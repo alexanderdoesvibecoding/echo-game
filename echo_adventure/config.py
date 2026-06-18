@@ -6,14 +6,14 @@ import random
 
 @dataclass(frozen=True)
 class GameConfig:
-    total_days: int = 30
+    total_days: int = 15
     shifts_per_day: int = 3
-    piece_count: int = 30
+    piece_count: int = 15
     shop_count: int = 10
     min_workcenters_per_shop: int = 20
     max_workcenters_per_shop: int = 50
     min_jobs_per_piece: int = 5
-    max_jobs_per_piece: int = 15
+    max_jobs_per_piece: int = 10
     seed: int | None = None
     use_color: bool = True
     debug: bool = False

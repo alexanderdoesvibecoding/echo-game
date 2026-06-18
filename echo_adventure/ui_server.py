@@ -491,6 +491,152 @@ INDEX_HTML = r"""<!doctype html>
       --shadow: 0 14px 32px rgba(32, 37, 36, 0.08);
     }
 
+    html[data-theme="dark"] {
+      --bg: #0f1419;
+      --panel: #1a202a;
+      --ink: #f0f3f5;
+      --muted: #a5b0b8;
+      --line: #3a4352;
+      --shadow: 0 14px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    html[data-theme="dark"] header {
+      background: rgba(15, 20, 25, 0.95);
+    }
+
+    html[data-theme="dark"] h1,
+    html[data-theme="dark"] h2,
+    html[data-theme="dark"] h3 {
+      color: #ffffff;
+    }
+
+    html[data-theme="dark"] input,
+    html[data-theme="dark"] select,
+    html[data-theme="dark"] button {
+      background: #1a202a;
+      color: #f0f3f5;
+      border-color: #3a4352;
+    }
+
+    html[data-theme="dark"] button.primary {
+      background: #167c78;
+      color: #ffffff;
+      border-color: #167c78;
+    }
+
+    html[data-theme="dark"] button.primary:hover {
+      background: #0d5552;
+      border-color: #0d5552;
+    }
+
+    html[data-theme="dark"] button:disabled {
+      opacity: 0.48;
+    }
+
+    html[data-theme="dark"] option {
+      background: #1a202a;
+      color: #f0f3f5;
+    }
+
+    html[data-theme="dark"] .badge {
+      background: #2a3543;
+      color: #a5b0b8;
+    }
+
+    html[data-theme="dark"] .badge.good {
+      background: #1a3a2a;
+      color: #5dd99f;
+    }
+
+    html[data-theme="dark"] .badge.warn {
+      background: #3a2a1a;
+      color: #f0ad4e;
+    }
+
+    html[data-theme="dark"] .badge.danger {
+      background: #3a1a1a;
+      color: #ff6b6b;
+    }
+
+    html[data-theme="dark"] .badge.info {
+      background: #1a2a3a;
+      color: #5dd9e0;
+    }
+
+    html[data-theme="dark"] table,
+    html[data-theme="dark"] th,
+    html[data-theme="dark"] td {
+      border-color: #3a4352;
+    }
+
+    html[data-theme="dark"] th {
+      background: #1a202a;
+      color: #a5b0b8;
+    }
+
+    html[data-theme="dark"] .section-head {
+      background: #252d38;
+      border-color: #3a4352;
+    }
+
+    html[data-theme="dark"] .tabbar button {
+      background: #1a202a;
+      color: #a5b0b8;
+    }
+
+    html[data-theme="dark"] .tabbar button.active {
+      background: #2a3543;
+      border-bottom-color: #2a3543;
+      color: #5dd9e0;
+    }
+
+    html[data-theme="dark"] .decision {
+      background: #1a202a;
+      border-color: #3a4352;
+    }
+
+    html[data-theme="dark"] .decision.done {
+      border-color: #2a5a3a;
+      background: #1a2f1f;
+    }
+
+    html[data-theme="dark"] .decision-head {
+      border-color: #3a4352;
+    }
+
+    html[data-theme="dark"] .choice {
+      background: #252d38;
+      border-color: #3a4352;
+      color: #f0f3f5;
+    }
+
+    html[data-theme="dark"] .choice.selected {
+      background: #2a5a3a;
+      border-color: #5dd99f;
+    }
+
+    html[data-theme="dark"] .modal {
+      background: #1a202a;
+      border-color: #3a4352;
+    }
+
+    html[data-theme="dark"] .reveal-panel {
+      background: #1a202a;
+      border-color: #3a4352;
+    }
+
+    html[data-theme="dark"] .error {
+      background: #2a1a1a;
+      border-color: #5a3a3a;
+      color: #ff9999;
+    }
+
+    html[data-theme="dark"] .metric {
+      background: #252d38;
+      border-color: #3a4352;
+      color: #f0f3f5;
+    }
+
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -736,6 +882,30 @@ INDEX_HTML = r"""<!doctype html>
       .metrics, .split { grid-template-columns: 1fr; }
       table { min-width: 720px; }
     }
+    /* Modal overlay for end-of-day summary */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(16,20,18,0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 60;
+      padding: 24px;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 18px;
+      max-width: 820px;
+      width: 100%;
+      box-shadow: 0 30px 60px rgba(8,10,9,0.4);
+    }
+    .modal .modal-body { max-height: 60vh; overflow: auto; margin-bottom: 12px; }
+    .modal .modal-footer { display:flex; justify-content:flex-end; gap:8px; }
+    .modal h3 { margin-top: 0; }
   </style>
 </head>
 <body>
@@ -744,16 +914,14 @@ INDEX_HTML = r"""<!doctype html>
       <div>
         <h1>Advanced Manufacturing Yard Schedule</h1>
         <div class="status-line">
-          <span class="badge info" id="scenarioBadge">Scenario</span>
-          <span class="badge" id="seedBadge">Seed</span>
           <span class="badge" id="dayBadge">Day</span>
-          <span class="badge warn" id="deadlineBadge">Deadline</span>
         </div>
       </div>
       <div class="controls">
+        <button id="themeToggle" title="Toggle dark mode" style="width:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;">🌙</button>
         <input id="seedInput" inputmode="numeric" placeholder="Seed">
         <button id="newRunBtn">New Run</button>
-        <button id="advanceBtn" class="primary" disabled>Advance Day</button>
+        <button id="advanceBtn" class="primary" disabled>End Day</button>
       </div>
     </div>
     <div id="error" class="error hidden"></div>
@@ -894,18 +1062,27 @@ INDEX_HTML = r"""<!doctype html>
       try {
         state = await api("/api/advance", { method: "POST", body: "{}" });
         showError("");
+        // show either the end-of-day summary modal or the final reveal modal if run finished
+        modalVisible = !!state.lastSummary && !state.finalReveal;
+        finalModalVisible = !!state.finalReveal;
         render();
       } catch (error) {
         showError(error.message);
       }
     }
 
+    let modalVisible = false;
+    let finalModalVisible = false;
+    let pendingChoice = null;
+
+    function closeFinalModal() {
+      finalModalVisible = false;
+      render();
+    }
+
     function render() {
       if (!state) return;
-      $("scenarioBadge").textContent = state.scenarioId;
-      $("seedBadge").textContent = `Seed ${state.seed}`;
       $("dayBadge").textContent = `Day ${state.day} | Shift ${state.shift}`;
-      $("deadlineBadge").textContent = state.deadlineLabel;
       $("projectedText").textContent = `Projected completion: ${state.overview.projectedCompletion}`;
       $("runStateBadge").textContent = state.gameOver ? "Run complete" : "In progress";
       $("runStateBadge").className = `badge ${state.gameOver ? "good" : "info"}`;
@@ -915,13 +1092,77 @@ INDEX_HTML = r"""<!doctype html>
       renderTables();
       renderDecisions();
       renderSummary();
+      renderSummaryModal();
       renderFinal();
+      // auto-open final modal if run finished
+      if (state.finalReveal && !finalModalVisible) finalModalVisible = true;
+      renderFinalModal();
+    }
+
+    function renderSummaryModal() {
+      const summary = state.lastSummary;
+      const overlay = document.getElementById("summaryModalOverlay");
+      const body = document.getElementById("summaryModalBody");
+      const notes = document.getElementById("summaryModalNotes");
+      if (!overlay || !body || !notes) return;
+      if (!summary || !modalVisible) {
+        overlay.classList.remove("active");
+        return;
+      }
+      overlay.classList.add("active");
+      body.innerHTML = `
+        <table>
+          <tbody>
+            <tr><td>Jobs completed today</td><td>${summary.completedToday}</td></tr>
+            <tr><td>Jobs remaining</td><td>${summary.jobsRemaining}</td></tr>
+            <tr><td>Pieces ready</td><td>${summary.piecesCompleted}/${state.pieces.length}</td></tr>
+            <tr><td>Jobs late</td><td>${summary.jobsLate}</td></tr>
+            <tr><td>Cost</td><td>${fmtNum(summary.cost)}</td></tr>
+            <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
+            <tr><td>Projected completion</td><td>${summary.projectedCompletion}</td></tr>
+          </tbody>
+        </table>
+      `;
+      notes.innerHTML = (summary.notes || []).map(note => `<li>${escapeHtml(note)}</li>`).join("") || "<li>No notable notes recorded.</li>";
+    }
+
+    function renderFinalModal() {
+      const final = state.finalReveal;
+      const overlay = document.getElementById("finalModalOverlay");
+      const body = document.getElementById("finalModalBody");
+      const notes = document.getElementById("finalModalNotes");
+      if (!overlay || !body || !notes) return;
+      if (!final || !finalModalVisible) {
+        overlay.classList.remove("active");
+        return;
+      }
+      overlay.classList.add("active");
+      const p = final.player;
+      const a = final.automated;
+      body.innerHTML = `
+        <table>
+          <tbody>
+            <tr><td>Deadline met</td><td>${p.deadlineMet ? "Yes" : "No"}</td><td>${a.deadlineMet ? "Yes" : "No"}</td></tr>
+            <tr><td>Final item completed</td><td>${p.finalItemCompleted ? "Yes" : "No"}</td><td>${a.finalItemCompleted ? "Yes" : "No"}</td></tr>
+            <tr><td>Completion</td><td>${p.completion || "Not complete"}</td><td>${a.completion || "Not complete"}</td></tr>
+            <tr><td>Pieces ready</td><td>${p.piecesCompleted}</td><td>${a.piecesCompleted}</td></tr>
+            <tr><td>Jobs completed</td><td>${p.jobsCompleted}</td><td>${a.jobsCompleted}</td></tr>
+            <tr><td>Jobs late</td><td>${p.jobsLate}</td><td>${a.jobsLate}</td></tr>
+            <tr><td>Utilization</td><td>${fmtPct(p.utilization)}</td><td>${fmtPct(a.utilization)}</td></tr>
+            <tr><td>Idle time</td><td>${p.idleTime}</td><td>${a.idleTime}</td></tr>
+            <tr><td>Reschedules</td><td>${p.reschedules}</td><td>${a.reschedules}</td></tr>
+            <tr><td>Cost</td><td>${fmtNum(p.cost)}</td><td>${fmtNum(a.cost)}</td></tr>
+            <tr><td>Schedule risk</td><td>${Math.round(p.scheduleRisk)}</td><td>${Math.round(a.scheduleRisk)}</td></tr>
+          </tbody>
+        </table>
+      `;
+      notes.innerHTML = (final.explanation || []).map(note => `<li>${escapeHtml(note)}</li>`).join("");
     }
 
     function renderMetrics() {
       const snap = state.snapshot;
       const metrics = [
-        ["Pieces Ready", `${snap.piecesCompleted}/30`, snap.piecesCompleted / 30, "good"],
+        ["Pieces Ready", `${snap.piecesCompleted}/${state.pieces.length}`, snap.piecesCompleted / state.pieces.length, "good"],
         ["Jobs Complete", fmtNum(snap.jobsCompleted), snap.jobsCompleted / Math.max(1, snap.jobsCompleted + snap.jobsRemaining), "good"],
         ["Jobs Late", fmtNum(snap.jobsLate), Math.min(1, snap.jobsLate / 20), snap.jobsLate > 0 ? "warn" : "good"],
         ["Utilization", fmtPct(snap.utilization), snap.utilization, "info"],
@@ -958,7 +1199,11 @@ INDEX_HTML = r"""<!doctype html>
         shop.event || "-"
       ]));
 
-      table($("piecesTable"), ["Piece", "Status", "Progress", "Jobs", "Blocked", "Critical", "Est.", "Risk"], state.pieces.map(piece => [
+      table($("piecesTable"), ["Piece", "Status", "Progress", "Jobs", "Blocked", "Critical", "Est.", "Risk"], state.pieces.sort((a, b) => {
+        const numA = parseInt(a.id.replace(/\D/g, '')) || 0;
+        const numB = parseInt(b.id.replace(/\D/g, '')) || 0;
+        return numA - numB;
+      }).map(piece => [
         piece.id,
         badge(piece.status, piece.status.includes("Risk") || piece.status.includes("Blocked") ? "warn" : piece.status.includes("Ready") ? "good" : "info"),
         progressCell(piece.progress),
@@ -1004,30 +1249,53 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function renderDecisions() {
-      const done = state.decisions.filter(card => card.selectedChoice).length;
-      $("decisionProgress").textContent = state.gameOver ? "Run complete." : `${done}/3 responses selected.`;
-      $("advanceBtn").disabled = state.gameOver || done < state.decisions.length;
-      $("decisions").innerHTML = state.decisions.map(card => `
-        <div class="decision ${card.selectedChoice ? "done" : ""}">
-          <div class="decision-head">
-            <div class="decision-title">
-              <div>
-                <h2>${escapeHtml(card.title)}</h2>
-                <div class="subtle">${escapeHtml(card.type)} | Severity ${card.severity}</div>
+      // Hide the header advance button — we'll surface Advance in the decisions area
+      $("advanceBtn").classList.add("hidden");
+
+      const chosenCount = state.decisions.filter(card => card.selectedChoice).length;
+      $("decisionProgress").textContent = state.gameOver ? "Run complete." : `${chosenCount}/${state.decisions.length} responses selected.`;
+
+      const nextCard = state.decisions.find(card => !card.selectedChoice);
+      if (state.gameOver) {
+        $("decisions").innerHTML = `<div class="subtle">Run complete.</div>`;
+        return;
+      }
+
+      if (nextCard) {
+        // show only the next open decision with choice selection
+        $("decisions").innerHTML = `
+          <div class="decision">
+            <div class="decision-head">
+              <div class="decision-title">
+                <div>
+                  <h2>${escapeHtml(nextCard.title)}</h2>
+                  <div class="subtle">${escapeHtml(nextCard.type)} | Severity ${nextCard.severity}</div>
+                </div>
+                <span class="badge warn">Open</span>
               </div>
-              ${card.selectedChoice ? '<span class="badge good">Set</span>' : '<span class="badge warn">Open</span>'}
+              <p>${escapeHtml(nextCard.description)}</p>
             </div>
-            <p>${escapeHtml(card.description)}</p>
+            ${nextCard.choices.map(choice => `
+              <button class="choice ${pendingChoice === choice.id ? "selected" : ""}" onclick="pendingChoice='${choice.id}';render()">
+                <strong>${escapeHtml(choice.label)}</strong>
+                <small>${escapeHtml(choice.description)}</small>
+              </button>
+            `).join("")}
+            <div style="padding:10px;display:flex;gap:8px;justify-content:center;border-top:1px solid var(--line);">
+              <button ${!pendingChoice ? "disabled" : ""} class="primary" onclick="choose('${nextCard.id}', pendingChoice); pendingChoice=null;">Submit</button>
+            </div>
           </div>
-          ${card.choices.map(choice => `
-            <button class="choice ${card.selectedChoice === choice.id ? "selected" : ""}" ${card.selectedChoice || state.gameOver ? "disabled" : ""} onclick="choose('${card.id}', '${choice.id}')">
-              <strong>${escapeHtml(choice.label)}</strong>
-              <small>${escapeHtml(choice.description)}</small>
-              <small>Risk ${choice.riskEffect >= 0 ? "+" : ""}${choice.riskEffect} | Cost +${choice.costEffect} | Reschedules +${choice.rescheduleEffect}</small>
-            </button>
-          `).join("")}
+        `;
+        return;
+      }
+
+      // All decisions selected — surface End Day in this area
+      $("decisions").innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;padding:18px;">
+          <div class="subtle">All choices made for today.</div>
+          <button id="localAdvanceBtn" class="primary" onclick="advanceDay()">End Day</button>
         </div>
-      `).join("");
+      `;
     }
 
     function renderSummary() {
@@ -1040,7 +1308,7 @@ INDEX_HTML = r"""<!doctype html>
           <tbody>
             <tr><td>Jobs completed today</td><td>${summary.completedToday}</td></tr>
             <tr><td>Jobs remaining</td><td>${summary.jobsRemaining}</td></tr>
-            <tr><td>Pieces ready</td><td>${summary.piecesCompleted}/30</td></tr>
+            <tr><td>Pieces ready</td><td>${summary.piecesCompleted}/${state.pieces.length}</td></tr>
             <tr><td>Jobs late</td><td>${summary.jobsLate}</td></tr>
             <tr><td>Cost</td><td>${fmtNum(summary.cost)}</td></tr>
             <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
@@ -1103,8 +1371,78 @@ INDEX_HTML = r"""<!doctype html>
     $("shopSelect").addEventListener("change", renderTables);
     $("newRunBtn").addEventListener("click", newRun);
     $("advanceBtn").addEventListener("click", advanceDay);
+    document.addEventListener("click", (e) => {
+      const summaryOverlay = document.getElementById("summaryModalOverlay");
+      const finalOverlay = document.getElementById("finalModalOverlay");
+      if (e.target && e.target.id === "closeModalBtn") {
+        modalVisible = false;
+        render();
+      }
+      if (e.target && e.target.id === "closeFinalBtn") {
+        finalModalVisible = false;
+        render();
+      }
+      if (summaryOverlay && e.target === summaryOverlay) {
+        modalVisible = false;
+        render();
+      }
+      if (finalOverlay && e.target === finalOverlay) {
+        finalModalVisible = false;
+        render();
+      }
+    });
+
+    function initDarkMode() {
+      const saved = localStorage.getItem("theme") || "light";
+      document.documentElement.setAttribute("data-theme", saved);
+      updateThemeButton(saved);
+    }
+
+    function updateThemeButton(theme) {
+      const btn = $("themeToggle");
+      if (btn) btn.textContent = theme === "dark" ? "☀️" : "🌙";
+    }
+
+    function toggleDarkMode() {
+      const current = document.documentElement.getAttribute("data-theme") || "light";
+      const next = current === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      localStorage.setItem("theme", next);
+      updateThemeButton(next);
+    }
+
+    $("themeToggle").addEventListener("click", toggleDarkMode);
+
+    initDarkMode();
     loadState();
   </script>
+
+  <!-- End-of-day modal (centered) -->
+  <div id="summaryModalOverlay" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-body" id="summaryModalBody"></div>
+      <div>
+        <h3>Notable Consequences</h3>
+        <ul class="notes" id="summaryModalNotes"></ul>
+      </div>
+      <div class="modal-footer">
+        <button id="modalAdvanceBtn" class="primary" onclick="(function(){ modalVisible=false; render(); })()">Advance Day</button>
+      </div>
+    </div>
+  </div>
+  <!-- Final-run modal (centered) -->
+  <div id="finalModalOverlay" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-body" id="finalModalBody"></div>
+      <div>
+        <h3>Outcome Drivers</h3>
+        <ul class="notes" id="finalModalNotes"></ul>
+      </div>
+      <div class="modal-footer">
+        <button id="closeFinalBtn" class="primary" onclick="closeFinalModal()">Close</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
 """

@@ -44,11 +44,11 @@ def generate_event_timeline(
         event_types[1] = EventType.DELAYED_MATERIAL
 
     for index, event_type in enumerate(event_types, start=1):
-        latest_start = deadline - 10
+        latest_start = deadline - 5
         if event_type in {EventType.URGENT_JOB, EventType.QUALITY_REWORK}:
-            latest_start = deadline - 22
+            latest_start = deadline - 11
         elif event_type in {EventType.ENGINEERING_HOLD, EventType.FACILITY_OUTAGE}:
-            latest_start = deadline - 16
+            latest_start = deadline - 8
         start_shift = rng.randint(5, max(6, latest_start))
         severity = rng.randint(1, 5)
         duration = _duration_for(event_type, severity, rng)
@@ -375,7 +375,7 @@ def _create_follow_on_job(
         dependency_ids=list(dependencies),
         status=JobStatus.NOT_READY,
         priority=priority,
-        due_shift=min(state.deadline_shift - 2, state.current_shift + 10),
+        due_shift=min(state.deadline_shift - 1, state.current_shift + 5),
         risk_score=event.severity * 4,
         cost_weight=1.4,
         original_duration_shifts=duration,
