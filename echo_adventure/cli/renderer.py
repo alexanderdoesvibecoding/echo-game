@@ -41,7 +41,7 @@ class GameRenderer:
     def render_main_menu(self) -> None:
         self.rule("Advanced Manufacturing Yard Scheduling")
         self._panel(
-            "Complete a 30-piece project in 30 days by steering priorities, reroutes, disruption response, and final integration readiness.",
+            "Complete a 15-piece project in 15 days by steering priorities, reroutes, disruption response, and final integration readiness.",
             "Scheduling Strategy Game",
         )
         self.print("1. Start new game")
@@ -54,7 +54,7 @@ class GameRenderer:
         text = (
             f"Scenario {state.scenario_id}\n"
             f"Seed: {state.seed}\n"
-            f"Deadline: Day 30, Shift 3 ({state.deadline_shift} shifts)\n"
+            f"Deadline: Day 15, Shift 3 ({state.deadline_shift} shifts)\n"
             f"Puzzle pieces: {len(state.pieces)} | Shops: {len(state.shops)} | Jobs: {len(state.jobs)}\n"
             f"Initial projected completion: {day_shift(snapshot.projected_completion_shift, state.shifts_per_day)}"
         )
@@ -70,7 +70,7 @@ class GameRenderer:
         critical_text = ", ".join(job.id for job in critical) or "No active critical jobs"
         self.rule(f"Start of Day {state.current_day}")
         rows = [
-            ("Pieces ready", f"{snapshot.pieces_completed}/30"),
+            ("Pieces ready", f"{snapshot.pieces_completed}/{len(state.pieces)}"),
             ("Jobs complete", f"{snapshot.jobs_completed}/{len(state.jobs)}"),
             ("Jobs late", str(snapshot.jobs_late)),
             ("Active disruptions", str(active)),
@@ -243,7 +243,7 @@ class GameRenderer:
         rows = [
             ("Jobs completed today", str(len(result.completed_job_ids))),
             ("Jobs remaining", str(snap.jobs_remaining)),
-            ("Pieces ready", f"{snap.pieces_completed}/30"),
+            ("Pieces ready", f"{snap.pieces_completed}/{len(state.pieces)}"),
             ("Jobs late", str(snap.jobs_late)),
             ("Reschedules", str(snap.reschedules)),
             ("Cost impact", f"{snap.cost:.0f}"),

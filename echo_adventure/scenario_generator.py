@@ -170,8 +170,8 @@ def _generate_pieces_and_jobs(
             setup = rng.choice([0, 0, 1])
             transport = 1 if previous_shop_id and previous_shop_id != shop_id and rng.random() < 0.65 else 0
             due_shift = min(
-                config.deadline_shift - 8,
-                4 + int((job_index / job_count) * (config.deadline_shift - 16)) + rng.randint(-2, 3),
+                config.deadline_shift - 4,
+                4 + int((job_index / job_count) * (config.deadline_shift - 8)) + rng.randint(-2, 3),
             )
             duration = base_duration + setup + transport
             job = Job(

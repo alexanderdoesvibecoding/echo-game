@@ -2,7 +2,7 @@
 
 A terminal-based scheduling strategy game set in a fictional advanced manufacturing yard.
 
-The player acts as a manual scheduler trying to complete a 30-piece project in 30 in-game days. A hidden automated scheduling engine runs the same scenario and disruption timeline in parallel, then appears only in the final report as an operational benchmark.
+The player acts as a manual scheduler trying to complete a 15-piece project in 15 in-game days. A hidden automated scheduling engine runs the same scenario and disruption timeline in parallel, then appears only in the final report as an operational benchmark.
 
 ## Run
 
