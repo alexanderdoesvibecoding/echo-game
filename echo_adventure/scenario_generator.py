@@ -108,9 +108,25 @@ def _generate_shops_and_workcenters(
 ) -> tuple[dict[str, Shop], dict[str, WorkCenter]]:
     shops: dict[str, Shop] = {}
     workcenters: dict[str, WorkCenter] = {}
+    
+    # Shop size mapping: larger shops have more workcenters, smaller specialized shops have fewer
+    shop_size_factors = {
+        0: (4, 6),    # Fabrication Gallery - large
+        1: (4, 6),    # Precision Machining - large
+        2: (3, 5),    # Composite Cell - medium
+        3: (3, 5),    # Coating Studio - medium
+        4: (4, 6),    # Assembly Hall - large
+        5: (2, 3),    # Calibration Lab - small specialized
+        6: (3, 4),    # Systems Integration - medium
+        7: (2, 3),    # Metrology Loft - small specialized
+        8: (2, 3),    # Tooling Annex - small specialized
+        9: (3, 4),    # Final Integration Bay - medium
+    }
+    
     for index, (name, capabilities) in enumerate(SHOP_BLUEPRINTS[: config.shop_count], start=1):
         shop_id = f"SHOP-{index:02d}"
-        count = rng.randint(config.min_workcenters_per_shop, min(config.max_workcenters_per_shop, 32))
+        min_count, max_count = shop_size_factors.get(index - 1, (3, 4))
+        count = rng.randint(min_count, max_count)
         workcenter_ids: list[str] = []
         for wc_index in range(1, count + 1):
             wc_id = f"WC-{index:02d}-{wc_index:03d}"

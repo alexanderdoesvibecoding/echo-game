@@ -1,36 +1,46 @@
 from __future__ import annotations
 
+import random
+
+from .config import GameConfig
 from .enums import DecisionType, EventType, JobStatus, TargetType, WorkCenterStatus
 from .metrics import update_state_metrics
 from .models import DecisionCard, DecisionChoice, Event, Job, Shop, SimulationState, WorkCenter
 
 
-def generate_decision_cards(state: SimulationState, day: int) -> list[DecisionCard]:
+def generate_decision_cards(state: SimulationState, day: int, config: GameConfig | None = None) -> list[DecisionCard]:
+    if config is None:
+        config = GameConfig()
     update_state_metrics(state)
     cards: list[DecisionCard] = []
+    target_count = random.randint(config.min_decisions_per_day, config.max_decisions_per_day)
     for event in _visible_events(state):
+        if len(cards) == target_count:
+            break
         cards.append(_event_card(state, event, len(cards) + 1, day))
         if len(cards) == 2:
             break
-    if len(cards) < 3:
+    if len(cards) < target_count:
         bottleneck = _top_bottleneck(state)
         if bottleneck:
             cards.append(_bottleneck_card(state, bottleneck, len(cards) + 1, day))
-    if len(cards) < 3:
+    if len(cards) < target_count:
         critical = _top_critical_job(state)
         if critical:
             cards.append(_critical_path_card(state, critical, len(cards) + 1, day))
-    if len(cards) < 3:
+    if len(cards) < target_count:
         alternate = _alternate_routing_job(state)
         if alternate:
             cards.append(_alternate_card(state, alternate, len(cards) + 1, day))
-    if len(cards) < 3 and _has_idle_opportunity(state):
+    if len(cards) < target_count and _has_idle_opportunity(state):
         cards.append(_idle_card(state, len(cards) + 1, day))
-    if len(cards) < 3:
+    if len(cards) < target_count and not state.all_pieces_ready():
         cards.append(_final_integration_card(state, len(cards) + 1, day))
-    while len(cards) < 3:
+    if not cards:
         cards.append(_strategic_card(state, len(cards) + 1, day))
-    return cards[:3]
+    while len(cards) < target_count:
+        cards.append(_fallback_strategic_card(state, len(cards) + 1, day))
+    return cards
 
 
 def apply_choice(state: SimulationState, card: DecisionCard, choice: DecisionChoice) -> str:
@@ -395,6 +405,49 @@ def _strategic_card(state: SimulationState, ordinal: int, day: int) -> DecisionC
                 id="3",
                 label="Stabilize queues",
                 description="Avoid churn and let current workcenter queues run.",
+                immediate_effects={"type": "wait"},
+                risk_effect=2,
+                cost_effect=0,
+                reschedule_effect=0,
+            ),
+        ],
+    )
+
+
+def _fallback_strategic_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
+    bottlenecks = state.get_bottleneck_shops(1)
+    target_ids = [bottlenecks[0].id] if bottlenecks else []
+    return DecisionCard(
+        id=f"DAY-{day:02d}-DEC-{ordinal}",
+        day=day,
+        type=DecisionType.STRATEGIC_PRIORITY,
+        title=f"Strategic planning review {ordinal}",
+        description="Use a broad schedule review to keep work aligned when fewer direct decisions are available.",
+        target_ids=target_ids,
+        severity=2,
+        choices=[
+            DecisionChoice(
+                id="1",
+                label="Rebalance priorities",
+                description="Shift attention toward the most urgent work and preserve flow.",
+                immediate_effects={"type": "resequence"},
+                risk_effect=-2,
+                cost_effect=3,
+                reschedule_effect=1,
+            ),
+            DecisionChoice(
+                id="2",
+                label="Protect key milestones",
+                description="Choose the sequence that safeguards the nearest delivery.",
+                immediate_effects={"type": "protect_critical"},
+                risk_effect=-4,
+                cost_effect=6,
+                reschedule_effect=1,
+            ),
+            DecisionChoice(
+                id="3",
+                label="Maintain stability",
+                description="Keep current queues intact and avoid additional churn.",
                 immediate_effects={"type": "wait"},
                 risk_effect=2,
                 cost_effect=0,

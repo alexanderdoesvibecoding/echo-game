@@ -74,7 +74,7 @@ def run_game(seed: int | None, renderer: GameRenderer, use_color: bool = True, d
             renderer.print("Run ended without saving.")
             return
 
-        cards = generate_decision_cards(player_state, player_state.current_day)
+        cards = generate_decision_cards(player_state, player_state.current_day, config)
         for card in cards:
             renderer.render_decision_card(card)
             selected = ask_number("Select response", 1, len(card.choices), allow_quit=True)

@@ -91,7 +91,7 @@ class GameSession:
                 return {"summary": self._summary_payload(), "gameOver": True}
             self._ensure_cards()
             if not self.ready_to_advance():
-                raise ValueError("Select a response for all three decisions before advancing the day.")
+                raise ValueError("Select a response for all decisions before advancing the day.")
             self.player_state.daily_notes.clear()
             self.last_result = advance_day(self.player_state, self.manual_scheduler)
             advance_day(self.automated_state, self.automated_scheduler)
@@ -110,7 +110,7 @@ class GameSession:
     def _ensure_cards(self) -> None:
         if self.current_cards or self._game_over():
             return
-        self.current_cards = generate_decision_cards(self.player_state, self.player_state.current_day)
+        self.current_cards = generate_decision_cards(self.player_state, self.player_state.current_day, self.config)
 
     def _game_over(self) -> bool:
         return self.player_state.final_item_completed or self.player_state.current_shift >= self.player_state.deadline_shift
@@ -159,6 +159,26 @@ class GameSession:
         for piece in sorted(self.player_state.pieces.values(), key=lambda item: (-item.risk_score, item.id)):
             blocked = sum(1 for job_id in piece.job_ids if self.player_state.jobs[job_id].is_blocked)
             critical = any(self.player_state.jobs[job_id].critical_path for job_id in piece.job_ids)
+            piece_jobs: list[dict[str, Any]] = []
+            for job_id in piece.job_ids:
+                job = self.player_state.jobs[job_id]
+                wc = self.player_state.workcenters.get(job.assigned_workcenter_id) if job.assigned_workcenter_id else None
+                shop = self.player_state.shops.get(job.shop_id)
+                piece_jobs.append(
+                    {
+                        "id": job.id,
+                        "status": job.status.value,
+                        "shop": shop.name if shop else job.shop_id,
+                        "workcenter": wc.id if wc else "-",
+                        "capability": job.required_capability,
+                        "remaining": job.remaining_duration_shifts,
+                        "planned": job.planned_duration,
+                        "due": day_shift(job.due_shift, self.config.shifts_per_day),
+                        "blocked": job.is_blocked,
+                        "blockReason": job.block_reason or "",
+                        "critical": job.critical_path,
+                    }
+                )
             pieces.append(
                 {
                     "id": piece.id,
@@ -171,6 +191,7 @@ class GameSession:
                     "critical": critical,
                     "estimated": day_shift(piece.estimated_completion_shift, self.config.shifts_per_day),
                     "risk": round(piece.risk_score, 1),
+                    "jobs": piece_jobs,
                 }
             )
         return pieces
@@ -704,7 +725,7 @@ INDEX_HTML = r"""<!doctype html>
       border-radius: 8px;
       box-shadow: var(--shadow);
     }
-    section { overflow: hidden; }
+    section { overflow: visible; }
     .section-head {
       display: flex;
       align-items: center;
@@ -806,6 +827,20 @@ INDEX_HTML = r"""<!doctype html>
     .badge.danger { background: #f8e4e4; color: var(--red); }
     .badge.info { background: #e7f1f1; color: var(--teal-dark); }
 
+    .link-button {
+      appearance: none;
+      border: none;
+      background: none;
+      color: var(--teal-dark);
+      text-decoration: underline;
+      cursor: pointer;
+      padding: 0;
+      font: inherit;
+    }
+    .link-button:hover {
+      color: var(--primary);
+    }
+
     aside {
       position: sticky;
       top: 82px;
@@ -906,6 +941,41 @@ INDEX_HTML = r"""<!doctype html>
     .modal .modal-body { max-height: 60vh; overflow: auto; margin-bottom: 12px; }
     .modal .modal-footer { display:flex; justify-content:flex-end; gap:8px; }
     .modal h3 { margin-top: 0; }
+    .info-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-style: italic;
+      color: var(--ink);
+      opacity: 0.6;
+      cursor: help;
+      font-size: 11px;
+      font-weight: bold;
+      margin-left: 4px;
+      position: relative;
+      z-index: 10;
+      width: 16px;
+      height: 16px;
+      border: 1.5px solid var(--ink);
+      border-radius: 50%;
+    }
+    .info-icon:hover::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: 125%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--panel);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-style: normal;
+      white-space: nowrap;
+      z-index: 9999;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
   </style>
 </head>
 <body>
@@ -985,7 +1055,7 @@ INDEX_HTML = r"""<!doctype html>
       <div class="section-head">
         <div>
           <h2>Daily Decisions</h2>
-          <div class="subtle" id="decisionProgress">Select three responses.</div>
+          <div class="subtle" id="decisionProgress">Select responses.</div>
         </div>
       </div>
       <div class="side-body" id="decisions"></div>
@@ -1058,22 +1128,57 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
-    async function advanceDay() {
+    let pendingAdvanceState = null;
+
+    async function prepareAdvanceDay() {
       try {
-        state = await api("/api/advance", { method: "POST", body: "{}" });
+        const nextState = await api("/api/advance", { method: "POST", body: "{}" });
         showError("");
-        // show either the end-of-day summary modal or the final reveal modal if run finished
-        modalVisible = !!state.lastSummary && !state.finalReveal;
-        finalModalVisible = !!state.finalReveal;
+        pendingAdvanceState = nextState;
+        if (nextState.finalReveal) {
+          state = nextState;
+          pendingAdvanceState = null;
+          finalModalVisible = true;
+          modalVisible = false;
+        } else {
+          modalVisible = true;
+          finalModalVisible = false;
+        }
+        pieceModalVisible = false;
         render();
       } catch (error) {
         showError(error.message);
       }
     }
 
+    function commitAdvanceDay() {
+      if (!pendingAdvanceState) {
+        return;
+      }
+      state = pendingAdvanceState;
+      pendingAdvanceState = null;
+      modalVisible = false;
+      render();
+    }
+
     let modalVisible = false;
     let finalModalVisible = false;
+    let pieceModalVisible = false;
+    let activePieceId = null;
     let pendingChoice = null;
+
+    function openPieceModal(pieceId) {
+      activePieceId = pieceId;
+      modalVisible = false;
+      finalModalVisible = false;
+      pieceModalVisible = true;
+      render();
+    }
+
+    function closePieceModal() {
+      pieceModalVisible = false;
+      render();
+    }
 
     function closeFinalModal() {
       finalModalVisible = false;
@@ -1094,13 +1199,15 @@ INDEX_HTML = r"""<!doctype html>
       renderSummary();
       renderSummaryModal();
       renderFinal();
+      renderPieceModal();
       // auto-open final modal if run finished
       if (state.finalReveal && !finalModalVisible) finalModalVisible = true;
       renderFinalModal();
     }
 
     function renderSummaryModal() {
-      const summary = state.lastSummary;
+      const payload = pendingAdvanceState || state;
+      const summary = payload.lastSummary;
       const overlay = document.getElementById("summaryModalOverlay");
       const body = document.getElementById("summaryModalBody");
       const notes = document.getElementById("summaryModalNotes");
@@ -1123,6 +1230,7 @@ INDEX_HTML = r"""<!doctype html>
           </tbody>
         </table>
       `;
+      body.scrollTop = 0;
       notes.innerHTML = (summary.notes || []).map(note => `<li>${escapeHtml(note)}</li>`).join("") || "<li>No notable notes recorded.</li>";
     }
 
@@ -1156,22 +1264,84 @@ INDEX_HTML = r"""<!doctype html>
           </tbody>
         </table>
       `;
+      body.scrollTop = 0;
       notes.innerHTML = (final.explanation || []).map(note => `<li>${escapeHtml(note)}</li>`).join("");
+    }
+
+    function renderPieceModal() {
+      const overlay = document.getElementById("pieceModalOverlay");
+      const body = document.getElementById("pieceModalBody");
+      if (!overlay || !body) return;
+      const piece = state.pieces.find(item => item.id === activePieceId);
+      if (!piece || !pieceModalVisible) {
+        overlay.classList.remove("active");
+        return;
+      }
+      overlay.classList.add("active");
+      const blockedCount = piece.jobs.filter(job => job.blocked).length;
+      const criticalCount = piece.jobs.filter(job => job.critical).length;
+      body.innerHTML = `
+        <div style="margin-bottom: 16px;">
+          <h3>${escapeHtml(piece.name)}</h3>
+          <p class="subtle">${escapeHtml(piece.id)}</p>
+          <table>
+            <tbody>
+              <tr><td>Status</td><td>${escapeHtml(piece.status)}</td></tr>
+              <tr><td>Progress</td><td>${fmtPct(piece.progress)}</td></tr>
+              <tr><td>Jobs complete</td><td>${piece.completed}/${piece.total}</td></tr>
+              <tr><td>Jobs blocked</td><td>${blockedCount}</td></tr>
+              <tr><td>Critical jobs</td><td>${criticalCount}</td></tr>
+              <tr><td>Estimated completion</td><td>${escapeHtml(piece.estimated)}</td></tr>
+              <tr><td>Risk</td><td>${Math.round(piece.risk)}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h4>Subjobs</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Job</th>
+              <th>Status</th>
+              <th>Shop</th>
+              <th>Workcenter</th>
+              <th>Capability</th>
+              <th>Remaining</th>
+              <th>Due</th>
+              <th>Blocked</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${piece.jobs.map(job => `
+              <tr>
+                <td>${escapeHtml(job.id)}</td>
+                <td>${escapeHtml(job.status)}</td>
+                <td>${escapeHtml(job.shop)}</td>
+                <td>${escapeHtml(job.workcenter)}</td>
+                <td>${escapeHtml(job.capability)}</td>
+                <td>${escapeHtml(job.remaining)}</td>
+                <td>${escapeHtml(job.due)}</td>
+                <td>${job.blocked ? "Yes" : ""}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+      body.scrollTop = 0;
     }
 
     function renderMetrics() {
       const snap = state.snapshot;
       const metrics = [
-        ["Pieces Ready", `${snap.piecesCompleted}/${state.pieces.length}`, snap.piecesCompleted / state.pieces.length, "good"],
-        ["Jobs Complete", fmtNum(snap.jobsCompleted), snap.jobsCompleted / Math.max(1, snap.jobsCompleted + snap.jobsRemaining), "good"],
-        ["Jobs Late", fmtNum(snap.jobsLate), Math.min(1, snap.jobsLate / 20), snap.jobsLate > 0 ? "warn" : "good"],
-        ["Utilization", fmtPct(snap.utilization), snap.utilization, "info"],
-        ["Cost", fmtNum(snap.cost), Math.min(1, snap.cost / 28000), "warn"],
-        ["Schedule Risk", `${Math.round(snap.scheduleRisk)}/100`, snap.scheduleRisk / 100, snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good"]
+        ["Pieces Ready", `${snap.piecesCompleted}/${state.pieces.length}`, snap.piecesCompleted / state.pieces.length, "good", "How many puzzle pieces are complete and ready to assemble."],
+        ["Jobs Complete", fmtNum(snap.jobsCompleted), snap.jobsCompleted / Math.max(1, snap.jobsCompleted + snap.jobsRemaining), "good", "Total jobs finished out of all required work."],
+        ["Jobs Late", fmtNum(snap.jobsLate), Math.min(1, snap.jobsLate / 20), snap.jobsLate > 0 ? "warn" : "good", "Number of jobs that have missed their target completion date."],
+        ["Utilization", fmtPct(snap.utilization), snap.utilization, "info", "How busy your workcenters are (0% = idle, 100% = fully busy)."],
+        ["Cost", fmtNum(snap.cost), Math.min(1, snap.cost / 28000), "warn", "Total additional costs from rescheduling, expediting, and resolving issues."],
+        ["Schedule Risk", `${Math.round(snap.scheduleRisk)}/100`, snap.scheduleRisk / 100, snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good", "Overall probability of missing the deadline (0 = safe, 100 = critical)."]
       ];
-      $("metrics").innerHTML = metrics.map(([label, value, pct, tone]) => `
+      $("metrics").innerHTML = metrics.map(([label, value, pct, tone, tooltip]) => `
         <div class="metric">
-          <span class="subtle">${label}</span>
+          <span class="subtle">${label}<span class="info-icon" data-tooltip="${escapeHtml(tooltip)}">i</span></span>
           <strong>${value}</strong>
           <div class="progress"><div class="bar ${tone}" style="width:${Math.max(0, Math.min(1, pct)) * 100}%"></div></div>
         </div>
@@ -1204,7 +1374,7 @@ INDEX_HTML = r"""<!doctype html>
         const numB = parseInt(b.id.replace(/\D/g, '')) || 0;
         return numA - numB;
       }).map(piece => [
-        piece.id,
+        `<button class="link-button" onclick="openPieceModal('${piece.id}')">${escapeHtml(piece.id)}</button>`,
         badge(piece.status, piece.status.includes("Risk") || piece.status.includes("Blocked") ? "warn" : piece.status.includes("Ready") ? "good" : "info"),
         progressCell(piece.progress),
         `${piece.completed}/${piece.total}`,
@@ -1293,7 +1463,7 @@ INDEX_HTML = r"""<!doctype html>
       $("decisions").innerHTML = `
         <div style="display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;padding:18px;">
           <div class="subtle">All choices made for today.</div>
-          <button id="localAdvanceBtn" class="primary" onclick="advanceDay()">End Day</button>
+          <button id="localAdvanceBtn" class="primary" onclick="prepareAdvanceDay()">End Day</button>
         </div>
       `;
     }
@@ -1370,24 +1540,35 @@ INDEX_HTML = r"""<!doctype html>
 
     $("shopSelect").addEventListener("change", renderTables);
     $("newRunBtn").addEventListener("click", newRun);
-    $("advanceBtn").addEventListener("click", advanceDay);
+    $("advanceBtn").addEventListener("click", prepareAdvanceDay);
     document.addEventListener("click", (e) => {
       const summaryOverlay = document.getElementById("summaryModalOverlay");
       const finalOverlay = document.getElementById("finalModalOverlay");
+      const pieceOverlay = document.getElementById("pieceModalOverlay");
       if (e.target && e.target.id === "closeModalBtn") {
         modalVisible = false;
+        if (pendingAdvanceState) pendingAdvanceState = null;
         render();
       }
       if (e.target && e.target.id === "closeFinalBtn") {
         finalModalVisible = false;
         render();
       }
+      if (e.target && e.target.id === "closePieceModalBtn") {
+        pieceModalVisible = false;
+        render();
+      }
       if (summaryOverlay && e.target === summaryOverlay) {
         modalVisible = false;
+        if (pendingAdvanceState) pendingAdvanceState = null;
         render();
       }
       if (finalOverlay && e.target === finalOverlay) {
         finalModalVisible = false;
+        render();
+      }
+      if (pieceOverlay && e.target === pieceOverlay) {
+        pieceModalVisible = false;
         render();
       }
     });
@@ -1420,13 +1601,14 @@ INDEX_HTML = r"""<!doctype html>
   <!-- End-of-day modal (centered) -->
   <div id="summaryModalOverlay" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal">
+      <h1>Daily Summary</h1Drop >
       <div class="modal-body" id="summaryModalBody"></div>
       <div>
         <h3>Notable Consequences</h3>
         <ul class="notes" id="summaryModalNotes"></ul>
       </div>
       <div class="modal-footer">
-        <button id="modalAdvanceBtn" class="primary" onclick="(function(){ modalVisible=false; render(); })()">Advance Day</button>
+        <button id="modalAdvanceBtn" class="primary" onclick="commitAdvanceDay()">Advance Day</button>
       </div>
     </div>
   </div>
@@ -1440,6 +1622,14 @@ INDEX_HTML = r"""<!doctype html>
       </div>
       <div class="modal-footer">
         <button id="closeFinalBtn" class="primary" onclick="closeFinalModal()">Close</button>
+      </div>
+    </div>
+  </div>
+  <div id="pieceModalOverlay" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modal-body" id="pieceModalBody"></div>
+      <div class="modal-footer">
+        <button id="closePieceModalBtn" class="primary" onclick="closePieceModal()">Close</button>
       </div>
     </div>
   </div>

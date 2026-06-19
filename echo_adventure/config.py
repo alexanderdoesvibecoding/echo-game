@@ -10,8 +10,10 @@ class GameConfig:
     shifts_per_day: int = 3
     piece_count: int = 15
     shop_count: int = 10
-    min_workcenters_per_shop: int = 20
-    max_workcenters_per_shop: int = 50
+    min_workcenters_per_shop: int = 1
+    max_workcenters_per_shop: int = 7
+    min_decisions_per_day: int = 1
+    max_decisions_per_day: int = 5
     min_jobs_per_piece: int = 5
     max_jobs_per_piece: int = 10
     seed: int | None = None
