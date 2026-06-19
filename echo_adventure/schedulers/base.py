@@ -1,3 +1,5 @@
+"""Shared scheduler interface and scoring helpers."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -6,6 +8,8 @@ from ..models import Event, Job, SimulationState, WorkCenter
 
 
 class Scheduler(ABC):
+    """Common interface for player-side and benchmark schedulers."""
+
     name: str = "scheduler"
 
     @abstractmethod
@@ -18,6 +22,7 @@ class Scheduler(ABC):
 
 
 def usable_workcenter(wc: WorkCenter) -> bool:
+    """Return whether a workcenter can be considered for scheduling."""
     from ..enums import WorkCenterStatus
 
     return wc.status in {WorkCenterStatus.AVAILABLE, WorkCenterStatus.IDLE, WorkCenterStatus.BUSY} or (
@@ -26,6 +31,7 @@ def usable_workcenter(wc: WorkCenter) -> bool:
 
 
 def downstream_count(state: SimulationState, job: Job) -> int:
+    """Count all jobs unlocked downstream of a job in the dependency graph."""
     seen: set[str] = set()
     stack = list(job.dependent_job_ids)
     while stack:

@@ -1,3 +1,5 @@
+"""Configuration defaults and seed handling for reproducible runs."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,6 +8,8 @@ import random
 
 @dataclass(frozen=True)
 class GameConfig:
+    """Tunable game/scenario parameters shared by CLI, UI, and tests."""
+
     total_days: int = 15
     shifts_per_day: int = 3
     piece_count: int = 15
@@ -24,10 +28,12 @@ class GameConfig:
 
     @property
     def deadline_shift(self) -> int:
+        """Convert the day-based deadline into the simulation's shift clock."""
         return self.total_days * self.shifts_per_day
 
 
 def resolve_seed(seed: int | None) -> int:
+    """Return a provided seed or generate one suitable for replaying a run."""
     if seed is not None:
         return seed
     return random.SystemRandom().randint(100_000, 999_999_999)

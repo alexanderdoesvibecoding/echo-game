@@ -1,3 +1,5 @@
+"""Player-side scheduler used after daily manual decisions are applied."""
+
 from __future__ import annotations
 
 from ..enums import JobStatus, WorkCenterStatus
@@ -7,13 +9,17 @@ from .base import Scheduler
 
 
 class ManualScheduler(Scheduler):
+    """A conservative scheduler that fills queues by priority and due date."""
+
     name = "manual"
 
     def plan_day(self, state: SimulationState, known_events: list[Event]) -> None:
+        """Refresh metrics and make an initial queueing pass for the day."""
         update_state_metrics(state)
         self.plan_shift(state)
 
     def plan_shift(self, state: SimulationState) -> None:
+        """Assign ready jobs into compatible queues without aggressive churn."""
         update_state_metrics(state)
         ready_jobs = sorted(
             state.get_ready_jobs(),
@@ -27,6 +33,7 @@ class ManualScheduler(Scheduler):
                 state.assign_job(job.id, wc.id)
 
     def _choose_workcenter(self, state: SimulationState, job: Job) -> WorkCenter | None:
+        """Prefer the existing assignment, then the shortest viable queue."""
         if job.assigned_workcenter_id:
             assigned = state.workcenters[job.assigned_workcenter_id]
             if assigned.status not in {

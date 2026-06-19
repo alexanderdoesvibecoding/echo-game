@@ -1,9 +1,13 @@
+"""Shared status and category enums used across the simulation and UI."""
+
 from __future__ import annotations
 
 from enum import Enum
 
 
 class WorkCenterStatus(str, Enum):
+    """Lifecycle states for an individual machine or station."""
+
     AVAILABLE = "Available"
     BUSY = "Busy"
     DOWN = "Down"
@@ -16,6 +20,8 @@ class WorkCenterStatus(str, Enum):
 
 
 class JobStatus(str, Enum):
+    """Lifecycle states for a unit of scheduled manufacturing work."""
+
     NOT_READY = "Not Ready"
     READY = "Ready"
     QUEUED = "Queued"
@@ -30,6 +36,8 @@ class JobStatus(str, Enum):
 
 
 class PieceStatus(str, Enum):
+    """Roll-up states for a puzzle piece and its subjobs."""
+
     NOT_STARTED = "Not Started"
     IN_PROGRESS = "In Progress"
     BLOCKED = "Blocked"
@@ -40,6 +48,8 @@ class PieceStatus(str, Enum):
 
 
 class EventType(str, Enum):
+    """Disruption and operating-condition types that can affect a run."""
+
     MISSING_MATERIAL = "Missing material"
     DELAYED_MATERIAL = "Delayed material"
     MACHINE_DOWN = "Machine or workcenter down"
@@ -60,6 +70,8 @@ class EventType(str, Enum):
 
 
 class TargetType(str, Enum):
+    """Domain object categories that an event can target."""
+
     SHOP = "shop"
     WORKCENTER = "workcenter"
     JOB = "job"
@@ -68,6 +80,8 @@ class TargetType(str, Enum):
 
 
 class DecisionType(str, Enum):
+    """Daily decision-card categories shown to the player."""
+
     MACHINE_DOWN = "Machine or workcenter down"
     MISSING_MATERIAL = "Missing or delayed material"
     QUALITY_REWORK = "Quality rework"

@@ -1,3 +1,5 @@
+"""Daily decision-card generation and player choice effects."""
+
 from __future__ import annotations
 
 import random
@@ -10,11 +12,14 @@ from .models import DecisionCard, DecisionChoice, Event, Job, Shop, SimulationSt
 
 
 def generate_decision_cards(state: SimulationState, day: int, config: GameConfig | None = None) -> list[DecisionCard]:
+    """Generate the day's required decision cards from visible operating risk."""
     if config is None:
         config = GameConfig()
     update_state_metrics(state)
     cards: list[DecisionCard] = []
     target_count = random.randint(config.min_decisions_per_day, config.max_decisions_per_day)
+    # Visible disruptions get first claim on limited player attention, then the
+    # generator fills remaining slots with operational pressure cards.
     for event in _visible_events(state):
         if len(cards) == target_count:
             break
@@ -45,6 +50,7 @@ def generate_decision_cards(state: SimulationState, day: int, config: GameConfig
 
 
 def apply_choice(state: SimulationState, card: DecisionCard, choice: DecisionChoice) -> str:
+    """Apply one selected choice and return a player-facing audit note."""
     effects = choice.immediate_effects
     effect_type = effects.get("type", "note")
     state.cost += max(0, choice.cost_effect)
@@ -71,6 +77,8 @@ def apply_choice(state: SimulationState, card: DecisionCard, choice: DecisionCho
         note = _pull_forward_unaffected(state, card)
     else:
         note = "Recorded the scheduling preference for today."
+    # Choices affect both the current board and the future event chain. The
+    # forward effect is recorded after the immediate action mutates priorities.
     forward_note = _apply_forward_decision_effect(state, card, choice)
     if forward_note:
         note = f"{note} {forward_note}"
@@ -80,12 +88,14 @@ def apply_choice(state: SimulationState, card: DecisionCard, choice: DecisionCho
 
 
 def _visible_events(state: SimulationState) -> list[Event]:
+    """Return active/warned events ordered by urgency for card generation."""
     ids = list(dict.fromkeys(state.active_events + state.known_warnings))
     events = [event for event in state.event_timeline if event.id in ids and not event.resolved]
     return sorted(events, key=lambda event: (0 if event.id in state.active_events else 1, -event.severity, event.start_shift))
 
 
 def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) -> DecisionCard:
+    """Build a decision card around a specific visible event."""
     dtype = _decision_type_for_event(event.type)
     status = "active" if event.id in state.active_events else "warning"
     target = _target_name(state, event.target_type, event.target_id)
@@ -164,6 +174,7 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
 
 
 def _bottleneck_card(state: SimulationState, shop: Shop, ordinal: int, day: int) -> DecisionCard:
+    """Build a card for queue pressure concentrated in one shop."""
     queued = len(shop.queued_job_ids)
     blocked = len(shop.blocked_job_ids)
     return DecisionCard(
@@ -207,6 +218,7 @@ def _bottleneck_card(state: SimulationState, shop: Shop, ordinal: int, day: int)
 
 
 def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int) -> DecisionCard:
+    """Build a card for a job that threatens final completion timing."""
     piece = state.pieces.get(job.piece_id)
     piece_name = piece.name if piece else "Final integration"
     return DecisionCard(
@@ -259,6 +271,7 @@ def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int
 
 
 def _alternate_card(state: SimulationState, job: Job, ordinal: int, day: int) -> DecisionCard:
+    """Build a card when a risky job has viable alternate routing."""
     return DecisionCard(
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
@@ -300,6 +313,7 @@ def _alternate_card(state: SimulationState, job: Job, ordinal: int, day: int) ->
 
 
 def _idle_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
+    """Build a card for unused capacity while ready work exists."""
     ready_count = len(state.get_ready_jobs())
     idle_count = len(state.get_available_workcenters())
     return DecisionCard(
@@ -343,6 +357,7 @@ def _idle_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
 
 
 def _final_integration_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
+    """Build a card for late-stage readiness of final integration."""
     complete_pieces = sum(1 for piece in state.pieces.values() if piece.ready_for_integration)
     return DecisionCard(
         id=f"DAY-{day:02d}-DEC-{ordinal}",
@@ -385,6 +400,7 @@ def _final_integration_card(state: SimulationState, ordinal: int, day: int) -> D
 
 
 def _strategic_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
+    """Build a general strategy card when no sharper risk is available."""
     bottlenecks = state.get_bottleneck_shops(1)
     target_ids = [bottlenecks[0].id] if bottlenecks else []
     return DecisionCard(
@@ -428,6 +444,7 @@ def _strategic_card(state: SimulationState, ordinal: int, day: int) -> DecisionC
 
 
 def _fallback_strategic_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
+    """Build extra broad-planning cards to satisfy the daily card count."""
     bottlenecks = state.get_bottleneck_shops(1)
     target_ids = [bottlenecks[0].id] if bottlenecks else []
     return DecisionCard(
@@ -471,6 +488,7 @@ def _fallback_strategic_card(state: SimulationState, ordinal: int, day: int) -> 
 
 
 def _resequence(state: SimulationState, card: DecisionCard) -> str:
+    """Sort queues by due date/priority and nudge ready work upward."""
     affected = 0
     for wc in state.workcenters.values():
         before = list(wc.queue)
@@ -483,6 +501,7 @@ def _resequence(state: SimulationState, card: DecisionCard) -> str:
 
 
 def _wait_and_absorb(state: SimulationState, card: DecisionCard) -> str:
+    """Accept near-term delay and increase future pressure for affected work."""
     affected = 0
     limit = 8 if card.type in {DecisionType.CRITICAL_PATH, DecisionType.FINAL_INTEGRATION} else 4
     delay = 3 if card.severity >= 4 else 2
@@ -504,6 +523,7 @@ def _wait_and_absorb(state: SimulationState, card: DecisionCard) -> str:
 
 
 def _protect_critical(state: SimulationState) -> str:
+    """Raise critical-path job priorities and pull queued ones forward."""
     critical = state.get_critical_path_jobs()[:10]
     for job in critical:
         job.priority += 10
@@ -513,6 +533,7 @@ def _protect_critical(state: SimulationState) -> str:
 
 
 def _expedite_event(state: SimulationState, event_id: str | None) -> str:
+    """Spend cost to shorten and soften an active or warned event."""
     event = _event_by_id(state, event_id)
     if not event:
         return "Expedite budget reserved for the highest active disruption."
@@ -535,6 +556,7 @@ def _expedite_event(state: SimulationState, event_id: str | None) -> str:
 
 
 def _reroute_targets(state: SimulationState, card: DecisionCard) -> str:
+    """Move affected jobs to less-loaded alternate workcenters."""
     jobs = _jobs_for_card(state, card)
     moved = 0
     for job in jobs[:3]:
@@ -547,6 +569,7 @@ def _reroute_targets(state: SimulationState, card: DecisionCard) -> str:
 
 
 def _preempt_for_card(state: SimulationState, card: DecisionCard) -> str:
+    """Interrupt lower-priority work when a card's target justifies it."""
     for job in _jobs_for_card(state, card):
         for wc_id in job.candidate_workcenter_ids:
             if wc_id not in state.workcenters:
@@ -559,6 +582,7 @@ def _preempt_for_card(state: SimulationState, card: DecisionCard) -> str:
 
 
 def _split_capacity(state: SimulationState, card: DecisionCard) -> str:
+    """Move queued shop work across alternate capable capacity."""
     shop_ids = [target for target in card.target_ids if target in state.shops]
     moved = 0
     for shop_id in shop_ids:
@@ -575,6 +599,7 @@ def _split_capacity(state: SimulationState, card: DecisionCard) -> str:
 
 
 def _defer_lower_risk(state: SimulationState, card: DecisionCard) -> str:
+    """Lower priority on slack-rich jobs so urgent work can flow first."""
     shop_ids = [target for target in card.target_ids if target in state.shops]
     jobs = [
         job
@@ -587,6 +612,7 @@ def _defer_lower_risk(state: SimulationState, card: DecisionCard) -> str:
 
 
 def _pull_forward_unaffected(state: SimulationState, card: DecisionCard) -> str:
+    """Queue ready jobs into available capacity before it is wasted."""
     moved = 0
     ready = sorted(state.get_ready_jobs(), key=lambda job: (-job.priority, job.due_shift))
     for job in ready[:18]:
@@ -602,6 +628,7 @@ def _apply_forward_decision_effect(
     card: DecisionCard,
     choice: DecisionChoice,
 ) -> str:
+    """Translate a decision into future mitigation or follow-on risk."""
     event = _event_by_id(state, choice.immediate_effects.get("event_id"))
     if not event:
         return ""
@@ -617,6 +644,8 @@ def _apply_forward_decision_effect(
         "wait": -2,
         "defer": -1,
     }.get(effect_type, 0)
+    # mitigation_score is later consumed by the cascade evaluator. Positive
+    # choices reduce pressure; passive/defer choices can create a new event.
     event.effects["mitigation_score"] = int(event.effects.get("mitigation_score", 0)) + mitigation_delta
     event.effects.setdefault("decision_history", []).append(
         {
@@ -640,6 +669,7 @@ def _apply_forward_decision_effect(
 
 
 def _soften_related_future_events(state: SimulationState, source_event: Event, strength: int) -> int:
+    """Reduce severity/duration on future events related to the mitigated one."""
     affected = 0
     for event in state.event_timeline:
         if event.id == source_event.id or event.started or event.resolved:
@@ -663,6 +693,7 @@ def _schedule_decision_follow_on(
     pressure: int,
     choice_label: str,
 ) -> Event | None:
+    """Schedule one downstream risk caused by a low-mitigation decision."""
     key = f"decision_follow_on:{choice_label}"
     if key in source_event.effects:
         return None
@@ -685,6 +716,7 @@ def _schedule_decision_follow_on(
 
 
 def _decision_follow_on_target(state: SimulationState, source_event: Event) -> tuple[EventType, TargetType, str]:
+    """Choose the plausible event type/target for a decision-driven cascade."""
     if source_event.type in {EventType.MISSING_MATERIAL, EventType.DELAYED_MATERIAL, EventType.SUPPLIER_ESCALATION}:
         if source_event.target_type == TargetType.JOB and source_event.target_id in state.jobs:
             job = state.jobs[source_event.target_id]
@@ -704,6 +736,7 @@ def _decision_follow_on_target(state: SimulationState, source_event: Event) -> t
 
 
 def _events_related(state: SimulationState, source: Event, candidate: Event) -> bool:
+    """Return whether two events touch the same job, piece, or shop context."""
     if source.target_id == candidate.target_id:
         return True
     source_jobs = _jobs_for_event(state, source)
@@ -727,6 +760,7 @@ def _events_related(state: SimulationState, source: Event, candidate: Event) -> 
 
 
 def _piece_id_for_event(state: SimulationState, event: Event) -> str:
+    """Resolve the piece id most closely associated with an event."""
     if event.target_type == TargetType.PIECE and event.target_id in state.pieces:
         return event.target_id
     if event.target_type == TargetType.JOB and event.target_id in state.jobs:
@@ -738,6 +772,7 @@ def _piece_id_for_event(state: SimulationState, event: Event) -> str:
 
 
 def _apply_risk_delta(state: SimulationState, card: DecisionCard, delta: int) -> None:
+    """Apply a choice's risk delta to the most relevant jobs/entities."""
     for job in _jobs_for_card(state, card)[:8]:
         job.risk_score = max(0, min(100, job.risk_score + delta))
     for target_id in card.target_ids:
@@ -748,6 +783,7 @@ def _apply_risk_delta(state: SimulationState, card: DecisionCard, delta: int) ->
 
 
 def _jobs_for_card(state: SimulationState, card: DecisionCard) -> list[Job]:
+    """Expand a card's targets into concrete affected jobs."""
     jobs: list[Job] = []
     for target_id in card.target_ids:
         if target_id in state.jobs:
@@ -774,6 +810,7 @@ def _jobs_for_card(state: SimulationState, card: DecisionCard) -> list[Job]:
 
 
 def _jobs_for_event(state: SimulationState, event: Event) -> list[Job]:
+    """Expand an event target into concrete affected jobs."""
     if event.target_type == TargetType.JOB and event.target_id in state.jobs:
         return [state.jobs[event.target_id]]
     if event.target_type == TargetType.PIECE and event.target_id in state.pieces:
@@ -794,6 +831,7 @@ def _best_alternate_workcenter(
     job: Job,
     allow_primary: bool = False,
 ) -> WorkCenter | None:
+    """Return the least-loaded capable workcenter for a reroute."""
     candidates: list[WorkCenter] = []
     for wc_id in job.candidate_workcenter_ids:
         if wc_id not in state.workcenters:
@@ -811,12 +849,14 @@ def _best_alternate_workcenter(
 
 
 def _event_by_id(state: SimulationState, event_id: str | None) -> Event | None:
+    """Find an event by id, tolerating missing ids from generic cards."""
     if not event_id:
         return None
     return next((event for event in state.event_timeline if event.id == event_id), None)
 
 
 def _target_name(state: SimulationState, target_type: TargetType, target_id: str) -> str:
+    """Resolve an event target into display text for a card description."""
     if target_type == TargetType.SHOP and target_id in state.shops:
         return state.shops[target_id].name
     if target_type == TargetType.WORKCENTER and target_id in state.workcenters:
@@ -827,6 +867,7 @@ def _target_name(state: SimulationState, target_type: TargetType, target_id: str
 
 
 def _decision_type_for_event(event_type: EventType) -> DecisionType:
+    """Map specific disruption types into broader decision-card categories."""
     return {
         EventType.MISSING_MATERIAL: DecisionType.MISSING_MATERIAL,
         EventType.DELAYED_MATERIAL: DecisionType.MISSING_MATERIAL,
@@ -849,6 +890,7 @@ def _decision_type_for_event(event_type: EventType) -> DecisionType:
 
 
 def _top_bottleneck(state: SimulationState) -> Shop | None:
+    """Return the most pressured shop if it is worth showing as a card."""
     shops = state.get_bottleneck_shops(1)
     if not shops:
         return None
@@ -859,11 +901,13 @@ def _top_bottleneck(state: SimulationState) -> Shop | None:
 
 
 def _top_critical_job(state: SimulationState) -> Job | None:
+    """Return the highest-priority critical-path job, if any."""
     critical = state.get_critical_path_jobs()
     return critical[0] if critical else None
 
 
 def _alternate_routing_job(state: SimulationState) -> Job | None:
+    """Find a risky job with a usable alternate workcenter."""
     candidates = [
         job
         for job in state.jobs.values()
@@ -876,4 +920,5 @@ def _alternate_routing_job(state: SimulationState) -> Job | None:
 
 
 def _has_idle_opportunity(state: SimulationState) -> bool:
+    """Return whether open workcenters and ready jobs coexist."""
     return bool(state.get_ready_jobs()) and bool(state.get_available_workcenters())

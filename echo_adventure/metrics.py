@@ -1,3 +1,5 @@
+"""Derived metric, status, risk, and critical-path calculations."""
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -7,6 +9,9 @@ from .models import Job, MetricSnapshot, SimulationState
 
 
 def update_state_metrics(state: SimulationState) -> None:
+    """Refresh all derived status fields and roll-up risk metrics on state."""
+    # Several modules mutate jobs, workcenters, and events directly. This pass
+    # re-derives display/status fields so schedulers and renderers agree.
     _refresh_job_statuses(state)
     projected = recalculate_critical_path(state)
     _refresh_piece_statuses(state)
@@ -17,6 +22,7 @@ def update_state_metrics(state: SimulationState) -> None:
 
 
 def calculate_snapshot(state: SimulationState) -> MetricSnapshot:
+    """Return a point-in-time metric snapshot without storing it on state."""
     projected = recalculate_critical_path(state)
     risk = calculate_schedule_risk(state, projected)
     jobs_completed = len(state.completed_jobs)
@@ -51,6 +57,7 @@ def calculate_snapshot(state: SimulationState) -> MetricSnapshot:
 
 
 def calculate_schedule_risk(state: SimulationState, projected_completion_shift: int | None = None) -> float:
+    """Estimate deadline risk from slack, blockers, queues, and disruptions."""
     if projected_completion_shift is None:
         projected_completion_shift = recalculate_critical_path(state)
     slack = state.deadline_shift - projected_completion_shift
@@ -72,6 +79,8 @@ def calculate_schedule_risk(state: SimulationState, projected_completion_shift: 
     integration_gap = max(0, 15 - completed_pieces) * (1.0 if state.current_shift > 30 else 0.45)
     slack_risk = max(0, 22 - slack) * 0.9
     work_risk = max(0.0, remaining_jobs / max(1, state.deadline_shift - state.current_shift)) * 3.5
+    # This is a heuristic score, not a probability model. It intentionally
+    # blends schedule slack with operational symptoms the player can affect.
     risk = (
         slack_risk
         + late_jobs * 2.6
@@ -89,11 +98,13 @@ def calculate_schedule_risk(state: SimulationState, projected_completion_shift: 
 
 
 def recalculate_critical_path(state: SimulationState) -> int:
+    """Mark critical jobs and return the projected final completion shift."""
     for job in state.jobs.values():
         job.critical_path = False
 
     @lru_cache(maxsize=None)
     def remaining_path(job_id: str) -> int:
+        """Return remaining downstream work from this job through dependents."""
         job = state.jobs[job_id]
         if job.status == JobStatus.COMPLETE:
             own = 0
@@ -114,6 +125,8 @@ def recalculate_critical_path(state: SimulationState) -> int:
     max_path = max(score for score, _job in scored)
     threshold = max(1, int(max_path * 0.72))
     for score, job in scored:
+        # Jobs near the longest path, with low slack, or representing final
+        # integration are all treated as critical-path attention targets.
         slack = state.deadline_shift - (state.current_shift + score)
         if score >= threshold or slack <= 10 or job.id == state.final_integration_job:
             job.critical_path = True
@@ -122,6 +135,7 @@ def recalculate_critical_path(state: SimulationState) -> int:
 
 
 def shop_utilization(state: SimulationState, shop_id: str) -> float:
+    """Return current active-workcenter utilization for one shop."""
     shop = state.shops[shop_id]
     if not shop.workcenter_ids:
         return 0.0
@@ -134,6 +148,7 @@ def shop_utilization(state: SimulationState, shop_id: str) -> float:
 
 
 def _job_risk(job: Job, slack: int) -> float:
+    """Score an individual incomplete job's schedule risk."""
     risk = 0.0
     if slack < 0:
         risk += 65
@@ -148,6 +163,7 @@ def _job_risk(job: Job, slack: int) -> float:
 
 
 def _refresh_job_statuses(state: SimulationState) -> None:
+    """Refresh dependency-driven job statuses without disturbing active work."""
     for job in state.jobs.values():
         if job.status == JobStatus.COMPLETE:
             continue
@@ -167,6 +183,7 @@ def _refresh_job_statuses(state: SimulationState) -> None:
 
 
 def _refresh_piece_statuses(state: SimulationState) -> None:
+    """Roll job statuses up into each puzzle piece's status and risk."""
     for piece in state.pieces.values():
         completed = sum(1 for job_id in piece.job_ids if state.jobs[job_id].status == JobStatus.COMPLETE)
         blocked = sum(1 for job_id in piece.job_ids if state.jobs[job_id].is_blocked)
@@ -201,6 +218,7 @@ def _refresh_piece_statuses(state: SimulationState) -> None:
 
 
 def _refresh_shop_statuses(state: SimulationState) -> None:
+    """Roll job/workcenter state up into shop queues, utilization, and risk."""
     for shop in state.shops.values():
         shop.active_job_ids = []
         shop.queued_job_ids = []
@@ -234,6 +252,7 @@ def _refresh_shop_statuses(state: SimulationState) -> None:
 
 
 def day_shift(shift: int, shifts_per_day: int = 3) -> str:
+    """Format a one-based shift number as a day/shift label."""
     if shift <= 0:
         return "Day 1, Shift 1"
     day = ((shift - 1) // shifts_per_day) + 1

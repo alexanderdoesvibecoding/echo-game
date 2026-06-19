@@ -1,7 +1,10 @@
+"""Small terminal input helpers for menu-style prompts."""
+
 from __future__ import annotations
 
 
 def ask_number(prompt: str, minimum: int, maximum: int, allow_quit: bool = False) -> int | None:
+    """Prompt until the user enters a number in range or quits/EOFs."""
     while True:
         suffix = f" [{minimum}-{maximum}]"
         if allow_quit:
@@ -23,6 +26,7 @@ def ask_number(prompt: str, minimum: int, maximum: int, allow_quit: bool = False
 
 
 def ask_optional_seed(prompt: str = "Seed") -> int | None:
+    """Prompt for an integer seed, returning None for a random seed."""
     while True:
         try:
             raw = input(f"{prompt} (blank for random): ").strip()
@@ -37,6 +41,7 @@ def ask_optional_seed(prompt: str = "Seed") -> int | None:
 
 
 def pause(prompt: str = "Press Enter to continue") -> bool:
+    """Wait for Enter and return False when the user quits or input ends."""
     try:
         raw = input(f"{prompt} ").strip().lower()
     except EOFError:

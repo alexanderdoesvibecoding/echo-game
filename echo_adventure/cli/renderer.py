@@ -1,3 +1,5 @@
+"""Terminal rendering for the CLI version of ECHO Adventure."""
+
 from __future__ import annotations
 
 from typing import Iterable
@@ -22,23 +24,29 @@ except ModuleNotFoundError:  # pragma: no cover - exercised in minimal environme
 
 
 class GameRenderer:
+    """Render game state with Rich when available, plain text otherwise."""
+
     def __init__(self, use_color: bool = True) -> None:
+        """Create a renderer and remember whether Rich output is available."""
         self.rich = RICH_AVAILABLE
         self.console = Console(no_color=not use_color) if RICH_AVAILABLE else None
 
     def print(self, message: str = "") -> None:
+        """Print a message with Rich markup support when available."""
         if self.rich:
             self.console.print(message)
         else:
             print(_strip_markup(message))
 
     def rule(self, title: str) -> None:
+        """Print a section divider."""
         if self.rich:
             self.console.rule(title)
         else:
             print(f"\n=== {title} ===")
 
     def render_main_menu(self) -> None:
+        """Render the terminal game's top-level menu."""
         self.rule("Advanced Manufacturing Yard Scheduling")
         self._panel(
             "Complete a 15-piece project in 15 days by steering priorities, reroutes, disruption response, and final integration readiness.",
@@ -49,6 +57,7 @@ class GameRenderer:
         self.print("3. Quit")
 
     def render_start(self, state: SimulationState) -> None:
+        """Render the initial scenario summary."""
         update_state_metrics(state)
         snapshot = calculate_snapshot(state)
         text = (
@@ -61,6 +70,7 @@ class GameRenderer:
         self._panel(text, "New Run")
 
     def render_overview(self, state: SimulationState) -> None:
+        """Render the start-of-day operating summary."""
         update_state_metrics(state)
         snapshot = calculate_snapshot(state)
         active = len(state.active_events)
@@ -84,6 +94,7 @@ class GameRenderer:
         self._two_col_table(rows, "Project Status")
 
     def render_schedule_board(self, state: SimulationState) -> None:
+        """Render the primary shop-level operating board."""
         update_state_metrics(state)
         headers = [
             "Shop",
@@ -118,6 +129,7 @@ class GameRenderer:
         self._table(headers, rows, "Schedule Board")
 
     def render_shop_status(self, state: SimulationState) -> None:
+        """Render shop capabilities, utilization, and queue pressure."""
         update_state_metrics(state)
         rows = []
         for shop in state.shops.values():
@@ -136,6 +148,7 @@ class GameRenderer:
         self._table(["ID", "Shop", "Capabilities", "WCs", "Util.", "Risk", "Queued", "Blocked"], rows, "Shop Status")
 
     def render_workcenter_queues(self, state: SimulationState, shop_id: str) -> None:
+        """Render detailed workcenter queues for one shop."""
         update_state_metrics(state)
         shop = state.shops[shop_id]
         rows = []
@@ -163,6 +176,7 @@ class GameRenderer:
         )
 
     def render_piece_progress(self, state: SimulationState) -> None:
+        """Render piece completion, blockers, criticality, and risk."""
         update_state_metrics(state)
         rows = []
         for piece in sorted(state.pieces.values(), key=lambda item: (-item.risk_score, item.id)):
@@ -188,6 +202,7 @@ class GameRenderer:
         )
 
     def render_critical_path(self, state: SimulationState) -> None:
+        """Render the jobs currently driving projected completion."""
         update_state_metrics(state)
         rows = []
         for job in state.get_critical_path_jobs()[:18]:
@@ -209,6 +224,7 @@ class GameRenderer:
         self._table(["Job", "Shop", "Workcenter", "Remain", "Slack", "Blocking Issue", "Impact"], rows, "Critical Path")
 
     def render_risk_register(self, state: SimulationState) -> None:
+        """Render visible disruptions plus blocked jobs needing attention."""
         rows = []
         for event in state.event_timeline:
             if event.id not in state.active_events and event.id not in state.known_warnings:
@@ -226,6 +242,7 @@ class GameRenderer:
         )
 
     def render_decision_card(self, card: DecisionCard) -> None:
+        """Render a daily decision card and its selectable responses."""
         body = f"{card.description}\n\n"
         for choice in card.choices:
             body += (
@@ -236,9 +253,11 @@ class GameRenderer:
         self._panel(body.rstrip(), f"{card.type.value}: {card.title}")
 
     def render_choice_confirmation(self, note: str) -> None:
+        """Render the result note after a decision choice is applied."""
         self._panel(note, "Action Applied")
 
     def render_day_summary(self, result: DayResult, state: SimulationState) -> None:
+        """Render the end-of-day metric deltas and notable consequences."""
         snap = result.end_snapshot
         rows = [
             ("Jobs completed today", str(len(result.completed_job_ids))),
@@ -258,6 +277,7 @@ class GameRenderer:
             self._panel("\n".join(f"- {note}" for note in result.notes[-10:]), "Notable Consequences")
 
     def render_final_reveal(self, player: SimulationState, automated: SimulationState, seed: int) -> None:
+        """Render the final player-vs-ECHO benchmark comparison."""
         player_snapshot = calculate_snapshot(player)
         automated_snapshot = calculate_snapshot(automated)
         self.rule("Final Operational Comparison")
@@ -299,6 +319,7 @@ class GameRenderer:
         self._panel("\n".join(f"- {line}" for line in explanation), "What Changed the Outcome")
 
     def render_debug(self, state: SimulationState) -> None:
+        """Render the full generated event timeline for debug runs."""
         rows = [
             [
                 event.id,
@@ -313,12 +334,14 @@ class GameRenderer:
         self._table(["ID", "Type", "Target", "Start", "Duration", "Warning"], rows, "Debug Event Timeline")
 
     def _panel(self, body: str, title: str) -> None:
+        """Render a titled panel with a plain-text fallback."""
         if self.rich:
             self.console.print(Panel(body, title=title, border_style="cyan"))
         else:
             print(f"\n[{title}]\n{_strip_markup(body)}")
 
     def _table(self, headers: list[str], rows: Iterable[Iterable[str]], title: str) -> None:
+        """Render a table with Rich when available and a pipe table otherwise."""
         if self.rich:
             table = Table(title=title, box=box.SIMPLE_HEAVY, show_lines=False)
             for header in headers:
@@ -334,16 +357,19 @@ class GameRenderer:
                 print(" | ".join(str(value) for value in row))
 
     def _two_col_table(self, rows: Iterable[tuple[str, str]], title: str) -> None:
+        """Render a simple metric/value table."""
         self._table(["Metric", "Value"], rows, title)
 
 
 def _bar(percent: float) -> str:
+    """Return a fixed-width text progress bar."""
     blocks = 12
     filled = int(round(percent * blocks))
     return "[" + "#" * filled + "." * (blocks - filled) + f"] {percent:.0%}"
 
 
 def _highest_risk_piece(state: SimulationState, shop_id: str) -> str:
+    """Return the highest-risk incomplete piece touched by a shop."""
     piece_scores: dict[str, float] = {}
     for job in state.jobs.values():
         if job.shop_id == shop_id and job.piece_id in state.pieces and not job.is_complete:
@@ -355,6 +381,7 @@ def _highest_risk_piece(state: SimulationState, shop_id: str) -> str:
 
 
 def _shop_event_label(state: SimulationState, shop_id: str) -> str:
+    """Return active event labels affecting a shop or its workcenters."""
     labels = []
     for event in state.event_timeline:
         if event.id not in state.active_events:
@@ -367,6 +394,7 @@ def _shop_event_label(state: SimulationState, shop_id: str) -> str:
 
 
 def _response_category(event_type: str) -> str:
+    """Map event display text to a high-level recommended response."""
     lower = event_type.lower()
     if "weather" in lower or "facility" in lower:
         return "pre-stage or shift unaffected work"
@@ -380,10 +408,12 @@ def _response_category(event_type: str) -> str:
 
 
 def _yes_no(value: bool) -> str:
+    """Format booleans for final comparison rows."""
     return "Yes" if value else "No"
 
 
 def _strip_markup(message: str) -> str:
+    """Remove the small Rich markup subset used by fallback text output."""
     return (
         message.replace("[bold]", "")
         .replace("[/bold]", "")

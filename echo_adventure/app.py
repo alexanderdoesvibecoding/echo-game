@@ -1,3 +1,5 @@
+"""Terminal entry point and high-level game loop orchestration."""
+
 from __future__ import annotations
 
 import argparse
@@ -15,6 +17,7 @@ from .simulation import advance_day, initialize_state
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Parse CLI options and route to either the terminal game or browser UI."""
     parser = argparse.ArgumentParser(description="Terminal scheduling strategy game.")
     parser.add_argument("--seed", type=int, help="Run a reproducible scenario seed.")
     parser.add_argument("--no-color", action="store_true", help="Disable colored terminal output where practical.")
@@ -47,6 +50,7 @@ def main(argv: list[str] | None = None) -> None:
 
 
 def run_game(seed: int | None, renderer: GameRenderer, use_color: bool = True, debug: bool = False) -> None:
+    """Run one complete terminal game, including the hidden ECHO benchmark."""
     resolved_seed = resolve_seed(seed)
     config = GameConfig(seed=resolved_seed, use_color=use_color, debug=debug)
     try:
@@ -57,6 +61,8 @@ def run_game(seed: int | None, renderer: GameRenderer, use_color: bool = True, d
             raise
         return
 
+    # Both states start from identical deep copies of the scenario. The player
+    # mutates one through daily decisions; ECHO mutates the other silently.
     player_state = initialize_state(scenario, config.shifts_per_day)
     automated_state = initialize_state(scenario, config.shifts_per_day)
     manual_scheduler = ManualScheduler()
@@ -74,6 +80,8 @@ def run_game(seed: int | None, renderer: GameRenderer, use_color: bool = True, d
             renderer.print("Run ended without saving.")
             return
 
+        # Daily cards are the only intentional manual intervention point before
+        # the manual scheduler advances the queued work for the day.
         cards = generate_decision_cards(player_state, player_state.current_day, config)
         for card in cards:
             renderer.render_decision_card(card)
@@ -85,6 +93,8 @@ def run_game(seed: int | None, renderer: GameRenderer, use_color: bool = True, d
             renderer.render_choice_confirmation(note)
 
         player_result = advance_day(player_state, manual_scheduler)
+        # ECHO receives no player choices, but it does see the same generated
+        # warnings and disruptions while it plans each day.
         advance_day(automated_state, automated_scheduler)
         renderer.render_day_summary(player_result, player_state)
 
@@ -99,6 +109,7 @@ def run_game(seed: int | None, renderer: GameRenderer, use_color: bool = True, d
 
 
 def _finish_automated_run(state, scheduler: AutomatedScheduler) -> None:
+    """Fast-forward the benchmark after the player run ends."""
     while state.current_shift < state.deadline_shift and not state.final_item_completed:
         state.daily_notes.clear()
         advance_day(state, scheduler)

@@ -1,3 +1,5 @@
+"""Terminal menu workflows that sit between input helpers and rendering."""
+
 from __future__ import annotations
 
 from .input import ask_number, ask_optional_seed, pause
@@ -6,15 +8,18 @@ from ..models import SimulationState
 
 
 def main_menu(renderer: GameRenderer) -> int | None:
+    """Render and read the top-level terminal menu."""
     renderer.render_main_menu()
     return ask_number("Choose", 1, 3)
 
 
 def seed_prompt() -> int | None:
+    """Ask for an optional replay seed."""
     return ask_optional_seed()
 
 
 def inspection_menu(renderer: GameRenderer, state: SimulationState) -> bool:
+    """Let the player inspect operating-board views before decisions."""
     while True:
         renderer.render_schedule_board(state)
         renderer.print("\nInspect before decisions:")
@@ -54,6 +59,7 @@ def inspection_menu(renderer: GameRenderer, state: SimulationState) -> bool:
 
 
 def choose_shop(renderer: GameRenderer, state: SimulationState) -> str | None:
+    """Return the selected shop id for workcenter-queue inspection."""
     renderer.print("\nSelect a shop:")
     shops = list(state.shops.values())
     for index, shop in enumerate(shops, start=1):
@@ -65,6 +71,7 @@ def choose_shop(renderer: GameRenderer, state: SimulationState) -> str | None:
 
 
 def end_day_menu(renderer: GameRenderer) -> bool:
+    """Return whether the player wants to continue after the day summary."""
     renderer.print("\n1. Continue to next day")
     renderer.print("2. Quit current run")
     choice = ask_number("Choose", 1, 2)

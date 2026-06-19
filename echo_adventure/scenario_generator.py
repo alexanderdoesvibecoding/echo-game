@@ -1,3 +1,5 @@
+"""Scenario construction for shops, pieces, jobs, dependencies, and events."""
+
 from __future__ import annotations
 
 import random
@@ -56,6 +58,7 @@ PIECE_NAMES = [
 
 
 def generate_scenario(config: GameConfig) -> Scenario:
+    """Generate and validate one deterministic scenario from the config seed."""
     seed = config.seed if config.seed is not None else 0
     rng = random.Random(seed)
     shops, workcenters = _generate_shops_and_workcenters(config, rng)
@@ -83,6 +86,7 @@ def generate_scenario(config: GameConfig) -> Scenario:
 
 
 def validate_scenario(scenario: Scenario, config: GameConfig) -> None:
+    """Check generated objects for configured counts and dependency validity."""
     if len(scenario.pieces) != config.piece_count:
         raise ValueError("Scenario must contain exactly 30 puzzle pieces.")
     if len(scenario.shops) != config.shop_count:
@@ -106,6 +110,7 @@ def _generate_shops_and_workcenters(
     config: GameConfig,
     rng: random.Random,
 ) -> tuple[dict[str, Shop], dict[str, WorkCenter]]:
+    """Create shop blueprints and a varied number of capable workcenters."""
     shops: dict[str, Shop] = {}
     workcenters: dict[str, WorkCenter] = {}
     
@@ -130,6 +135,8 @@ def _generate_shops_and_workcenters(
         workcenter_ids: list[str] = []
         for wc_index in range(1, count + 1):
             wc_id = f"WC-{index:02d}-{wc_index:03d}"
+            # Give every workcenter a primary capability, then sprinkle in
+            # secondary capabilities to create routing alternatives.
             primary_cap = capabilities[(wc_index - 1) % len(capabilities)]
             extra_caps = rng.sample(capabilities, k=rng.randint(0, min(2, len(capabilities) - 1)))
             wc_caps = sorted(set([primary_cap] + extra_caps))
@@ -157,6 +164,7 @@ def _generate_pieces_and_jobs(
     shops: dict[str, Shop],
     workcenters: dict[str, WorkCenter],
 ) -> tuple[dict[str, PuzzlePiece], dict[str, Job]]:
+    """Create puzzle pieces and their dependency-linked job chains."""
     pieces: dict[str, PuzzlePiece] = {}
     jobs: dict[str, Job] = {}
     shop_ids = list(shops.keys())
@@ -172,6 +180,8 @@ def _generate_pieces_and_jobs(
         previous_job_ids: list[str] = []
         previous_shop_id: str | None = None
         for job_index in range(1, job_count + 1):
+            # Pieces usually cluster around a dominant shop, but occasional
+            # cross-shop work creates transport delays and scheduling tradeoffs.
             shop_id = dominant_shop if rng.random() < 0.45 else rng.choice(piece_shops)
             shop = shops[shop_id]
             capability = rng.choice(shop.capabilities)
@@ -179,6 +189,8 @@ def _generate_pieces_and_jobs(
             job_id = f"JOB-{piece_index:02d}-{job_index:03d}"
             dependencies: list[str] = []
             if previous_job_ids:
+                # Each piece is mostly linear, with occasional extra links to
+                # make the critical path more interesting than a simple chain.
                 dependencies.append(previous_job_ids[-1])
                 if len(previous_job_ids) > 2 and rng.random() < 0.25:
                     dependencies.append(rng.choice(previous_job_ids[:-1]))
@@ -230,6 +242,7 @@ def _candidate_workcenters(
     workcenters: dict[str, WorkCenter],
     rng: random.Random,
 ) -> list[str]:
+    """Return primary and alternate workcenters that can perform a capability."""
     primary = [wc.id for wc in workcenters.values() if wc.shop_id == primary_shop_id and capability in wc.capabilities]
     alternates = [wc.id for wc in workcenters.values() if wc.shop_id != primary_shop_id and capability in wc.capabilities]
     rng.shuffle(primary)
@@ -248,6 +261,7 @@ def _generate_final_integration_job(
     workcenters: dict[str, WorkCenter],
     jobs: dict[str, Job],
 ) -> Job:
+    """Create the final job that depends on every generated piece job."""
     integration_shops = [shop for shop in shops.values() if "integration" in shop.capabilities]
     shop = integration_shops[0]
     candidate_ids = [wc.id for wc in workcenters.values() if "integration" in wc.capabilities]
@@ -274,6 +288,7 @@ def _generate_final_integration_job(
 
 
 def _assert_acyclic(jobs: dict[str, Job]) -> None:
+    """Raise if generated job dependencies contain a cycle."""
     visiting: set[str] = set()
     visited: set[str] = set()
 

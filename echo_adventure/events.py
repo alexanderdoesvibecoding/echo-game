@@ -1,3 +1,5 @@
+"""Event generation, event effects, and downstream disruption cascades."""
+
 from __future__ import annotations
 
 from random import Random
@@ -39,6 +41,7 @@ def generate_event_timeline(
     pieces: dict[str, PuzzlePiece],
     jobs: dict[str, Job],
 ) -> list[Event]:
+    """Build the base disruption timeline for a scenario."""
     deadline = config.deadline_shift
     all_jobs = [job for job in jobs.values() if job.id != "JOB-FINAL-001"]
     timeline: list[Event] = []
@@ -48,6 +51,8 @@ def generate_event_timeline(
         config.max_extra_quality_rework_events,
     )
     filler_count = max(0, event_count - len(EVENT_SEQUENCE) - extra_rework_count)
+    # The catalog guarantees broad variety, then extra/filler events create
+    # enough density that a player cannot perfectly absorb every disruption.
     event_types = (
         EVENT_SEQUENCE
         + [EventType.QUALITY_REWORK for _ in range(extra_rework_count)]
@@ -93,6 +98,7 @@ def generate_event_timeline(
 
 
 def _duration_for(event_type: EventType, severity: int, rng: Random) -> int:
+    """Choose an event duration, scaling severe events without exceeding caps."""
     base = {
         EventType.MISSING_MATERIAL: (2, 5),
         EventType.DELAYED_MATERIAL: (2, 6),
@@ -123,6 +129,7 @@ def _target_for(
     pieces: dict[str, PuzzlePiece],
     jobs: list[Job],
 ) -> tuple[TargetType, str]:
+    """Pick a target object appropriate for the event type."""
     if event_type in {EventType.MACHINE_DOWN, EventType.TOOLING_DAMAGE}:
         return TargetType.WORKCENTER, rng.choice(list(workcenters.keys()))
     if event_type in {EventType.WEATHER, EventType.FACILITY_OUTAGE, EventType.CREW_SHORTAGE, EventType.LOGISTICS_BACKLOG}:
@@ -142,6 +149,7 @@ def _target_for(
 
 
 def _description_for(event_type: EventType, target_type: TargetType, target_id: str, severity: int) -> str:
+    """Return the player-facing description for an event."""
     target = target_id.replace("-", " ")
     if event_type == EventType.MISSING_MATERIAL:
         return f"Material kit for {target} is missing at release check."
@@ -181,12 +189,17 @@ def _description_for(event_type: EventType, target_type: TargetType, target_id: 
 
 
 def refresh_event_state(state: SimulationState) -> None:
+    """Apply warnings, starts, resolutions, and countdown updates for a shift."""
     current = state.current_shift
+    # Warnings become visible before event start, giving schedulers and players
+    # a chance to mitigate a future disruption.
     for event in state.event_timeline:
         if event.has_advance_warning and event.warning_shift == current and event.id not in state.known_warnings:
             state.known_warnings.append(event.id)
             state.daily_notes.append(f"Warning received: {event.description}")
 
+    # Resolve first so a workcenter/job can become available before newly
+    # starting events for the same shift are applied.
     for event in state.event_timeline:
         if event.started and not event.resolved and current >= event.end_shift:
             resolve_event(state, event)
@@ -204,6 +217,7 @@ def refresh_event_state(state: SimulationState) -> None:
 
 
 def apply_event_start(state: SimulationState, event: Event) -> None:
+    """Apply the immediate state mutation caused by a newly active event."""
     event.started = True
     if event.id not in state.active_events:
         state.active_events.append(event.id)
@@ -246,6 +260,7 @@ def apply_event_start(state: SimulationState, event: Event) -> None:
 
 
 def resolve_event(state: SimulationState, event: Event) -> None:
+    """Clear reversible event effects and evaluate downstream cascade risk."""
     event.resolved = True
     if event.id in state.active_events:
         state.active_events.remove(event.id)
@@ -254,6 +269,8 @@ def resolve_event(state: SimulationState, event: Event) -> None:
         if job_id not in state.jobs:
             continue
         job = state.jobs[job_id]
+        # Block reasons include the event id, so resolution only clears blocks
+        # caused by this event and leaves overlapping disruptions intact.
         if job.status != JobStatus.COMPLETE and job.block_reason and event.id in job.block_reason:
             job.block_reason = None
             job.status = JobStatus.READY if state.is_dependency_complete(job.id) else JobStatus.NOT_READY
@@ -277,6 +294,7 @@ def resolve_event(state: SimulationState, event: Event) -> None:
 
 
 def _block_target_jobs(state: SimulationState, event: Event, reason: str) -> None:
+    """Expand an event target into concrete jobs and block them."""
     if event.target_type == TargetType.JOB:
         _block_jobs(state, event, [event.target_id], reason)
     elif event.target_type == TargetType.PIECE:
@@ -287,6 +305,7 @@ def _block_target_jobs(state: SimulationState, event: Event, reason: str) -> Non
 
 
 def _block_jobs(state: SimulationState, event: Event, job_ids: Iterable[str], reason: str) -> None:
+    """Block jobs and record exactly which ones this event must later release."""
     affected: list[str] = []
     for job_id in job_ids:
         if job_id not in state.jobs:
@@ -315,6 +334,7 @@ def _set_workcenters_down(
     status: WorkCenterStatus,
     reason: str,
 ) -> None:
+    """Set workcenters into a disrupted status and pause their current jobs."""
     affected: list[str] = []
     for wc_id in workcenter_ids:
         if wc_id not in state.workcenters:
@@ -333,6 +353,7 @@ def _set_workcenters_down(
 
 
 def _apply_quality_rework(state: SimulationState, event: Event) -> None:
+    """Add rework to incomplete jobs or insert follow-on work for completed jobs."""
     target_id = event.target_id
     if event.target_type == TargetType.PIECE and target_id in state.pieces:
         candidates = [
@@ -373,6 +394,7 @@ def _apply_quality_rework(state: SimulationState, event: Event) -> None:
 
 
 def _apply_priority_change(state: SimulationState, event: Event) -> None:
+    """Raise priority and pull due dates forward for affected jobs."""
     if event.target_type == TargetType.PIECE:
         targets = [state.jobs[job_id] for job_id in state.pieces[event.target_id].job_ids]
     else:
@@ -387,6 +409,7 @@ def _apply_priority_change(state: SimulationState, event: Event) -> None:
 
 
 def _insert_urgent_job(state: SimulationState, event: Event) -> None:
+    """Insert a new required job into a piece during the active run."""
     piece_id = event.target_id
     piece = state.pieces[piece_id]
     existing_jobs = [state.jobs[job_id] for job_id in piece.job_ids]
@@ -427,6 +450,7 @@ def _create_follow_on_job(
     priority: int,
     label: str,
 ) -> Job:
+    """Create a generated job caused by rework or urgent inserted work."""
     piece = state.pieces[piece_id]
     suffix = len(state.jobs) + 1
     job_id = f"JOB-{piece_id.split('-')[-1]}-{label}-{suffix:03d}"
@@ -474,6 +498,7 @@ def schedule_follow_on_event(
     duration_shifts: int | None = None,
     description: str | None = None,
 ) -> Event | None:
+    """Schedule a future chained event if depth/deadline limits allow it."""
     if source_event.chain_depth >= MAX_EVENT_CHAIN_DEPTH:
         return None
     start_shift = max(state.current_shift + 1, source_event.end_shift + delay_shifts)
@@ -502,9 +527,12 @@ def schedule_follow_on_event(
 
 
 def _schedule_cascading_events(state: SimulationState, event: Event) -> None:
+    """Evaluate whether a resolved event creates a later related disruption."""
     if event.effects.get("cascade_evaluated") or event.chain_depth >= MAX_EVENT_CHAIN_DEPTH:
         return
     event.effects["cascade_evaluated"] = True
+    # Mitigation from player choices reduces pressure; unresolved work impact
+    # increases it. Only meaningful pressure is allowed to spawn cascades.
     mitigation = int(event.effects.get("mitigation_score", 0))
     pressure = event.severity + len(event.effects.get("blocked_job_ids", [])) // 4 - mitigation
     if pressure < 3:
@@ -537,6 +565,7 @@ def _cascade_target(
     event: Event,
     rng: Random,
 ) -> tuple[EventType, TargetType, str]:
+    """Map a source event into the most plausible follow-on event target."""
     if event.type in {EventType.MISSING_MATERIAL, EventType.DELAYED_MATERIAL, EventType.SUPPLIER_ESCALATION}:
         if event.target_type == TargetType.JOB and event.target_id in state.jobs:
             job = state.jobs[event.target_id]
@@ -574,11 +603,13 @@ def _cascade_description(
     target_id: str,
     severity: int,
 ) -> str:
+    """Build a description that preserves the source event relationship."""
     base = _description_for(event_type, target_type, target_id, severity)
     return f"{base} Follow-on effect from {source_event.id}."
 
 
 def _piece_for_event(state: SimulationState, event: Event) -> str:
+    """Resolve the affected piece for event types that cascade at piece level."""
     if event.target_type == TargetType.PIECE and event.target_id in state.pieces:
         return event.target_id
     if event.target_type == TargetType.JOB and event.target_id in state.jobs:
@@ -591,6 +622,7 @@ def _piece_for_event(state: SimulationState, event: Event) -> str:
 
 
 def _next_event_id(state: SimulationState) -> str:
+    """Return the next unused event id in EVT-#### form."""
     existing = {event.id for event in state.event_timeline}
     index = len(existing) + 1
     while True:
@@ -601,5 +633,6 @@ def _next_event_id(state: SimulationState) -> str:
 
 
 def _sample_ids(ids: list[str], count: int) -> list[str]:
+    """Pick a deterministic prefix sample from an already-randomized id list."""
     # Deterministic enough for an already-generated ordered list; avoids touching global randomness.
     return ids[: max(0, min(count, len(ids)))]

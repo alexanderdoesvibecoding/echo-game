@@ -1,3 +1,5 @@
+"""Module entry point for `python -m echo_adventure`."""
+
 from .app import main
 
 

@@ -1339,6 +1339,7 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
+    // Holds the server-advanced state while the player reads the daily summary.
     let pendingAdvanceState = null;
 
     async function prepareAdvanceDay() {
@@ -1379,6 +1380,8 @@ INDEX_HTML = r"""<!doctype html>
       render();
     }
 
+    // These flags are purely presentation state. The authoritative simulation
+    // state always comes from the server payload in `state`.
     let modalVisible = false;
     let finalModalVisible = false;
     let pieceModalVisible = false;
@@ -1860,6 +1863,8 @@ INDEX_HTML = r"""<!doctype html>
       return String(value).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[ch]));
     }
 
+    // Tab selection only changes visibility; all tab tables are refreshed from
+    // the latest payload whenever renderTables runs.
     document.querySelectorAll(".tabbar button").forEach(button => {
       button.addEventListener("click", () => {
         activeTab = button.dataset.tab;
@@ -1919,6 +1924,8 @@ INDEX_HTML = r"""<!doctype html>
     });
 
     function initDarkMode() {
+      // Theme is intentionally local browser preference, separate from run
+      // state so seed replays do not change presentation preferences.
       const saved = localStorage.getItem("theme") || "light";
       document.documentElement.setAttribute("data-theme", saved);
       updateThemeButton(saved);

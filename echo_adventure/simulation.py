@@ -1,3 +1,5 @@
+"""Core shift/day advancement logic for a scheduler-controlled run."""
+
 from __future__ import annotations
 
 import copy
@@ -18,6 +20,8 @@ MAX_COMPLETION_REWORK_PER_JOB = 1
 
 @dataclass
 class DayResult:
+    """Summary of one in-game day after all shifts are processed."""
+
     completed_job_ids: list[str]
     notes: list[str]
     start_snapshot: MetricSnapshot
@@ -25,6 +29,7 @@ class DayResult:
 
 
 def initialize_state(scenario: Scenario, shifts_per_day: int) -> SimulationState:
+    """Deep-copy a scenario into mutable state for one scheduler."""
     state = SimulationState(
         scenario_id=scenario.scenario_id,
         seed=scenario.seed,
@@ -42,10 +47,13 @@ def initialize_state(scenario: Scenario, shifts_per_day: int) -> SimulationState
 
 
 def advance_day(state: SimulationState, scheduler: Scheduler) -> DayResult:
+    """Let a scheduler plan, then process up to one day's worth of shifts."""
     update_state_metrics(state)
     start_snapshot = calculate_snapshot(state)
     completed_before = set(state.completed_jobs)
     notes_start = len(state.daily_notes)
+    # Day-level planning can react to active disruptions and warnings before
+    # individual shift processing starts.
     scheduler.plan_day(state, _known_events(state))
 
     for _ in range(state.shifts_per_day):
@@ -67,7 +75,10 @@ def advance_day(state: SimulationState, scheduler: Scheduler) -> DayResult:
 
 
 def advance_shift(state: SimulationState, scheduler: Scheduler) -> None:
+    """Advance one shift in event, planning, work, queue-aging order."""
     state.current_shift += 1
+    # Events are applied before planning so schedulers see fresh downtime,
+    # blocks, and warnings when assigning or resequencing work.
     refresh_event_state(state)
     update_state_metrics(state)
     scheduler.plan_shift(state)
@@ -78,6 +89,7 @@ def advance_shift(state: SimulationState, scheduler: Scheduler) -> None:
 
 
 def complete_job(state: SimulationState, job_id: str) -> None:
+    """Complete a job, unless completion inspection creates rework."""
     job = state.jobs[job_id]
     if _maybe_require_completion_rework(state, job):
         return
@@ -105,10 +117,13 @@ def complete_job(state: SimulationState, job_id: str) -> None:
 
 
 def _maybe_require_completion_rework(state: SimulationState, job) -> bool:
+    """Deterministically decide whether a finished job needs final rework."""
     if job.id == state.final_integration_job:
         return False
     if job.rework_count >= MAX_COMPLETION_REWORK_PER_JOB:
         return False
+    # Use a seeded local RNG so the same scenario and shift history produce the
+    # same inspection outcome without touching module/global randomness.
     roll = Random(f"{state.seed}:{job.id}:{state.current_shift}:{job.rework_count}")
     if roll.random() >= JOB_REWORK_PROBABILITY:
         return False
@@ -134,6 +149,7 @@ def _maybe_require_completion_rework(state: SimulationState, job) -> bool:
 
 
 def _start_available_jobs(state: SimulationState) -> None:
+    """Move queued jobs onto idle workcenters when they are still valid."""
     for wc in state.workcenters.values():
         if wc.current_job_id:
             continue
@@ -152,6 +168,8 @@ def _start_available_jobs(state: SimulationState) -> None:
             if job.required_capability not in wc.capabilities:
                 continue
             if not job.started_once:
+                # Duration is locked when the job starts, because reroutes and
+                # workcenter efficiency should not keep re-scaling active work.
                 planned = job.planned_duration
                 adjusted = max(1, math.ceil(planned / max(0.2, wc.efficiency)))
                 if wc.id != job.candidate_workcenter_ids[0]:
@@ -169,6 +187,7 @@ def _start_available_jobs(state: SimulationState) -> None:
 
 
 def _process_workcenters(state: SimulationState) -> None:
+    """Consume one shift of capacity across all workcenters."""
     disrupted = {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}
     for wc in state.workcenters.values():
         if wc.status in disrupted:
@@ -194,6 +213,7 @@ def _process_workcenters(state: SimulationState) -> None:
 
 
 def _age_queues(state: SimulationState) -> None:
+    """Increment queue-time pressure and holding cost for queued jobs."""
     queued: set[str] = set()
     for wc in state.workcenters.values():
         for job_id in wc.queue:
@@ -205,6 +225,7 @@ def _age_queues(state: SimulationState) -> None:
 
 
 def _known_events(state: SimulationState):
+    """Return events the scheduler is allowed to know about today."""
     known = []
     for event in state.event_timeline:
         if event.id in state.known_warnings or event.id in state.active_events:
