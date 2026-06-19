@@ -4,6 +4,7 @@ import random
 
 from .config import GameConfig
 from .enums import DecisionType, EventType, JobStatus, TargetType, WorkCenterStatus
+from .events import schedule_follow_on_event
 from .metrics import update_state_metrics
 from .models import DecisionCard, DecisionChoice, Event, Job, Shop, SimulationState, WorkCenter
 
@@ -70,6 +71,9 @@ def apply_choice(state: SimulationState, card: DecisionCard, choice: DecisionCho
         note = _pull_forward_unaffected(state, card)
     else:
         note = "Recorded the scheduling preference for today."
+    forward_note = _apply_forward_decision_effect(state, card, choice)
+    if forward_note:
+        note = f"{note} {forward_note}"
     state.daily_notes.append(note)
     update_state_metrics(state)
     return note
@@ -114,7 +118,16 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
             reschedule_effect=1,
         ),
     ]
-    if event.type in {EventType.MACHINE_DOWN, EventType.MISSING_MATERIAL, EventType.DELAYED_MATERIAL, EventType.INSPECTION_DELAY}:
+    if event.type in {
+        EventType.MACHINE_DOWN,
+        EventType.MISSING_MATERIAL,
+        EventType.DELAYED_MATERIAL,
+        EventType.INSPECTION_DELAY,
+        EventType.SUPPLIER_ESCALATION,
+        EventType.LOGISTICS_BACKLOG,
+        EventType.TOOLING_DAMAGE,
+        EventType.CERTIFICATION_AUDIT,
+    }:
         choices.append(
             DecisionChoice(
                 id="4",
@@ -484,6 +497,7 @@ def _wait_and_absorb(state: SimulationState, card: DecisionCard) -> str:
         event = _event_by_id(state, target_id)
         if event and event.id in state.active_events:
             event.duration_shifts += 1
+            event.effects["mitigation_score"] = int(event.effects.get("mitigation_score", 0)) - 2
     if affected:
         return f"Held sequence; {affected} affected job(s) absorbed extra queue or coordination delay."
     return "Held current sequence and accepted near-term risk."
@@ -505,7 +519,15 @@ def _expedite_event(state: SimulationState, event_id: str | None) -> str:
     reduction = 2 if event.severity >= 4 else 1
     event.duration_shifts = max(1, event.duration_shifts - reduction)
     event.severity = max(1, event.severity - 1)
-    if event.type in {EventType.MISSING_MATERIAL, EventType.DELAYED_MATERIAL, EventType.INSPECTION_DELAY}:
+    event.effects["mitigation_score"] = int(event.effects.get("mitigation_score", 0)) + 3
+    if event.type in {
+        EventType.MISSING_MATERIAL,
+        EventType.DELAYED_MATERIAL,
+        EventType.INSPECTION_DELAY,
+        EventType.SUPPLIER_ESCALATION,
+        EventType.LOGISTICS_BACKLOG,
+        EventType.CERTIFICATION_AUDIT,
+    }:
         for job_id in event.effects.get("blocked_job_ids", [])[:2]:
             if job_id in state.jobs and state.jobs[job_id].block_reason:
                 state.jobs[job_id].priority += 12
@@ -573,6 +595,146 @@ def _pull_forward_unaffected(state: SimulationState, card: DecisionCard) -> str:
             state.assign_job(job.id, alt.id, front=job.critical_path)
             moved += 1
     return f"Pulled forward {moved} ready jobs into available capacity."
+
+
+def _apply_forward_decision_effect(
+    state: SimulationState,
+    card: DecisionCard,
+    choice: DecisionChoice,
+) -> str:
+    event = _event_by_id(state, choice.immediate_effects.get("event_id"))
+    if not event:
+        return ""
+    effect_type = choice.immediate_effects.get("type", "note")
+    mitigation_delta = {
+        "expedite_event": 3,
+        "reroute": 2,
+        "protect_critical": 2,
+        "resequence": 1,
+        "split_capacity": 1,
+        "pull_forward": 1,
+        "preempt": 1,
+        "wait": -2,
+        "defer": -1,
+    }.get(effect_type, 0)
+    event.effects["mitigation_score"] = int(event.effects.get("mitigation_score", 0)) + mitigation_delta
+    event.effects.setdefault("decision_history", []).append(
+        {
+            "day": state.current_day,
+            "card": card.id,
+            "choice": choice.label,
+            "effect": effect_type,
+            "mitigation": mitigation_delta,
+        }
+    )
+    if mitigation_delta > 0:
+        affected = _soften_related_future_events(state, event, mitigation_delta)
+        if affected:
+            return f"Future related risk was reduced on {affected} event(s)."
+        return "Future cascade risk was reduced."
+    if mitigation_delta < 0:
+        follow_on = _schedule_decision_follow_on(state, event, abs(mitigation_delta), choice.label)
+        if follow_on:
+            return f"Follow-on risk {follow_on.id} was added to the timeline."
+    return ""
+
+
+def _soften_related_future_events(state: SimulationState, source_event: Event, strength: int) -> int:
+    affected = 0
+    for event in state.event_timeline:
+        if event.id == source_event.id or event.started or event.resolved:
+            continue
+        if event.start_shift <= state.current_shift:
+            continue
+        if not _events_related(state, source_event, event):
+            continue
+        event.severity = max(1, event.severity - min(2, strength))
+        event.duration_shifts = max(1, event.duration_shifts - 1)
+        event.effects.setdefault("upstream_mitigations", []).append(source_event.id)
+        affected += 1
+        if affected >= strength:
+            break
+    return affected
+
+
+def _schedule_decision_follow_on(
+    state: SimulationState,
+    source_event: Event,
+    pressure: int,
+    choice_label: str,
+) -> Event | None:
+    key = f"decision_follow_on:{choice_label}"
+    if key in source_event.effects:
+        return None
+    event_type, target_type, target_id = _decision_follow_on_target(state, source_event)
+    if not target_id:
+        return None
+    follow_on = schedule_follow_on_event(
+        state=state,
+        source_event=source_event,
+        event_type=event_type,
+        target_type=target_type,
+        target_id=target_id,
+        delay_shifts=2 + min(3, source_event.severity),
+        severity=max(1, min(5, source_event.severity + pressure - 1)),
+        description=f"Deferred response to {source_event.id} creates a downstream {event_type.value.lower()} risk.",
+    )
+    if follow_on:
+        source_event.effects[key] = follow_on.id
+    return follow_on
+
+
+def _decision_follow_on_target(state: SimulationState, source_event: Event) -> tuple[EventType, TargetType, str]:
+    if source_event.type in {EventType.MISSING_MATERIAL, EventType.DELAYED_MATERIAL, EventType.SUPPLIER_ESCALATION}:
+        if source_event.target_type == TargetType.JOB and source_event.target_id in state.jobs:
+            job = state.jobs[source_event.target_id]
+            return EventType.LOGISTICS_BACKLOG, TargetType.SHOP, job.shop_id
+        return EventType.SUPPLIER_ESCALATION, source_event.target_type, source_event.target_id
+    if source_event.type in {EventType.MACHINE_DOWN, EventType.TOOLING_DAMAGE}:
+        return EventType.TOOLING_DAMAGE, source_event.target_type, source_event.target_id
+    if source_event.type in {EventType.QUALITY_REWORK, EventType.REWORK_SPILLOVER}:
+        return EventType.REWORK_SPILLOVER, TargetType.PIECE, _piece_id_for_event(state, source_event)
+    if source_event.type in {EventType.INSPECTION_DELAY, EventType.CERTIFICATION_AUDIT}:
+        return EventType.CERTIFICATION_AUDIT, TargetType.PIECE, _piece_id_for_event(state, source_event)
+    if source_event.type in {EventType.ENGINEERING_HOLD, EventType.ENGINEERING_DATA_REVISION, EventType.PRIORITY_CHANGE}:
+        return EventType.ENGINEERING_DATA_REVISION, TargetType.PIECE, _piece_id_for_event(state, source_event)
+    if source_event.type in {EventType.WEATHER, EventType.FACILITY_OUTAGE, EventType.CREW_SHORTAGE, EventType.LOGISTICS_BACKLOG}:
+        return EventType.CREW_SHORTAGE, source_event.target_type, source_event.target_id
+    return EventType.LOGISTICS_BACKLOG, source_event.target_type, source_event.target_id
+
+
+def _events_related(state: SimulationState, source: Event, candidate: Event) -> bool:
+    if source.target_id == candidate.target_id:
+        return True
+    source_jobs = _jobs_for_event(state, source)
+    candidate_jobs = _jobs_for_event(state, candidate)
+    if source_jobs and candidate_jobs:
+        source_job_ids = {job.id for job in source_jobs}
+        candidate_job_ids = {job.id for job in candidate_jobs}
+        if source_job_ids & candidate_job_ids:
+            return True
+        source_piece_ids = {job.piece_id for job in source_jobs}
+        candidate_piece_ids = {job.piece_id for job in candidate_jobs}
+        if source_piece_ids & candidate_piece_ids:
+            return True
+        source_shop_ids = {job.shop_id for job in source_jobs}
+        candidate_shop_ids = {job.shop_id for job in candidate_jobs}
+        if source_shop_ids & candidate_shop_ids:
+            return True
+    if source.target_type == TargetType.SHOP and candidate.target_type == TargetType.SHOP:
+        return source.target_id == candidate.target_id
+    return False
+
+
+def _piece_id_for_event(state: SimulationState, event: Event) -> str:
+    if event.target_type == TargetType.PIECE and event.target_id in state.pieces:
+        return event.target_id
+    if event.target_type == TargetType.JOB and event.target_id in state.jobs:
+        return state.jobs[event.target_id].piece_id
+    jobs = _jobs_for_event(state, event)
+    if jobs:
+        return jobs[0].piece_id
+    return next(iter(state.pieces))
 
 
 def _apply_risk_delta(state: SimulationState, card: DecisionCard, delta: int) -> None:
@@ -676,6 +838,13 @@ def _decision_type_for_event(event_type: EventType) -> DecisionType:
         EventType.URGENT_JOB: DecisionType.URGENT_JOB,
         EventType.WEATHER: DecisionType.WEATHER,
         EventType.FACILITY_OUTAGE: DecisionType.WEATHER,
+        EventType.SUPPLIER_ESCALATION: DecisionType.MISSING_MATERIAL,
+        EventType.LOGISTICS_BACKLOG: DecisionType.MISSING_MATERIAL,
+        EventType.TOOLING_DAMAGE: DecisionType.MACHINE_DOWN,
+        EventType.CREW_SHORTAGE: DecisionType.BOTTLENECK,
+        EventType.REWORK_SPILLOVER: DecisionType.QUALITY_REWORK,
+        EventType.CERTIFICATION_AUDIT: DecisionType.INSPECTION_DELAY,
+        EventType.ENGINEERING_DATA_REVISION: DecisionType.ENGINEERING_HOLD,
     }[event_type]
 
 

@@ -16,6 +16,8 @@ class GameConfig:
     max_decisions_per_day: int = 5
     min_jobs_per_piece: int = 5
     max_jobs_per_piece: int = 10
+    min_extra_quality_rework_events: int = 5
+    max_extra_quality_rework_events: int = 8
     seed: int | None = None
     use_color: bool = True
     debug: bool = False

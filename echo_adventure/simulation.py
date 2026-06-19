@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import math
+from random import Random
 from dataclasses import dataclass
 
 from .enums import JobStatus, WorkCenterStatus
@@ -9,6 +10,10 @@ from .events import refresh_event_state
 from .metrics import calculate_snapshot, update_state_metrics
 from .models import MetricSnapshot, Scenario, SimulationState
 from .schedulers.base import Scheduler
+
+
+JOB_REWORK_PROBABILITY = 0.24
+MAX_COMPLETION_REWORK_PER_JOB = 1
 
 
 @dataclass
@@ -74,6 +79,8 @@ def advance_shift(state: SimulationState, scheduler: Scheduler) -> None:
 
 def complete_job(state: SimulationState, job_id: str) -> None:
     job = state.jobs[job_id]
+    if _maybe_require_completion_rework(state, job):
+        return
     job.status = JobStatus.COMPLETE
     job.completed_shift = state.current_shift
     job.remaining_duration_shifts = 0
@@ -95,6 +102,35 @@ def complete_job(state: SimulationState, job_id: str) -> None:
         state.daily_notes.append(f"Final integration completed at shift {state.current_shift}.")
     else:
         state.daily_notes.append(f"Completed {job_id}.")
+
+
+def _maybe_require_completion_rework(state: SimulationState, job) -> bool:
+    if job.id == state.final_integration_job:
+        return False
+    if job.rework_count >= MAX_COMPLETION_REWORK_PER_JOB:
+        return False
+    roll = Random(f"{state.seed}:{job.id}:{state.current_shift}:{job.rework_count}")
+    if roll.random() >= JOB_REWORK_PROBABILITY:
+        return False
+
+    extra_shifts = roll.randint(1, 3)
+    job.rework_count += 1
+    job.status = JobStatus.REWORK_REQUIRED
+    job.completed_shift = None
+    job.remaining_duration_shifts = extra_shifts
+    job.priority += 12
+    job.risk_score = min(100.0, job.risk_score + 12 + extra_shifts * 3)
+    job.queue_time = 0
+    state.cost += 30 + extra_shifts * 12 * job.cost_weight
+    state.reschedule_count += 1
+    state.completed_jobs.discard(job.id)
+    state.remove_job_from_queues(job.id)
+    for wc in state.workcenters.values():
+        if wc.current_job_id == job.id:
+            wc.current_job_id = None
+            wc.status = WorkCenterStatus.AVAILABLE
+    state.daily_notes.append(f"Quality rework flagged on {job.id}; added {extra_shifts} shift(s).")
+    return True
 
 
 def _start_available_jobs(state: SimulationState) -> None:

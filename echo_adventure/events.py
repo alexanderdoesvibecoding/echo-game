@@ -19,7 +19,16 @@ EVENT_SEQUENCE = [
     EventType.URGENT_JOB,
     EventType.WEATHER,
     EventType.FACILITY_OUTAGE,
+    EventType.SUPPLIER_ESCALATION,
+    EventType.LOGISTICS_BACKLOG,
+    EventType.TOOLING_DAMAGE,
+    EventType.CREW_SHORTAGE,
+    EventType.REWORK_SPILLOVER,
+    EventType.CERTIFICATION_AUDIT,
+    EventType.ENGINEERING_DATA_REVISION,
 ]
+
+MAX_EVENT_CHAIN_DEPTH = 2
 
 
 def generate_event_timeline(
@@ -33,8 +42,17 @@ def generate_event_timeline(
     deadline = config.deadline_shift
     all_jobs = [job for job in jobs.values() if job.id != "JOB-FINAL-001"]
     timeline: list[Event] = []
-    event_count = rng.randint(18, 24)
-    event_types = EVENT_SEQUENCE + [rng.choice(EVENT_SEQUENCE) for _ in range(event_count - len(EVENT_SEQUENCE))]
+    event_count = rng.randint(22, 30)
+    extra_rework_count = rng.randint(
+        config.min_extra_quality_rework_events,
+        config.max_extra_quality_rework_events,
+    )
+    filler_count = max(0, event_count - len(EVENT_SEQUENCE) - extra_rework_count)
+    event_types = (
+        EVENT_SEQUENCE
+        + [EventType.QUALITY_REWORK for _ in range(extra_rework_count)]
+        + [rng.choice(EVENT_SEQUENCE) for _ in range(filler_count)]
+    )
     rng.shuffle(event_types)
 
     # Force at least one early warning for weather and one for delayed material.
@@ -86,6 +104,13 @@ def _duration_for(event_type: EventType, severity: int, rng: Random) -> int:
         EventType.URGENT_JOB: (1, 1),
         EventType.WEATHER: (2, 5),
         EventType.FACILITY_OUTAGE: (1, 4),
+        EventType.SUPPLIER_ESCALATION: (2, 5),
+        EventType.LOGISTICS_BACKLOG: (2, 5),
+        EventType.TOOLING_DAMAGE: (2, 4),
+        EventType.CREW_SHORTAGE: (1, 3),
+        EventType.REWORK_SPILLOVER: (1, 3),
+        EventType.CERTIFICATION_AUDIT: (2, 4),
+        EventType.ENGINEERING_DATA_REVISION: (1, 3),
     }[event_type]
     return min(8, rng.randint(*base) + max(0, severity - 3))
 
@@ -98,11 +123,16 @@ def _target_for(
     pieces: dict[str, PuzzlePiece],
     jobs: list[Job],
 ) -> tuple[TargetType, str]:
-    if event_type == EventType.MACHINE_DOWN:
+    if event_type in {EventType.MACHINE_DOWN, EventType.TOOLING_DAMAGE}:
         return TargetType.WORKCENTER, rng.choice(list(workcenters.keys()))
-    if event_type in {EventType.WEATHER, EventType.FACILITY_OUTAGE}:
+    if event_type in {EventType.WEATHER, EventType.FACILITY_OUTAGE, EventType.CREW_SHORTAGE, EventType.LOGISTICS_BACKLOG}:
         return TargetType.SHOP, rng.choice(list(shops.keys()))
-    if event_type == EventType.ENGINEERING_HOLD:
+    if event_type in {
+        EventType.ENGINEERING_HOLD,
+        EventType.REWORK_SPILLOVER,
+        EventType.CERTIFICATION_AUDIT,
+        EventType.ENGINEERING_DATA_REVISION,
+    }:
         return TargetType.PIECE, rng.choice(list(pieces.keys()))
     if event_type == EventType.URGENT_JOB:
         return TargetType.PIECE, rng.choice(list(pieces.keys()))
@@ -133,6 +163,20 @@ def _description_for(event_type: EventType, target_type: TargetType, target_id: 
         return f"Weather exposure may reduce throughput in {target}."
     if event_type == EventType.FACILITY_OUTAGE:
         return f"Facility interruption affects {target}."
+    if event_type == EventType.SUPPLIER_ESCALATION:
+        return f"Supplier recovery plan slips for {target}; substitute flow may be needed."
+    if event_type == EventType.LOGISTICS_BACKLOG:
+        return f"Internal logistics backlog delays movement through {target}."
+    if event_type == EventType.TOOLING_DAMAGE:
+        return f"Tooling damage is found at {target}; setup and recovery will take extra time."
+    if event_type == EventType.CREW_SHORTAGE:
+        return f"Crew availability drops in {target}; available capacity is reduced."
+    if event_type == EventType.REWORK_SPILLOVER:
+        return f"Related quality findings spread into {target}."
+    if event_type == EventType.CERTIFICATION_AUDIT:
+        return f"Certification audit requests additional evidence for {target}."
+    if event_type == EventType.ENGINEERING_DATA_REVISION:
+        return f"Engineering data revision changes acceptance criteria for {target}."
     return f"Severity {severity} disruption affects {target_type.value} {target_id}."
 
 
@@ -167,14 +211,21 @@ def apply_event_start(state: SimulationState, event: Event) -> None:
     if event.id in state.known_warnings:
         state.known_warnings.remove(event.id)
 
-    if event.type in {EventType.MISSING_MATERIAL, EventType.DELAYED_MATERIAL, EventType.INSPECTION_DELAY}:
+    if event.type in {
+        EventType.MISSING_MATERIAL,
+        EventType.DELAYED_MATERIAL,
+        EventType.INSPECTION_DELAY,
+        EventType.SUPPLIER_ESCALATION,
+        EventType.LOGISTICS_BACKLOG,
+        EventType.CERTIFICATION_AUDIT,
+    }:
         _block_target_jobs(state, event, reason=event.type.value)
-    elif event.type == EventType.MACHINE_DOWN:
+    elif event.type in {EventType.MACHINE_DOWN, EventType.TOOLING_DAMAGE}:
         _set_workcenters_down(state, event, [event.target_id], WorkCenterStatus.DOWN, event.type.value)
-    elif event.type == EventType.ENGINEERING_HOLD:
+    elif event.type in {EventType.ENGINEERING_HOLD, EventType.ENGINEERING_DATA_REVISION}:
         job_ids = list(state.pieces[event.target_id].job_ids)
         _block_jobs(state, event, job_ids, reason=event.type.value)
-    elif event.type == EventType.QUALITY_REWORK:
+    elif event.type in {EventType.QUALITY_REWORK, EventType.REWORK_SPILLOVER}:
         _apply_quality_rework(state, event)
     elif event.type == EventType.PRIORITY_CHANGE:
         _apply_priority_change(state, event)
@@ -187,6 +238,10 @@ def apply_event_start(state: SimulationState, event: Event) -> None:
     elif event.type == EventType.FACILITY_OUTAGE:
         shop = state.shops[event.target_id]
         affected = _sample_ids(shop.workcenter_ids, max(3, len(shop.workcenter_ids) // 4))
+        _set_workcenters_down(state, event, affected, WorkCenterStatus.BLOCKED, event.type.value)
+    elif event.type == EventType.CREW_SHORTAGE:
+        shop = state.shops[event.target_id]
+        affected = _sample_ids(shop.workcenter_ids, max(1, len(shop.workcenter_ids) // 4))
         _set_workcenters_down(state, event, affected, WorkCenterStatus.BLOCKED, event.type.value)
 
 
@@ -217,6 +272,7 @@ def resolve_event(state: SimulationState, event: Event) -> None:
         else:
             wc.status = WorkCenterStatus.AVAILABLE
 
+    _schedule_cascading_events(state, event)
     state.daily_notes.append(f"Resolved: {event.description}")
 
 
@@ -278,11 +334,26 @@ def _set_workcenters_down(
 
 def _apply_quality_rework(state: SimulationState, event: Event) -> None:
     target_id = event.target_id
+    if event.target_type == TargetType.PIECE and target_id in state.pieces:
+        candidates = [
+            state.jobs[job_id]
+            for job_id in state.pieces[target_id].job_ids
+            if job_id in state.jobs and not state.jobs[job_id].is_complete
+        ]
+        for job in sorted(candidates, key=lambda item: (-item.risk_score, item.due_shift))[: max(1, event.severity // 2)]:
+            job.rework_count += 1
+            job.remaining_duration_shifts += max(1, event.severity // 2)
+            job.status = JobStatus.REWORK_REQUIRED if not job.block_reason else job.status
+            job.risk_score += event.severity * 4
+            event.effects.setdefault("rework_job_ids", []).append(job.id)
+        state.cost += 30 * event.severity * max(1, len(event.effects.get("rework_job_ids", [])))
+        return
     if target_id not in state.jobs:
         return
     job = state.jobs[target_id]
+    job.rework_count += 1
     if job.status == JobStatus.COMPLETE:
-        _create_follow_on_job(
+        new_job = _create_follow_on_job(
             state,
             event,
             piece_id=job.piece_id,
@@ -293,6 +364,7 @@ def _apply_quality_rework(state: SimulationState, event: Event) -> None:
             priority=job.priority + 12,
             label="RQ",
         )
+        new_job.rework_count = 1
     else:
         job.remaining_duration_shifts += max(1, event.severity)
         job.status = JobStatus.REWORK_REQUIRED if not job.block_reason else job.status
@@ -389,6 +461,143 @@ def _create_follow_on_job(
     event.effects.setdefault("inserted_job_ids", []).append(job.id)
     state.daily_notes.append(f"Inserted required job {job.id} into {piece.name}.")
     return job
+
+
+def schedule_follow_on_event(
+    state: SimulationState,
+    source_event: Event,
+    event_type: EventType,
+    target_type: TargetType,
+    target_id: str,
+    delay_shifts: int,
+    severity: int,
+    duration_shifts: int | None = None,
+    description: str | None = None,
+) -> Event | None:
+    if source_event.chain_depth >= MAX_EVENT_CHAIN_DEPTH:
+        return None
+    start_shift = max(state.current_shift + 1, source_event.end_shift + delay_shifts)
+    if start_shift >= state.deadline_shift:
+        return None
+    event = Event(
+        id=_next_event_id(state),
+        type=event_type,
+        target_type=target_type,
+        target_id=target_id,
+        start_shift=start_shift,
+        duration_shifts=duration_shifts or min(6, max(1, severity)),
+        severity=max(1, min(5, severity)),
+        has_advance_warning=True,
+        warning_shift=max(state.current_shift + 1, start_shift - 2),
+        description=description or _description_for(event_type, target_type, target_id, severity),
+        effects={"source_event_id": source_event.id},
+        parent_event_id=source_event.id,
+        chain_depth=source_event.chain_depth + 1,
+    )
+    state.event_timeline.append(event)
+    state.event_timeline.sort(key=lambda item: (item.start_shift, item.id))
+    source_event.effects.setdefault("follow_on_event_ids", []).append(event.id)
+    state.daily_notes.append(f"Follow-on risk scheduled from {source_event.id}: {event.description}")
+    return event
+
+
+def _schedule_cascading_events(state: SimulationState, event: Event) -> None:
+    if event.effects.get("cascade_evaluated") or event.chain_depth >= MAX_EVENT_CHAIN_DEPTH:
+        return
+    event.effects["cascade_evaluated"] = True
+    mitigation = int(event.effects.get("mitigation_score", 0))
+    pressure = event.severity + len(event.effects.get("blocked_job_ids", [])) // 4 - mitigation
+    if pressure < 3:
+        return
+
+    rng = Random(f"{state.seed}:{event.id}:{state.current_shift}:cascade")
+    if pressure < 5 and rng.random() > 0.55:
+        return
+
+    event_type, target_type, target_id = _cascade_target(state, event, rng)
+    if not target_id:
+        return
+    severity = max(1, min(5, pressure + rng.randint(-1, 1)))
+    delay = rng.randint(1, 4)
+    schedule_follow_on_event(
+        state=state,
+        source_event=event,
+        event_type=event_type,
+        target_type=target_type,
+        target_id=target_id,
+        delay_shifts=delay,
+        severity=severity,
+        duration_shifts=_duration_for(event_type, severity, rng),
+        description=_cascade_description(event, event_type, target_type, target_id, severity),
+    )
+
+
+def _cascade_target(
+    state: SimulationState,
+    event: Event,
+    rng: Random,
+) -> tuple[EventType, TargetType, str]:
+    if event.type in {EventType.MISSING_MATERIAL, EventType.DELAYED_MATERIAL, EventType.SUPPLIER_ESCALATION}:
+        if event.target_type == TargetType.JOB and event.target_id in state.jobs:
+            job = state.jobs[event.target_id]
+            if rng.random() < 0.55:
+                return EventType.LOGISTICS_BACKLOG, TargetType.SHOP, job.shop_id
+            return EventType.SUPPLIER_ESCALATION, TargetType.JOB, job.id
+        return EventType.LOGISTICS_BACKLOG, event.target_type, event.target_id
+    if event.type in {EventType.MACHINE_DOWN, EventType.TOOLING_DAMAGE}:
+        wc = state.workcenters.get(event.target_id)
+        if wc and rng.random() < 0.5:
+            return EventType.CREW_SHORTAGE, TargetType.SHOP, wc.shop_id
+        return EventType.TOOLING_DAMAGE, event.target_type, event.target_id
+    if event.type in {EventType.QUALITY_REWORK, EventType.REWORK_SPILLOVER}:
+        piece_id = _piece_for_event(state, event)
+        return EventType.REWORK_SPILLOVER, TargetType.PIECE, piece_id
+    if event.type in {EventType.INSPECTION_DELAY, EventType.CERTIFICATION_AUDIT}:
+        piece_id = _piece_for_event(state, event)
+        return EventType.CERTIFICATION_AUDIT, TargetType.PIECE, piece_id
+    if event.type in {EventType.ENGINEERING_HOLD, EventType.ENGINEERING_DATA_REVISION}:
+        piece_id = _piece_for_event(state, event)
+        return EventType.ENGINEERING_DATA_REVISION, TargetType.PIECE, piece_id
+    if event.type in {EventType.WEATHER, EventType.FACILITY_OUTAGE, EventType.CREW_SHORTAGE, EventType.LOGISTICS_BACKLOG}:
+        if event.target_type == TargetType.SHOP:
+            return EventType.CREW_SHORTAGE if rng.random() < 0.5 else EventType.LOGISTICS_BACKLOG, TargetType.SHOP, event.target_id
+    if event.type in {EventType.PRIORITY_CHANGE, EventType.URGENT_JOB}:
+        piece_id = _piece_for_event(state, event)
+        return EventType.ENGINEERING_DATA_REVISION, TargetType.PIECE, piece_id
+    return EventType.LOGISTICS_BACKLOG, event.target_type, event.target_id
+
+
+def _cascade_description(
+    source_event: Event,
+    event_type: EventType,
+    target_type: TargetType,
+    target_id: str,
+    severity: int,
+) -> str:
+    base = _description_for(event_type, target_type, target_id, severity)
+    return f"{base} Follow-on effect from {source_event.id}."
+
+
+def _piece_for_event(state: SimulationState, event: Event) -> str:
+    if event.target_type == TargetType.PIECE and event.target_id in state.pieces:
+        return event.target_id
+    if event.target_type == TargetType.JOB and event.target_id in state.jobs:
+        return state.jobs[event.target_id].piece_id
+    if event.effects.get("blocked_job_ids"):
+        job_id = event.effects["blocked_job_ids"][0]
+        if job_id in state.jobs:
+            return state.jobs[job_id].piece_id
+    return next(iter(state.pieces))
+
+
+def _next_event_id(state: SimulationState) -> str:
+    existing = {event.id for event in state.event_timeline}
+    index = len(existing) + 1
+    while True:
+        event_id = f"EVT-{index:04d}"
+        if event_id not in existing:
+            return event_id
+        index += 1
 
 
 def _sample_ids(ids: list[str], count: int) -> list[str]:

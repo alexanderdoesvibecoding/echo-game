@@ -50,6 +50,13 @@ class EventType(str, Enum):
     URGENT_JOB = "Urgent new job inserted"
     WEATHER = "Weather event"
     FACILITY_OUTAGE = "Facility outage"
+    SUPPLIER_ESCALATION = "Supplier escalation"
+    LOGISTICS_BACKLOG = "Logistics backlog"
+    TOOLING_DAMAGE = "Tooling damage"
+    CREW_SHORTAGE = "Crew shortage"
+    REWORK_SPILLOVER = "Rework spillover"
+    CERTIFICATION_AUDIT = "Certification audit"
+    ENGINEERING_DATA_REVISION = "Engineering data revision"
 
 
 class TargetType(str, Enum):

@@ -87,6 +87,7 @@ class Job:
     completed_shift: int | None = None
     queue_time: int = 0
     original_duration_shifts: int = 0
+    rework_count: int = 0
 
     @property
     def planned_duration(self) -> int:
@@ -116,6 +117,8 @@ class Event:
     effects: dict[str, Any] = field(default_factory=dict)
     resolved: bool = False
     started: bool = False
+    parent_event_id: str | None = None
+    chain_depth: int = 0
 
     @property
     def end_shift(self) -> int:
