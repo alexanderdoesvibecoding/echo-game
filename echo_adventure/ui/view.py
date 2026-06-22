@@ -179,6 +179,12 @@ INDEX_HTML = r"""<!doctype html>
       color: #f0ad4e;
     }
 
+    html[data-theme="dark"] .modal-error {
+      background: #2a1a1a;
+      border-color: #5a3a3a;
+      color: #ff9999;
+    }
+
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -277,6 +283,14 @@ INDEX_HTML = r"""<!doctype html>
       border-radius: 8px;
       background: #fff7e2;
       color: #805b13;
+      font-weight: 700;
+    }
+    .modal-error {
+      padding: 9px 10px;
+      border: 1px solid #e4b3b3;
+      border-radius: 8px;
+      background: #fff2f2;
+      color: #8d2525;
       font-weight: 700;
     }
     input, select, button {
@@ -761,6 +775,7 @@ INDEX_HTML = r"""<!doctype html>
           <div id="settingsWarning" class="settings-warning hidden">
             Editing these fields can make the game unplayable or impossible to finish.
           </div>
+          <div id="newRunError" class="modal-error hidden"></div>
           <div class="settings-fields">
             <label>
               Days
@@ -798,6 +813,7 @@ INDEX_HTML = r"""<!doctype html>
     let newRunModalVisible = false;
     let settingsMenuOpen = false;
     let settingsEdited = false;
+    let finalModalDismissed = false;
     let dismissedDecisionKey = null;
     const welcomeStorageKey = "echoAdventureWelcomeSeen";
     const runPresets = {
@@ -832,6 +848,18 @@ INDEX_HTML = r"""<!doctype html>
       box.classList.remove("hidden");
     }
 
+    function showNewRunError(message) {
+      const box = $("newRunError");
+      if (!box) return;
+      if (!message) {
+        box.classList.add("hidden");
+        box.textContent = "";
+        return;
+      }
+      box.textContent = message;
+      box.classList.remove("hidden");
+    }
+
     async function loadState() {
       try {
         state = await api("/api/state");
@@ -844,6 +872,13 @@ INDEX_HTML = r"""<!doctype html>
 
     async function startNewRun() {
       try {
+        clampRunSettings();
+        const minJobs = Number($("runMinJobsInput").value);
+        const maxJobs = Number($("runMaxJobsInput").value);
+        if (minJobs > maxJobs) {
+          showNewRunError("Minimum jobs per piece cannot be greater than maximum jobs per piece.");
+          return;
+        }
         const seed = $("runSeedInput").value.trim();
         const mode = $("runPresetSelect").value;
         state = await api("/api/new", {
@@ -863,10 +898,16 @@ INDEX_HTML = r"""<!doctype html>
         dismissedDecisionKey = null;
         decisionModalVisible = false;
         newRunModalVisible = false;
+        finalModalDismissed = false;
+        showNewRunError("");
         showError("");
         render();
       } catch (error) {
-        showError(error.message);
+        if (newRunModalVisible) {
+          showNewRunError(error.message);
+        } else {
+          showError(error.message);
+        }
       }
     }
 
@@ -904,6 +945,7 @@ INDEX_HTML = r"""<!doctype html>
           state = nextState;
           pendingAdvanceState = null;
           finalModalVisible = true;
+          finalModalDismissed = false;
           modalVisible = false;
         } else {
           modalVisible = true;
@@ -951,6 +993,7 @@ INDEX_HTML = r"""<!doctype html>
 
     function closeFinalModal() {
       finalModalVisible = false;
+      finalModalDismissed = true;
       render();
     }
 
@@ -974,7 +1017,7 @@ INDEX_HTML = r"""<!doctype html>
       maybeAutoOpenDecisionModal();
       renderDecisionModal();
       // Auto-open final modal if run finished.
-      if (state.finalReveal && !finalModalVisible) finalModalVisible = true;
+      if (state.finalReveal && !finalModalVisible && !finalModalDismissed) finalModalVisible = true;
       renderFinalModal();
     }
 
@@ -1060,6 +1103,7 @@ INDEX_HTML = r"""<!doctype html>
       closeSettingsMenu();
       newRunModalVisible = true;
       settingsEdited = false;
+      showNewRunError("");
       const mode = state ? state.mode || "normal" : "normal";
       $("runPresetSelect").value = mode;
       applyRunSettings(state && state.settings ? state.settings : runPresets[mode]);
@@ -1069,6 +1113,7 @@ INDEX_HTML = r"""<!doctype html>
 
     function closeNewRunModal() {
       newRunModalVisible = false;
+      showNewRunError("");
       renderNewRunModal();
     }
 
@@ -1085,6 +1130,7 @@ INDEX_HTML = r"""<!doctype html>
       $("runPiecesInput").value = settings.pieceCount;
       $("runMinJobsInput").value = settings.minJobsPerPiece;
       $("runMaxJobsInput").value = settings.maxJobsPerPiece;
+      clampRunSettings();
     }
 
     function applyRunPreset() {
@@ -1095,8 +1141,28 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function markSettingsEdited() {
+      clampRunInput(this);
       settingsEdited = true;
+      showNewRunError("");
       renderNewRunModal();
+    }
+
+    function clampRunInput(input) {
+      if (!input || input.value === "") return;
+      const min = Number(input.min);
+      const max = Number(input.max);
+      let value = Number(input.value);
+      if (!Number.isFinite(value)) {
+        input.value = input.min || "";
+        return;
+      }
+      if (Number.isFinite(min) && value < min) value = min;
+      if (Number.isFinite(max) && value > max) value = max;
+      input.value = String(Math.trunc(value));
+    }
+
+    function clampRunSettings() {
+      ["runDaysInput", "runPiecesInput", "runMinJobsInput", "runMaxJobsInput"].forEach(id => clampRunInput($(id)));
     }
 
     function renderSummaryModal() {
@@ -1496,7 +1562,6 @@ INDEX_HTML = r"""<!doctype html>
       $(id).addEventListener("input", markSettingsEdited);
     });
     document.addEventListener("click", (e) => {
-      const summaryOverlay = document.getElementById("summaryModalOverlay");
       const finalOverlay = document.getElementById("finalModalOverlay");
       const pieceOverlay = document.getElementById("pieceModalOverlay");
       const welcomeOverlay = document.getElementById("welcomeModalOverlay");
@@ -1516,26 +1581,19 @@ INDEX_HTML = r"""<!doctype html>
         closeNewRunModal();
       }
       if (e.target && e.target.id === "closeModalBtn") {
-        modalVisible = false;
-        if (pendingAdvanceState) pendingAdvanceState = null;
-        render();
+        if (pendingAdvanceState) {
+          commitAdvanceDay();
+        }
       }
       if (e.target && e.target.id === "closeFinalBtn") {
-        finalModalVisible = false;
-        render();
+        closeFinalModal();
       }
       if (e.target && e.target.id === "closePieceModalBtn") {
         pieceModalVisible = false;
         render();
       }
-      if (summaryOverlay && e.target === summaryOverlay) {
-        modalVisible = false;
-        if (pendingAdvanceState) pendingAdvanceState = null;
-        render();
-      }
       if (finalOverlay && e.target === finalOverlay) {
-        finalModalVisible = false;
-        render();
+        closeFinalModal();
       }
       if (pieceOverlay && e.target === pieceOverlay) {
         pieceModalVisible = false;
