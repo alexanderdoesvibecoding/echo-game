@@ -88,9 +88,9 @@ def generate_scenario(config: GameConfig) -> Scenario:
 def validate_scenario(scenario: Scenario, config: GameConfig) -> None:
     """Check generated objects for configured counts and dependency validity."""
     if len(scenario.pieces) != config.piece_count:
-        raise ValueError("Scenario must contain exactly 30 puzzle pieces.")
+        raise ValueError(f"Scenario must contain exactly {config.piece_count} puzzle pieces.")
     if len(scenario.shops) != config.shop_count:
-        raise ValueError("Scenario must contain exactly 10 shops.")
+        raise ValueError(f"Scenario must contain exactly {config.shop_count} shops.")
     for shop in scenario.shops.values():
         if not config.min_workcenters_per_shop <= len(shop.workcenter_ids) <= config.max_workcenters_per_shop:
             raise ValueError(f"{shop.id} workcenter count outside configured range.")
@@ -131,7 +131,7 @@ def _generate_shops_and_workcenters(
     for index, (name, capabilities) in enumerate(SHOP_BLUEPRINTS[: config.shop_count], start=1):
         shop_id = f"SHOP-{index:02d}"
         min_count, max_count = shop_size_factors.get(index - 1, (3, 4))
-        count = rng.randint(min_count, max_count)
+        count = max(rng.randint(min_count, max_count), len(capabilities))
         workcenter_ids: list[str] = []
         for wc_index in range(1, count + 1):
             wc_id = f"WC-{index:02d}-{wc_index:03d}"
@@ -194,9 +194,15 @@ def _generate_pieces_and_jobs(
                 dependencies.append(previous_job_ids[-1])
                 if len(previous_job_ids) > 2 and rng.random() < 0.25:
                     dependencies.append(rng.choice(previous_job_ids[:-1]))
-            base_duration = rng.randint(1, 4)
-            setup = rng.choice([0, 0, 1])
-            transport = 1 if previous_shop_id and previous_shop_id != shop_id and rng.random() < 0.65 else 0
+            base_duration = rng.randint(config.min_job_duration_shifts, config.max_job_duration_shifts)
+            setup = rng.choice(config.setup_time_choices)
+            transport = (
+                1
+                if previous_shop_id
+                and previous_shop_id != shop_id
+                and rng.random() < config.transport_delay_probability
+                else 0
+            )
             due_shift = min(
                 config.deadline_shift - 4,
                 4 + int((job_index / job_count) * (config.deadline_shift - 8)) + rng.randint(-2, 3),
@@ -273,8 +279,8 @@ def _generate_final_integration_job(
         required_capability="integration",
         candidate_workcenter_ids=candidate_ids[:8],
         assigned_workcenter_id=None,
-        base_duration_shifts=2,
-        remaining_duration_shifts=2,
+        base_duration_shifts=config.final_integration_duration_shifts,
+        remaining_duration_shifts=config.final_integration_duration_shifts,
         setup_time_shifts=0,
         transport_delay_shifts=0,
         dependency_ids=list(jobs.keys()),
@@ -283,7 +289,7 @@ def _generate_final_integration_job(
         due_shift=config.deadline_shift,
         risk_score=50,
         cost_weight=2.0,
-        original_duration_shifts=2,
+        original_duration_shifts=config.final_integration_duration_shifts,
     )
 
 

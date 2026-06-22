@@ -359,14 +359,16 @@ def _idle_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
 def _final_integration_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
     """Build a card for late-stage readiness of final integration."""
     complete_pieces = sum(1 for piece in state.pieces.values() if piece.ready_for_integration)
+    total_pieces = len(state.pieces)
+    late_stage_day = max(1, int((state.deadline_shift / state.shifts_per_day) * 0.67))
     return DecisionCard(
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
         type=DecisionType.FINAL_INTEGRATION,
         title="Final integration readiness",
-        description=f"{complete_pieces}/30 puzzle pieces are ready; late dependencies can starve the final integration bay.",
+        description=f"{complete_pieces}/{total_pieces} puzzle pieces are ready; late dependencies can starve the final integration bay.",
         target_ids=[state.final_integration_job],
-        severity=4 if day >= 20 else 3,
+        severity=4 if day >= late_stage_day else 3,
         choices=[
             DecisionChoice(
                 id="1",

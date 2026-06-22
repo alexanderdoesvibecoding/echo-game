@@ -2,7 +2,7 @@
 
 ECHO Adventure is a scheduling strategy game set in a fictional advanced manufacturing yard.
 
-The player acts as a manual scheduler trying to finish a 15-piece project in 15 in-game days. Every run creates a reproducible manufacturing scenario with shops, workcenters, jobs, dependencies, material problems, quality findings, equipment failures, weather, crew pressure, engineering holds, certification issues, and downstream event cascades. A hidden automated scheduler runs the same scenario in parallel and is revealed only at the end as an operational benchmark.
+The player acts as a manual scheduler trying to finish a 15-piece project in 30 in-game days. Every run creates a reproducible manufacturing scenario with shops, workcenters, jobs, dependencies, material problems, quality findings, equipment failures, weather, crew pressure, engineering holds, certification issues, and downstream event cascades. A hidden automated scheduler runs the same scenario in parallel and is revealed only at the end as an operational benchmark.
 
 ## Gameplay
 
@@ -21,7 +21,7 @@ The goal is to complete all puzzle pieces and final integration before the deadl
 
 Daily decisions are intentionally limited. You usually cannot fix everything. A strong response can reduce future related disruption, while waiting or deferring can create follow-on risks later in the timeline.
 
-## Run The Terminal Game
+## Run The Browser Game
 
 ```bash
 python -m echo_adventure
@@ -37,22 +37,18 @@ Useful flags:
 
 ```bash
 python -m echo_adventure --seed 12345
-python -m echo_adventure --no-color
-python -m echo_adventure --debug
+python -m echo_adventure --demo
+python -m echo_adventure --port 8766
 ```
 
 Use a seed when comparing changes. The same seed should generate the same scenario and event timeline unless scenario-generation logic changes.
 
-## Run The Browser UI
-
-```bash
-python -m echo_adventure --ui
-```
+The demo mode is a five-day run with five puzzle pieces, shorter job chains, no random disruptions, and one or two decisions per day. It is intended to be finishable in five minutes or less.
 
 With a fixed seed:
 
 ```bash
-python -m echo_adventure --ui --seed 4242
+python -m echo_adventure --seed 4242
 ```
 
 Then open:
@@ -61,7 +57,7 @@ Then open:
 http://127.0.0.1:8765
 ```
 
-The UI is served by Python's standard-library HTTP server. There is no frontend build step. The HTML, CSS, and JavaScript live inline in `echo_adventure/ui_server.py`.
+The UI is served by Python's standard-library HTTP server. There is no frontend build step. The HTTP server and browser template live in `echo_adventure/ui/`.
 
 ## Browser UI Flow
 
@@ -171,8 +167,7 @@ The Risk Register shows a `Source` column for chained risks so downstream disrup
 ```text
 main.py
 echo_adventure/
-  app.py                 CLI entry point and terminal run loop
-  ui_server.py           Local browser UI, API session, inline HTML/CSS/JS
+  app.py                 Browser game entry point
   config.py              GameConfig and seed resolution
   models.py              Dataclasses for shops, workcenters, jobs, events, state
   enums.py               Status, event, target, and decision enums
@@ -185,10 +180,9 @@ echo_adventure/
     manual.py            Player-side scheduler behavior
     automated.py         Hidden ECHO benchmark scheduler
     base.py              Shared scheduler interface/helpers
-  cli/
-    renderer.py          Terminal rendering
-    menus.py             Terminal menus
-    input.py             Terminal input helpers
+  ui/
+    server.py            Local HTTP server, API session, JSON payloads
+    view.py              Browser HTML, CSS, and JavaScript template
 ```
 
 ## Browser API
@@ -253,13 +247,13 @@ python -m py_compile echo_adventure/*.py echo_adventure/**/*.py
 Run the UI with a stable seed:
 
 ```bash
-python -m echo_adventure --ui --seed 1
+python -m echo_adventure --seed 1
 ```
 
 If port `8765` is already in use:
 
 ```bash
-python -m echo_adventure --ui --port 8766 --seed 1
+python -m echo_adventure --port 8766 --seed 1
 ```
 
 The UI server intentionally keeps state in memory. Refreshing the browser keeps the same server-side run. Starting a new run through the UI replaces the process-wide session.
@@ -268,14 +262,14 @@ The UI server intentionally keeps state in memory. Refreshing the browser keeps 
 
 ### The browser shows old UI
 
-Restart the UI server. The HTML is embedded in `ui_server.py`, so changes require the server process to be restarted.
+Restart the UI server. The browser template lives in `echo_adventure/ui/view.py`, so changes require the server process to be restarted.
 
 ### A random seed fails scenario validation
 
 Some random seeds can expose scenario-generation edge cases. Use a fixed known-good seed while developing:
 
 ```bash
-python -m echo_adventure --ui --seed 1
+python -m echo_adventure --seed 1
 ```
 
 ### The decision modal keeps appearing

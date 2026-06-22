@@ -1,620 +1,11 @@
-"""Local browser UI for ECHO Adventure.
-
-This module intentionally keeps the browser UI self-contained: the HTTP API,
-session state, and inline HTML/CSS/JS all live here. The simulation and decision
-logic remain in their own modules; this file translates those domain objects
-into small JSON payloads that the dashboard can render.
-"""
-
-from __future__ import annotations
-
-import argparse
-import json
-import threading
-from dataclasses import asdict
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
-from urllib.parse import parse_qs, urlparse
-
-from .config import GameConfig, resolve_seed
-from .decisions import apply_choice, generate_decision_cards
-from .enums import JobStatus, TargetType, WorkCenterStatus
-from .metrics import calculate_snapshot, day_shift, update_state_metrics
-from .models import DecisionCard, DecisionChoice, Event, Job, MetricSnapshot, SimulationState
-from .scenario_generator import generate_scenario
-from .schedulers.automated import AutomatedScheduler
-from .schedulers.manual import ManualScheduler
-from .simulation import DayResult, advance_day, initialize_state
-
-
-# GameSession is the stateful bridge between stateless HTTP requests and the
-# mutable simulation engine. One process hosts one active session at a time.
-class GameSession:
-    """Owns one playable browser run and its hidden automated benchmark run.
-
-    The browser server is threaded, so every public mutation/read takes the
-    session lock. The player and automated states are initialized from the same
-    scenario so the final reveal compares scheduling policy, not scenario luck.
-    """
-
-    def __init__(self, seed: int | None = None) -> None:
-        # RLock allows helper methods called inside locked public methods to
-        # safely reuse the same lock if the implementation grows later.
-        self.lock = threading.RLock()
-        # Resolve random seeds immediately so the UI can always display and
-        # replay the exact generated scenario.
-        self.seed = resolve_seed(seed)
-        self.config = GameConfig(seed=self.seed)
-        # Both schedulers share a scenario but mutate independent state copies.
-        self.scenario = generate_scenario(self.config)
-        self.player_state = initialize_state(self.scenario, self.config.shifts_per_day)
-        self.automated_state = initialize_state(self.scenario, self.config.shifts_per_day)
-        # Manual scheduler reflects player-driven priorities; automated is the
-        # hidden ECHO benchmark revealed at the end.
-        self.manual_scheduler = ManualScheduler()
-        self.automated_scheduler = AutomatedScheduler()
-        # Cards/choices are tracked at the session layer because they are a UI
-        # interaction contract layered over the underlying simulation state.
-        self.current_cards: list[DecisionCard] = []
-        self.applied_choices: dict[str, str] = {}
-        self.choice_notes: list[str] = []
-        self.last_result: DayResult | None = None
-        self._ensure_cards()
-
-    def state_payload(self) -> dict[str, Any]:
-        """Return the complete JSON model needed by the browser dashboard."""
-        with self.lock:
-            # Metrics can be invalidated by choices and event handling, so they
-            # are refreshed every time the browser asks for state.
-            update_state_metrics(self.player_state)
-            self._ensure_cards()
-            snapshot = calculate_snapshot(self.player_state)
-            game_over = self._game_over()
-            # Keep payload fields deliberately flat and table-oriented. The
-            # frontend is plain JavaScript, so it benefits from data shaped
-            # close to the rows and panels it renders.
-            payload: dict[str, Any] = {
-                "seed": self.seed,
-                "scenarioId": self.scenario.scenario_id,
-                "gameOver": game_over,
-                "day": self.player_state.current_day,
-                "shift": self.player_state.current_shift,
-                "shiftLabel": day_shift(max(1, self.player_state.current_shift), self.config.shifts_per_day),
-                "deadlineLabel": "Day 30, Shift 3",
-                "snapshot": _snapshot_payload(snapshot, self.config.shifts_per_day),
-                "overview": self._overview(snapshot),
-                "shops": self._shops_payload(),
-                "pieces": self._pieces_payload(),
-                "workcenters": self._workcenters_payload(),
-                "criticalPath": self._critical_path_payload(),
-                "risks": self._risk_payload(),
-                "decisions": [_card_payload(card, self.applied_choices.get(card.id)) for card in self.current_cards],
-                "appliedChoices": self.choice_notes[-6:],
-                "lastSummary": self._summary_payload(),
-            }
-            if game_over:
-                # The automated state is lazy-finished only when it is needed
-                # for the final reveal, keeping normal requests cheap.
-                self._finish_automated()
-                payload["finalReveal"] = self._final_payload()
-            return payload
-
-    def apply_choice(self, card_id: str, choice_id: str) -> dict[str, Any]:
-        """Apply one response to one active decision card."""
-        with self.lock:
-            # Guard all invalid interaction states server-side. The browser also
-            # disables buttons, but the server is the rule authority.
-            if self._game_over():
-                raise ValueError("The run has already ended.")
-            self._ensure_cards()
-            card = next((candidate for candidate in self.current_cards if candidate.id == card_id), None)
-            if not card:
-                raise ValueError("Decision card is no longer active.")
-            if card.id in self.applied_choices:
-                raise ValueError("That decision already has a selected response.")
-            choice = next((candidate for candidate in card.choices if candidate.id == choice_id), None)
-            if not choice:
-                raise ValueError("Choice is not valid for that decision.")
-            # Decision effects can mutate current queues and future event
-            # chains. The returned note is the human-readable audit trail.
-            note = apply_choice(self.player_state, card, choice)
-            self.applied_choices[card.id] = choice.id
-            self.choice_notes.append(f"{card.title}: {choice.label}. {note}")
-            return {"note": note, "allDecisionsMade": self.ready_to_advance()}
-
-    def advance_day(self) -> dict[str, Any]:
-        """Advance both player and benchmark simulations by one in-game day."""
-        with self.lock:
-            if self._game_over():
-                self._finish_automated()
-                return {"summary": self._summary_payload(), "gameOver": True}
-            self._ensure_cards()
-            if not self.ready_to_advance():
-                raise ValueError("Select a response for all decisions before advancing the day.")
-            # Daily notes are scoped to the just-advanced day. Choice notes are
-            # kept separately until the day is committed, then reset with cards.
-            self.player_state.daily_notes.clear()
-            self.last_result = advance_day(self.player_state, self.manual_scheduler)
-            # The automated scheduler advances silently alongside the player so
-            # it faces the same random event timeline.
-            advance_day(self.automated_state, self.automated_scheduler)
-            # A new day means fresh decision cards and no selected choices.
-            self.current_cards = []
-            self.applied_choices = {}
-            self.choice_notes = []
-            if self._game_over():
-                self._finish_automated()
-            else:
-                self._ensure_cards()
-            return {"summary": self._summary_payload(), "gameOver": self._game_over()}
-
-    def ready_to_advance(self) -> bool:
-        """Return whether every current daily decision has a selected choice."""
-        return len(self.current_cards) == 0 or all(card.id in self.applied_choices for card in self.current_cards)
-
-    def _ensure_cards(self) -> None:
-        if self.current_cards or self._game_over():
-            return
-        # Cards are generated lazily so a fresh state payload always has the
-        # current day's required decisions, including newly visible warnings.
-        self.current_cards = generate_decision_cards(self.player_state, self.player_state.current_day, self.config)
-
-    def _game_over(self) -> bool:
-        """The run ends at final completion or the configured deadline."""
-        return self.player_state.final_item_completed or self.player_state.current_shift >= self.player_state.deadline_shift
-
-    def _finish_automated(self) -> None:
-        # The benchmark is hidden during play. At game over, fast-forward it
-        # through the same deadline so the reveal has a complete comparison.
-        while self.automated_state.current_shift < self.automated_state.deadline_shift and not self.automated_state.final_item_completed:
-            self.automated_state.daily_notes.clear()
-            advance_day(self.automated_state, self.automated_scheduler)
-
-    def _overview(self, snapshot: MetricSnapshot) -> dict[str, Any]:
-        """Build the compact header/overview payload for the dashboard."""
-        # Active and warning counts are pulled from event ids tracked on state;
-        # the event objects contain the display text and severity details.
-        active = [event for event in self.player_state.event_timeline if event.id in self.player_state.active_events]
-        warnings = [event for event in self.player_state.event_timeline if event.id in self.player_state.known_warnings]
-        bottlenecks = self.player_state.get_bottleneck_shops(3)
-        return {
-            "activeDisruptions": len(active),
-            "knownWarnings": len(warnings),
-            "bottlenecks": [shop.name for shop in bottlenecks],
-            "projectedCompletion": day_shift(snapshot.projected_completion_shift, self.config.shifts_per_day),
-            "finalComplete": self.player_state.final_item_completed,
-            "completion": day_shift(self.player_state.completion_shift or 0, self.config.shifts_per_day)
-            if self.player_state.completion_shift
-            else None,
-        }
-
-    def _shops_payload(self) -> list[dict[str, Any]]:
-        """Return one row per shop for the Shops operating-board table."""
-        return [
-            {
-                "id": shop.id,
-                "name": shop.name,
-                "active": len(shop.active_job_ids),
-                "queued": len(shop.queued_job_ids),
-                "blocked": len(shop.blocked_job_ids),
-                "completed": len(shop.completed_job_ids),
-                "utilization": round(shop.utilization, 3),
-                "idle": shop.idle_time,
-                "risk": round(shop.risk_score, 1),
-                "highestRiskPiece": _highest_risk_piece(self.player_state, shop.id),
-                "bottleneck": len(shop.queued_job_ids) + len(shop.blocked_job_ids) >= 5,
-                "event": _shop_event_label(self.player_state, shop.id),
-            }
-            for shop in self.player_state.shops.values()
-        ]
-
-    def _pieces_payload(self) -> list[dict[str, Any]]:
-        """Return piece rows plus nested job rows for piece drill-down modals."""
-        pieces = []
-        # Highest-risk pieces are listed first in the payload; the browser later
-        # sorts by piece id for the default table, but risk ordering is still
-        # useful to callers and future views.
-        for piece in sorted(self.player_state.pieces.values(), key=lambda item: (-item.risk_score, item.id)):
-            blocked = sum(1 for job_id in piece.job_ids if self.player_state.jobs[job_id].is_blocked)
-            critical = any(self.player_state.jobs[job_id].critical_path for job_id in piece.job_ids)
-            piece_jobs: list[dict[str, Any]] = []
-            for job_id in piece.job_ids:
-                job = self.player_state.jobs[job_id]
-                # Resolve display names here so the frontend does not need to
-                # join jobs back to shops/workcenters.
-                wc = self.player_state.workcenters.get(job.assigned_workcenter_id) if job.assigned_workcenter_id else None
-                shop = self.player_state.shops.get(job.shop_id)
-                piece_jobs.append(
-                    {
-                        "id": job.id,
-                        "status": job.status.value,
-                        "shop": shop.name if shop else job.shop_id,
-                        "workcenter": wc.id if wc else "-",
-                        "capability": job.required_capability,
-                        "remaining": job.remaining_duration_shifts,
-                        "planned": job.planned_duration,
-                        "due": day_shift(job.due_shift, self.config.shifts_per_day),
-                        "blocked": job.is_blocked,
-                        "blockReason": job.block_reason or "",
-                        "critical": job.critical_path,
-                        "rework": job.rework_count > 0 or job.status == JobStatus.REWORK_REQUIRED,
-                    }
-                )
-            pieces.append(
-                {
-                    "id": piece.id,
-                    "name": piece.name,
-                    "status": piece.status.value,
-                    "completed": piece.completed_job_count,
-                    "total": piece.total_job_count,
-                    "progress": round(piece.percent_complete, 3),
-                    "blocked": blocked,
-                    "critical": critical,
-                    "estimated": day_shift(piece.estimated_completion_shift, self.config.shifts_per_day),
-                    "risk": round(piece.risk_score, 1),
-                    "jobs": piece_jobs,
-                }
-            )
-        return pieces
-
-    def _workcenters_payload(self) -> dict[str, list[dict[str, Any]]]:
-        """Return workcenter rows grouped by shop id for the Workcenters tab."""
-        grouped: dict[str, list[dict[str, Any]]] = {}
-        for shop in self.player_state.shops.values():
-            rows = []
-            for wc_id in shop.workcenter_ids:
-                wc = self.player_state.workcenters[wc_id]
-                current = wc.current_job_id
-                current_job = self.player_state.jobs.get(current) if current else None
-                next_job = self.player_state.jobs.get(wc.queue[0]) if wc.queue else None
-                # Rework flags are calculated for current/next jobs separately
-                # so the UI can add a compact red marker next to job ids.
-                rows.append(
-                    {
-                        "id": wc.id,
-                        "name": wc.name,
-                        "status": wc.status.value,
-                        "current": current or "-",
-                        "currentRework": bool(
-                            current_job
-                            and (current_job.rework_count > 0 or current_job.status == JobStatus.REWORK_REQUIRED)
-                        ),
-                        "remaining": current_job.remaining_duration_shifts if current_job else "-",
-                        "queue": len(wc.queue),
-                        "next": wc.queue[0] if wc.queue else "-",
-                        "nextRework": bool(
-                            next_job and (next_job.rework_count > 0 or next_job.status == JobStatus.REWORK_REQUIRED)
-                        ),
-                        "capability": ", ".join(cap.replace("_", " ") for cap in wc.capabilities[:2]),
-                        "down": wc.downtime_remaining or "-",
-                    }
-                )
-            grouped[shop.id] = rows
-        return grouped
-
-    def _critical_path_payload(self) -> list[dict[str, Any]]:
-        """Return critical-path rows capped for a readable dashboard table."""
-        rows = []
-        for job in self.player_state.get_critical_path_jobs()[:18]:
-            wc = self.player_state.workcenters.get(job.assigned_workcenter_id) if job.assigned_workcenter_id else None
-            shop = self.player_state.shops.get(job.shop_id)
-            # Slack is recalculated for display from current shift and remaining
-            # work so it reflects choices/events made earlier in the same day.
-            slack = job.due_shift - self.player_state.current_shift - max(0, job.remaining_duration_shifts)
-            rows.append(
-                {
-                    "id": job.id,
-                    "shop": shop.name if shop else job.shop_id,
-                    "workcenter": wc.id if wc else "-",
-                    "remaining": job.remaining_duration_shifts,
-                    "slack": slack,
-                    "block": job.block_reason or "-",
-                    "impact": "Final integration" if job.id == self.player_state.final_integration_job else job.piece_id,
-                    "risk": round(job.risk_score, 1),
-                    "rework": job.rework_count > 0 or job.status == JobStatus.REWORK_REQUIRED,
-                }
-            )
-        return rows
-
-    def _risk_payload(self) -> list[dict[str, Any]]:
-        """Return active warnings/disruptions plus blocked jobs for risk review."""
-        rows = []
-        for event in self.player_state.event_timeline:
-            if event.id not in self.player_state.active_events and event.id not in self.player_state.known_warnings:
-                continue
-            # Source identifies event-chain ancestry. It is "-" for base
-            # timeline events and an event id for follow-on/cascade events.
-            status = "Active" if event.id in self.player_state.active_events else "Warning"
-            shifts = max(0, event.end_shift - self.player_state.current_shift) if status == "Active" else max(0, event.start_shift - self.player_state.current_shift)
-            rows.append(
-                {
-                    "status": status,
-                    "id": event.id,
-                    "type": event.type.value,
-                    "affected": _event_target_name(self.player_state, event),
-                    "severity": event.severity,
-                    "shifts": shifts,
-                    "response": _response_category(event.type.value),
-                    "source": event.parent_event_id or "-",
-                    "rework": bool(
-                        event.target_id in self.player_state.jobs
-                        and self.player_state.jobs[event.target_id].rework_count > 0
-                    ),
-                }
-            )
-        for job in self.player_state.get_blocked_jobs()[:12]:
-            # Blocked jobs are shown alongside events because they require the
-            # same scheduling attention even when they are not event objects.
-            rows.append(
-                {
-                    "status": "Blocked",
-                    "id": job.id,
-                    "type": "Job block",
-                    "affected": job.piece_id,
-                    "severity": round(job.risk_score, 1),
-                    "shifts": "-",
-                    "response": "mitigation recommended",
-                    "source": "-",
-                    "rework": job.rework_count > 0 or job.status == JobStatus.REWORK_REQUIRED,
-                }
-            )
-        return rows
-
-    def _summary_payload(self) -> dict[str, Any] | None:
-        """Return the latest end-of-day summary, if a day has advanced."""
-        if not self.last_result:
-            return None
-        snapshot = self.last_result.end_snapshot
-        return {
-            "completedToday": len(self.last_result.completed_job_ids),
-            "jobsRemaining": snapshot.jobs_remaining,
-            "piecesCompleted": snapshot.pieces_completed,
-            "jobsLate": snapshot.jobs_late,
-            "reschedules": snapshot.reschedules,
-            "cost": round(snapshot.cost, 1),
-            "utilization": round(snapshot.utilization, 3),
-            "idleTime": snapshot.idle_time,
-            "risk": round(snapshot.schedule_risk, 1),
-            "projectedCompletion": day_shift(snapshot.projected_completion_shift, self.config.shifts_per_day),
-            "notes": self.last_result.notes[-10:],
-        }
-
-    def _final_payload(self) -> dict[str, Any]:
-        """Return the final player-vs-ECHO comparison payload."""
-        player_snapshot = calculate_snapshot(self.player_state)
-        automated_snapshot = calculate_snapshot(self.automated_state)
-        return {
-            "player": _snapshot_payload(player_snapshot, self.config.shifts_per_day, self.player_state),
-            "automated": _snapshot_payload(automated_snapshot, self.config.shifts_per_day, self.automated_state),
-            "explanation": [
-                "ECHO continuously reprioritized critical-path work instead of waiting for daily manual decisions.",
-                "It used alternate capable workcenters when queue pressure or downtime threatened slack.",
-                "It reacted to warnings by pulling forward unaffected work and reducing bottleneck idle time.",
-                "It avoided unnecessary preemption while still resequencing around blocked jobs quickly.",
-                "Those behaviors reduced cascading delay, cost pressure, and end-of-run schedule risk.",
-            ],
-        }
-
-
-class GameRequestHandler(BaseHTTPRequestHandler):
-    """Small JSON/HTML request handler for the local-only browser app."""
-
-    # The dynamically-created subclass in run_ui_server attaches a GameSession
-    # here so every request handler instance shares the same current run.
-    session: GameSession
-
-    def do_GET(self) -> None:
-        """Serve the shell HTML or the current JSON state."""
-        parsed = urlparse(self.path)
-        if parsed.path == "/":
-            self._send_html(INDEX_HTML)
-        elif parsed.path == "/api/state":
-            self._send_json(self.session.state_payload())
-        else:
-            self._send_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
-
-    def do_POST(self) -> None:
-        """Handle state-changing UI actions."""
-        parsed = urlparse(self.path)
-        try:
-            # This intentionally tiny API mirrors the UI's workflow:
-            # create/read a run, apply decisions, then advance days.
-            if parsed.path == "/api/new":
-                data = self._read_json()
-                seed = data.get("seed")
-                if seed in ("", None):
-                    seed = None
-                else:
-                    seed = int(seed)
-                type(self).session = GameSession(seed=seed)
-                self._send_json(type(self).session.state_payload())
-            elif parsed.path == "/api/choice":
-                data = self._read_json()
-                result = self.session.apply_choice(str(data.get("cardId", "")), str(data.get("choiceId", "")))
-                state = self.session.state_payload()
-                state["action"] = result
-                self._send_json(state)
-            elif parsed.path == "/api/advance":
-                result = self.session.advance_day()
-                state = self.session.state_payload()
-                state["advance"] = result
-                self._send_json(state)
-            else:
-                self._send_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
-        except ValueError as exc:
-            self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-        except Exception as exc:  # pragma: no cover - defensive local server path
-            self._send_json({"error": f"Server error: {exc}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
-
-    def log_message(self, format: str, *args: Any) -> None:
-        # Suppress noisy per-request logs; the UI is local and stateful, and
-        # request spam makes terminal output harder to use while developing.
-        return
-
-    def _read_json(self) -> dict[str, Any]:
-        """Read a JSON request body, treating empty bodies as empty objects."""
-        length = int(self.headers.get("content-length", "0"))
-        if length == 0:
-            return {}
-        raw = self.rfile.read(length)
-        return json.loads(raw.decode("utf-8"))
-
-    def _send_json(self, payload: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
-        """Serialize and send a JSON response with explicit length headers."""
-        body = json.dumps(payload).encode("utf-8")
-        self.send_response(status)
-        self.send_header("content-type", "application/json; charset=utf-8")
-        self.send_header("content-length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def _send_html(self, html: str) -> None:
-        """Send the inline HTML shell."""
-        body = html.encode("utf-8")
-        self.send_response(HTTPStatus.OK)
-        self.send_header("content-type", "text/html; charset=utf-8")
-        self.send_header("content-length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-
-def run_ui_server(seed: int | None = None, host: str = "127.0.0.1", port: int = 8765) -> None:
-    """Start the local browser UI server."""
-    # A fresh handler subclass lets us attach a mutable class-level session
-    # without modifying BaseHTTPRequestHandler itself.
-    handler = type("SessionHandler", (GameRequestHandler,), {})
-    handler.session = GameSession(seed=seed)
-    server = ThreadingHTTPServer((host, port), handler)
-    url = f"http://{host}:{port}"
-    print(f"ECHO Adventure UI running at {url}")
-    print("Press Ctrl+C to stop.")
-    try:
-        server.serve_forever()
-    finally:
-        server.server_close()
-
-
-def main(argv: list[str] | None = None) -> None:
-    """CLI entry point for running only the browser UI server."""
-    parser = argparse.ArgumentParser(description="Run the local ECHO Adventure browser UI.")
-    parser.add_argument("--seed", type=int, help="Run a reproducible scenario seed.")
-    parser.add_argument("--host", default="127.0.0.1", help="Host for the local UI server.")
-    parser.add_argument("--port", type=int, default=8765, help="Port for the local UI server.")
-    args = parser.parse_args(argv)
-    run_ui_server(seed=args.seed, host=args.host, port=args.port)
-
-
-def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: SimulationState | None = None) -> dict[str, Any]:
-    """Convert a MetricSnapshot into frontend-friendly camelCase fields."""
-    completion_shift = state.completion_shift if state else None
-    return {
-        "shift": snapshot.shift,
-        "day": snapshot.day,
-        "piecesCompleted": snapshot.pieces_completed,
-        "jobsCompleted": snapshot.jobs_completed,
-        "jobsRemaining": snapshot.jobs_remaining,
-        "jobsLate": snapshot.jobs_late,
-        "utilization": round(snapshot.utilization, 3),
-        "idleTime": snapshot.idle_time,
-        "reschedules": snapshot.reschedules,
-        "cost": round(snapshot.cost, 1),
-        "scheduleRisk": round(snapshot.schedule_risk, 1),
-        "projectedCompletionShift": snapshot.projected_completion_shift,
-        "projectedCompletion": day_shift(snapshot.projected_completion_shift, shifts_per_day),
-        "finalItemCompleted": snapshot.final_item_completed,
-        "deadlineMet": snapshot.deadline_met,
-        "completion": day_shift(completion_shift, shifts_per_day) if completion_shift else None,
-    }
-
-
-def _card_payload(card: DecisionCard, selected_choice: str | None) -> dict[str, Any]:
-    """Convert a decision card into the shape rendered by the modal UI."""
-    return {
-        "id": card.id,
-        "type": card.type.value,
-        "title": card.title,
-        "description": card.description,
-        "severity": card.severity,
-        "selectedChoice": selected_choice,
-        "choices": [_choice_payload(choice) for choice in card.choices],
-    }
-
-
-def _choice_payload(choice: DecisionChoice) -> dict[str, Any]:
-    """Convert a decision choice while preserving simulation effect hints."""
-    return {
-        "id": choice.id,
-        "label": choice.label,
-        "description": choice.description,
-        "riskEffect": choice.risk_effect,
-        "costEffect": choice.cost_effect,
-        "rescheduleEffect": choice.reschedule_effect,
-    }
-
-
-def _highest_risk_piece(state: SimulationState, shop_id: str) -> str:
-    """Return a compact highest-risk piece label for one shop row."""
-    piece_scores: dict[str, float] = {}
-    for job in state.jobs.values():
-        if job.shop_id == shop_id and job.piece_id in state.pieces and not job.is_complete:
-            piece_scores[job.piece_id] = max(piece_scores.get(job.piece_id, 0.0), job.risk_score)
-    if not piece_scores:
-        return "-"
-    piece_id = max(piece_scores, key=piece_scores.get)
-    return f"{piece_id} ({piece_scores[piece_id]:.0f})"
-
-
-def _shop_event_label(state: SimulationState, shop_id: str) -> str:
-    """Return active event labels affecting a shop or its workcenters."""
-    labels = []
-    for event in state.event_timeline:
-        if event.id not in state.active_events:
-            continue
-        if event.target_id == shop_id:
-            labels.append(event.type.value)
-        elif event.target_id in state.workcenters and state.workcenters[event.target_id].shop_id == shop_id:
-            labels.append(event.type.value)
-    return ", ".join(labels[:2])
-
-
-def _event_target_name(state: SimulationState, event: Event) -> str:
-    """Resolve an event target id into a human-readable UI label."""
-    if event.target_type == TargetType.SHOP and event.target_id in state.shops:
-        return state.shops[event.target_id].name
-    if event.target_type == TargetType.WORKCENTER and event.target_id in state.workcenters:
-        return state.workcenters[event.target_id].name
-    if event.target_type == TargetType.PIECE and event.target_id in state.pieces:
-        return state.pieces[event.target_id].name
-    if event.target_type == TargetType.JOB and event.target_id in state.jobs:
-        return event.target_id
-    return event.target_id
-
-
-def _response_category(event_type: str) -> str:
-    """Map event display text to the broad response hint shown in risk rows."""
-    lower = event_type.lower()
-    if "weather" in lower or "facility" in lower:
-        return "pre-stage or shift unaffected work"
-    if "material" in lower or "supplier" in lower or "logistics" in lower:
-        return "resequence or expedite"
-    if "machine" in lower or "workcenter" in lower or "tooling" in lower:
-        return "reroute or protect critical path"
-    if "crew" in lower:
-        return "split capacity or protect critical jobs"
-    if "rework" in lower:
-        return "contain quality impact"
-    if "inspection" in lower or "engineering" in lower or "certification" in lower:
-        return "mitigation recommended"
-    return "priority review"
-
+"""HTML template for the local browser UI."""
 
 INDEX_HTML = r"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ECHO Adventure Operations UI</title>
+  <title>Shipyard Scheduler Choose Your Own Adventure Game</title>
   <style>
     :root {
       --bg: #f6f7f4;
@@ -1150,7 +541,7 @@ INDEX_HTML = r"""<!doctype html>
   <header>
     <div class="topbar">
       <div>
-        <h1>Advanced Manufacturing Yard Schedule</h1>
+        <h1>Shipyard Scheduler Choose Your Own Adventure Game</h1>
         <div class="status-line">
           <span class="badge" id="dayBadge">Day</span>
           <span class="badge warn" id="decisionProgress">Decisions</span>
@@ -1158,6 +549,10 @@ INDEX_HTML = r"""<!doctype html>
       </div>
       <div class="controls">
         <button id="themeToggle" title="Toggle dark mode" style="width:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;">🌙</button>
+        <select id="modeSelect" aria-label="Run mode">
+          <option value="full">Full game</option>
+          <option value="demo">Demo</option>
+        </select>
         <input id="seedInput" inputmode="numeric" placeholder="Seed">
         <button id="newRunBtn">New Run</button>
         <button id="decisionBtn">Daily Decisions</button>
@@ -1175,7 +570,6 @@ INDEX_HTML = r"""<!doctype html>
             <h2>Project Position</h2>
             <div class="subtle" id="projectedText">Projected completion</div>
           </div>
-          <span class="badge" id="runStateBadge">In progress</span>
         </div>
         <div class="metrics" id="metrics"></div>
       </section>
@@ -1232,7 +626,7 @@ INDEX_HTML = r"""<!doctype html>
       <h1 id="welcomeModalTitle">Welcome</h1>
       <div class="welcome-copy">
         <p>You are managing a manufacturing schedule under disruption. Each day, inspect the operating board, read the active risks, and choose how the yard should respond.</p>
-        <p>Your goal is to get every puzzle piece ready for final integration before the Day 15 deadline while balancing cost, reschedules, utilization, and schedule risk.</p>
+        <p>Your goal is to get every puzzle piece ready for final integration before <span id="welcomeDeadline">the deadline</span> while balancing cost, reschedules, utilization, and schedule risk.</p>
         <ul>
           <li>Review shops, workcenters, pieces, the critical path, and the risk register.</li>
           <li>Answer the daily decision cards to resequence, reroute, expedite, or protect critical work.</li>
@@ -1309,9 +703,10 @@ INDEX_HTML = r"""<!doctype html>
     async function newRun() {
       try {
         const seed = $("seedInput").value.trim();
+        const mode = $("modeSelect").value;
         state = await api("/api/new", {
           method: "POST",
-          body: JSON.stringify({ seed })
+          body: JSON.stringify({ seed, mode })
         });
         pendingChoice = null;
         dismissedDecisionKey = null;
@@ -1410,9 +805,9 @@ INDEX_HTML = r"""<!doctype html>
     function render() {
       if (!state) return;
       $("dayBadge").textContent = state.shiftLabel;
+      $("modeSelect").value = state.mode || "full";
+      $("welcomeDeadline").textContent = state.deadlineLabel;
       $("projectedText").textContent = `Projected completion: ${state.overview.projectedCompletion}`;
-      $("runStateBadge").textContent = state.gameOver ? "Run complete" : "In progress";
-      $("runStateBadge").className = `badge ${state.gameOver ? "good" : "info"}`;
 
       renderMetrics();
       renderShopOptions();
@@ -1955,7 +1350,7 @@ INDEX_HTML = r"""<!doctype html>
   <!-- End-of-day modal (centered) -->
   <div id="summaryModalOverlay" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal">
-      <h1>Daily Summary</h1Drop >
+      <h1>Daily Summary</h1>
       <div class="modal-body" id="summaryModalBody"></div>
       <div>
         <h3>Notable Consequences</h3>
@@ -1990,7 +1385,3 @@ INDEX_HTML = r"""<!doctype html>
 </body>
 </html>
 """
-
-
-if __name__ == "__main__":
-    main()

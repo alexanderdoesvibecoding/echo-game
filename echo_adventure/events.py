@@ -45,25 +45,30 @@ def generate_event_timeline(
     deadline = config.deadline_shift
     all_jobs = [job for job in jobs.values() if job.id != "JOB-FINAL-001"]
     timeline: list[Event] = []
-    event_count = rng.randint(22, 30)
+    event_count = rng.randint(config.min_base_events, config.max_base_events)
     extra_rework_count = rng.randint(
         config.min_extra_quality_rework_events,
         config.max_extra_quality_rework_events,
     )
-    filler_count = max(0, event_count - len(EVENT_SEQUENCE) - extra_rework_count)
-    # The catalog guarantees broad variety, then extra/filler events create
-    # enough density that a player cannot perfectly absorb every disruption.
-    event_types = (
-        EVENT_SEQUENCE
-        + [EventType.QUALITY_REWORK for _ in range(extra_rework_count)]
-        + [rng.choice(EVENT_SEQUENCE) for _ in range(filler_count)]
-    )
+    if event_count <= 0:
+        return timeline
+    if event_count < len(EVENT_SEQUENCE):
+        event_types = rng.sample(EVENT_SEQUENCE, k=event_count)
+    else:
+        filler_count = max(0, event_count - len(EVENT_SEQUENCE) - extra_rework_count)
+        # The full-game catalog guarantees broad variety, then extra/filler
+        # events create enough density that a player cannot absorb everything.
+        event_types = (
+            EVENT_SEQUENCE
+            + [EventType.QUALITY_REWORK for _ in range(extra_rework_count)]
+            + [rng.choice(EVENT_SEQUENCE) for _ in range(filler_count)]
+        )
     rng.shuffle(event_types)
 
     # Force at least one early warning for weather and one for delayed material.
-    if EventType.WEATHER not in event_types:
+    if event_types and EventType.WEATHER not in event_types:
         event_types[0] = EventType.WEATHER
-    if EventType.DELAYED_MATERIAL not in event_types:
+    if len(event_types) > 1 and EventType.DELAYED_MATERIAL not in event_types:
         event_types[1] = EventType.DELAYED_MATERIAL
 
     for index, event_type in enumerate(event_types, start=1):

@@ -1,15 +1,13 @@
 [project]
 name = "echo-adventure"
 version = "0.1.0"
-description = "Terminal scheduling strategy game with a hidden automated scheduler benchmark."
+description = "Browser scheduling strategy game with a hidden automated scheduler benchmark."
 requires-python = ">=3.11"
-dependencies = [
-    "rich>=13.7",
-]
+dependencies = []
 
 [project.scripts]
 echo-adventure = "echo_adventure.app:main"
-echo-adventure-ui = "echo_adventure.ui_server:main"
+echo-adventure-ui = "echo_adventure.ui.server:main"
 
 [build-system]
 requires = ["setuptools>=68"]

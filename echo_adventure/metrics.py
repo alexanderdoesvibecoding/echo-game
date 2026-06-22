@@ -76,7 +76,9 @@ def calculate_schedule_risk(state: SimulationState, projected_completion_shift: 
     )
     remaining_jobs = sum(1 for job in state.jobs.values() if not job.is_complete)
     completed_pieces = sum(1 for piece in state.pieces.values() if piece.ready_for_integration)
-    integration_gap = max(0, 15 - completed_pieces) * (1.0 if state.current_shift > 30 else 0.45)
+    integration_gap = max(0, len(state.pieces) - completed_pieces) * (
+        1.0 if state.current_shift > state.deadline_shift * 0.67 else 0.45
+    )
     slack_risk = max(0, 22 - slack) * 0.9
     work_risk = max(0.0, remaining_jobs / max(1, state.deadline_shift - state.current_shift)) * 3.5
     # This is a heuristic score, not a probability model. It intentionally
