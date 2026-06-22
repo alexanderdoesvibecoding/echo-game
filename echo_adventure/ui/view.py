@@ -168,6 +168,17 @@ INDEX_HTML = r"""<!doctype html>
       color: #f0f3f5;
     }
 
+    html[data-theme="dark"] .settings-panel {
+      background: #1a202a;
+      border-color: #3a4352;
+    }
+
+    html[data-theme="dark"] .settings-warning {
+      background: #3a2a1a;
+      border-color: #7a5a2a;
+      color: #f0ad4e;
+    }
+
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -189,10 +200,11 @@ INDEX_HTML = r"""<!doctype html>
 
     .topbar {
       display: grid;
-      grid-template-columns: minmax(240px, 1fr) auto;
+      grid-template-columns: auto minmax(240px, 1fr) auto;
       gap: 18px;
       align-items: center;
       padding: 16px 22px;
+      position: relative;
     }
 
     h1, h2, h3 { margin: 0; letter-spacing: 0; }
@@ -201,6 +213,72 @@ INDEX_HTML = r"""<!doctype html>
     h3 { font-size: 13px; font-weight: 760; color: var(--muted); text-transform: uppercase; }
     .subtle { color: var(--muted); }
     .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center; }
+    .settings-wrap { position: relative; }
+    .settings-button {
+      width: 38px;
+      padding: 0;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .settings-button span {
+      width: 18px;
+      height: 2px;
+      border-radius: 999px;
+      background: currentColor;
+    }
+    .settings-panel {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      z-index: 40;
+      display: none;
+      width: 220px;
+      padding: 8px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    .settings-panel.active { display: grid; gap: 8px; }
+    .settings-panel button {
+      width: 100%;
+      justify-content: flex-start;
+      text-align: left;
+    }
+    .settings-form {
+      display: grid;
+      gap: 12px;
+    }
+    .settings-fields {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .settings-fields label,
+    .settings-form label {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .settings-fields input,
+    .settings-form input,
+    .settings-form select {
+      width: 100%;
+      min-width: 0;
+    }
+    .settings-warning {
+      padding: 9px 10px;
+      border: 1px solid #e0b96a;
+      border-radius: 8px;
+      background: #fff7e2;
+      color: #805b13;
+      font-weight: 700;
+    }
     input, select, button {
       height: 36px;
       border: 1px solid var(--line);
@@ -437,7 +515,8 @@ INDEX_HTML = r"""<!doctype html>
       .metrics { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
     }
     @media (max-width: 680px) {
-      .topbar { grid-template-columns: 1fr; }
+      .topbar { grid-template-columns: auto 1fr; }
+      .controls { grid-column: 1 / -1; }
       .controls { justify-content: flex-start; }
       main { padding: 12px; }
       .metrics, .split { grid-template-columns: 1fr; }
@@ -540,21 +619,25 @@ INDEX_HTML = r"""<!doctype html>
 <body>
   <header>
     <div class="topbar">
+      <div class="settings-wrap">
+        <button id="settingsMenuBtn" class="settings-button" title="Settings" aria-label="Settings menu" aria-expanded="false">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div id="settingsPanel" class="settings-panel">
+          <button id="openNewRunModalBtn">New Run</button>
+          <button id="themeMenuBtn">Light/Dark Mode</button>
+        </div>
+      </div>
       <div>
         <h1>Shipyard Scheduler Choose Your Own Adventure Game</h1>
         <div class="status-line">
           <span class="badge" id="dayBadge">Day</span>
-          <span class="badge warn" id="decisionProgress">Decisions</span>
+          <span class="badge warn" id="decisionProgress">0/0 Daily Decisions Handled</span>
         </div>
       </div>
       <div class="controls">
-        <button id="themeToggle" title="Toggle dark mode" style="width:36px;padding:0;display:flex;align-items:center;justify-content:center;font-size:18px;">🌙</button>
-        <select id="modeSelect" aria-label="Run mode">
-          <option value="full">Full game</option>
-          <option value="demo">Demo</option>
-        </select>
-        <input id="seedInput" inputmode="numeric" placeholder="Seed">
-        <button id="newRunBtn">New Run</button>
         <button id="decisionBtn">Daily Decisions</button>
         <button id="advanceBtn" class="primary" disabled>End Day</button>
       </div>
@@ -579,8 +662,8 @@ INDEX_HTML = r"""<!doctype html>
           <h2>Operating Board</h2>
         </div>
         <div class="tabbar">
-          <button data-tab="shops" class="active">Shops<span class="info-icon" data-tooltip="Shows queue pressure, blocked work, utilization, idle time, shop risk, and active disruptions by shop.">i</span></button>
-          <button data-tab="pieces">Pieces<span class="info-icon" data-tooltip="Shows each puzzle piece's completion progress, blocked job count, critical-path exposure, estimated completion, and risk.">i</span></button>
+          <button data-tab="shops" class="active">Shops<span class="info-icon" data-tooltip="Shows queue pressure, blocked work, workstation utilization, idle time, shop risk, and active disruptions by shop.">i</span></button>
+          <button data-tab="pieces">Pieces<span class="info-icon" data-tooltip="Shows each puzzle piece's completion progress, blocked job count, critical-path exposure, last-job due date, and risk.">i</span></button>
           <button data-tab="workcenters">Workcenters<span class="info-icon" data-tooltip="Shows the selected shop's machines or stations, current job, queue depth, next job, capability, and downtime.">i</span></button>
           <button data-tab="critical">Critical Path<span class="info-icon" data-tooltip="Shows jobs most likely to control the final completion date, including slack, blockers, downstream impact, and risk.">i</span></button>
           <button data-tab="risks">Risk Register<span class="info-icon" data-tooltip="Shows active disruptions, warnings, and blocked jobs that need schedule response or mitigation.">i</span></button>
@@ -626,7 +709,7 @@ INDEX_HTML = r"""<!doctype html>
       <h1 id="welcomeModalTitle">Welcome</h1>
       <div class="welcome-copy">
         <p>You are managing a manufacturing schedule under disruption. Each day, inspect the operating board, read the active risks, and choose how the yard should respond.</p>
-        <p>Your goal is to get every puzzle piece ready for final integration before <span id="welcomeDeadline">the deadline</span> while balancing cost, reschedules, utilization, and schedule risk.</p>
+        <p>Your goal is to get every puzzle piece ready for final integration before <span id="welcomeDeadline">the deadline</span> while balancing cost, reschedules, workstation utilization, and schedule risk.</p>
         <ul>
           <li>Review shops, workcenters, pieces, the critical path, and the risk register.</li>
           <li>Answer the daily decision cards to resequence, reroute, expedite, or protect critical work.</li>
@@ -653,6 +736,58 @@ INDEX_HTML = r"""<!doctype html>
     </div>
   </div>
 
+  <div id="newRunModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="newRunModalTitle">
+    <div class="modal">
+      <div class="modal-titlebar">
+        <div>
+          <h1 id="newRunModalTitle">New Run</h1>
+          <div class="subtle">Choose a preset, seed, and scenario size.</div>
+        </div>
+        <button id="closeNewRunModalBtn" class="icon-button" title="Close new run settings" onclick="closeNewRunModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-form">
+          <label>
+            Preset
+            <select id="runPresetSelect">
+              <option value="normal">Normal</option>
+              <option value="demo">Demo</option>
+            </select>
+          </label>
+          <label>
+            Seed
+            <input id="runSeedInput" inputmode="numeric" placeholder="Random">
+          </label>
+          <div id="settingsWarning" class="settings-warning hidden">
+            Editing these fields can make the game unplayable or impossible to finish.
+          </div>
+          <div class="settings-fields">
+            <label>
+              Days
+              <input id="runDaysInput" type="number" min="1" max="90">
+            </label>
+            <label>
+              Pieces
+              <input id="runPiecesInput" type="number" min="1" max="30">
+            </label>
+            <label>
+              Min Jobs per Piece
+              <input id="runMinJobsInput" type="number" min="1" max="20">
+            </label>
+            <label>
+              Max Jobs per Piece
+              <input id="runMaxJobsInput" type="number" min="1" max="20">
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button onclick="closeNewRunModal()">Cancel</button>
+        <button class="primary" onclick="startNewRun()">Start Run</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let state = null;
     let activeTab = "shops";
@@ -660,8 +795,15 @@ INDEX_HTML = r"""<!doctype html>
     // source of truth for the run, decisions, and day advancement rules.
     let welcomeModalVisible = false;
     let decisionModalVisible = false;
+    let newRunModalVisible = false;
+    let settingsMenuOpen = false;
+    let settingsEdited = false;
     let dismissedDecisionKey = null;
     const welcomeStorageKey = "echoAdventureWelcomeSeen";
+    const runPresets = {
+      normal: { totalDays: 30, pieceCount: 15, minJobsPerPiece: 5, maxJobsPerPiece: 10 },
+      demo: { totalDays: 5, pieceCount: 5, minJobsPerPiece: 1, maxJobsPerPiece: 2 }
+    };
 
     const $ = (id) => document.getElementById(id);
     const fmtPct = (value) => `${Math.round((value || 0) * 100)}%`;
@@ -700,17 +842,27 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
-    async function newRun() {
+    async function startNewRun() {
       try {
-        const seed = $("seedInput").value.trim();
-        const mode = $("modeSelect").value;
+        const seed = $("runSeedInput").value.trim();
+        const mode = $("runPresetSelect").value;
         state = await api("/api/new", {
           method: "POST",
-          body: JSON.stringify({ seed, mode })
+          body: JSON.stringify({
+            seed,
+            mode,
+            settings: {
+              total_days: $("runDaysInput").value,
+              piece_count: $("runPiecesInput").value,
+              min_jobs_per_piece: $("runMinJobsInput").value,
+              max_jobs_per_piece: $("runMaxJobsInput").value
+            }
+          })
         });
         pendingChoice = null;
         dismissedDecisionKey = null;
         decisionModalVisible = false;
+        newRunModalVisible = false;
         showError("");
         render();
       } catch (error) {
@@ -805,7 +957,6 @@ INDEX_HTML = r"""<!doctype html>
     function render() {
       if (!state) return;
       $("dayBadge").textContent = state.shiftLabel;
-      $("modeSelect").value = state.mode || "full";
       $("welcomeDeadline").textContent = state.deadlineLabel;
       $("projectedText").textContent = `Projected completion: ${state.overview.projectedCompletion}`;
 
@@ -818,6 +969,8 @@ INDEX_HTML = r"""<!doctype html>
       renderFinal();
       renderPieceModal();
       renderWelcomeModal();
+      renderNewRunModal();
+      renderSettingsMenu();
       maybeAutoOpenDecisionModal();
       renderDecisionModal();
       // Auto-open final modal if run finished.
@@ -885,6 +1038,67 @@ INDEX_HTML = r"""<!doctype html>
       renderDecisionModal();
     }
 
+    function toggleSettingsMenu() {
+      settingsMenuOpen = !settingsMenuOpen;
+      renderSettingsMenu();
+    }
+
+    function closeSettingsMenu() {
+      settingsMenuOpen = false;
+      renderSettingsMenu();
+    }
+
+    function renderSettingsMenu() {
+      const panel = $("settingsPanel");
+      const button = $("settingsMenuBtn");
+      if (!panel || !button) return;
+      panel.classList.toggle("active", settingsMenuOpen);
+      button.setAttribute("aria-expanded", settingsMenuOpen ? "true" : "false");
+    }
+
+    function openNewRunModal() {
+      closeSettingsMenu();
+      newRunModalVisible = true;
+      settingsEdited = false;
+      const mode = state ? state.mode || "normal" : "normal";
+      $("runPresetSelect").value = mode;
+      applyRunSettings(state && state.settings ? state.settings : runPresets[mode]);
+      $("runSeedInput").value = "";
+      renderNewRunModal();
+    }
+
+    function closeNewRunModal() {
+      newRunModalVisible = false;
+      renderNewRunModal();
+    }
+
+    function renderNewRunModal() {
+      const overlay = $("newRunModalOverlay");
+      const warning = $("settingsWarning");
+      if (!overlay || !warning) return;
+      overlay.classList.toggle("active", newRunModalVisible);
+      warning.classList.toggle("hidden", !settingsEdited);
+    }
+
+    function applyRunSettings(settings) {
+      $("runDaysInput").value = settings.totalDays;
+      $("runPiecesInput").value = settings.pieceCount;
+      $("runMinJobsInput").value = settings.minJobsPerPiece;
+      $("runMaxJobsInput").value = settings.maxJobsPerPiece;
+    }
+
+    function applyRunPreset() {
+      const preset = $("runPresetSelect").value;
+      applyRunSettings(runPresets[preset] || runPresets.normal);
+      settingsEdited = false;
+      renderNewRunModal();
+    }
+
+    function markSettingsEdited() {
+      settingsEdited = true;
+      renderNewRunModal();
+    }
+
     function renderSummaryModal() {
       const payload = pendingAdvanceState || state;
       const summary = payload.lastSummary;
@@ -938,7 +1152,7 @@ INDEX_HTML = r"""<!doctype html>
             <tr><td>Pieces ready</td><td>${p.piecesCompleted}</td><td>${a.piecesCompleted}</td></tr>
             <tr><td>Jobs completed</td><td>${p.jobsCompleted}</td><td>${a.jobsCompleted}</td></tr>
             <tr><td>Jobs late</td><td>${p.jobsLate}</td><td>${a.jobsLate}</td></tr>
-            <tr><td>Utilization</td><td>${fmtPct(p.utilization)}</td><td>${fmtPct(a.utilization)}</td></tr>
+            <tr><td>Workstation Utilization</td><td>${fmtPct(p.utilization)}</td><td>${fmtPct(a.utilization)}</td></tr>
             <tr><td>Idle time</td><td>${p.idleTime}</td><td>${a.idleTime}</td></tr>
             <tr><td>Reschedules</td><td>${p.reschedules}</td><td>${a.reschedules}</td></tr>
             <tr><td>Cost</td><td>${fmtNum(p.cost)}</td><td>${fmtNum(a.cost)}</td></tr>
@@ -968,12 +1182,12 @@ INDEX_HTML = r"""<!doctype html>
           <p class="subtle">${escapeHtml(piece.id)}</p>
           <table>
             <tbody>
-              <tr><td>Status</td><td>${escapeHtml(piece.status)}</td></tr>
+              <tr><td>Status</td><td>${escapeHtml(pieceStatusLabel(piece.status))}</td></tr>
               <tr><td>Progress</td><td>${fmtPct(piece.progress)}</td></tr>
               <tr><td>Jobs complete</td><td>${piece.completed}/${piece.total}</td></tr>
               <tr><td>Jobs blocked</td><td>${blockedCount}</td></tr>
               <tr><td>Critical jobs</td><td>${criticalCount}</td></tr>
-              <tr><td>Estimated completion</td><td>${escapeHtml(piece.estimated)}</td></tr>
+              <tr><td>Due date</td><td>${escapeHtml(piece.dueDate)}</td></tr>
               <tr><td>Risk</td><td>${Math.round(piece.risk)}</td></tr>
             </tbody>
           </table>
@@ -1017,7 +1231,7 @@ INDEX_HTML = r"""<!doctype html>
         ["Pieces Ready", `${snap.piecesCompleted}/${state.pieces.length}`, snap.piecesCompleted / state.pieces.length, "good", "How many puzzle pieces are complete and ready to assemble."],
         ["Jobs Complete", fmtNum(snap.jobsCompleted), snap.jobsCompleted / Math.max(1, snap.jobsCompleted + snap.jobsRemaining), "good", "Total jobs finished out of all required work."],
         ["Jobs Late", fmtNum(snap.jobsLate), Math.min(1, snap.jobsLate / 20), snap.jobsLate > 0 ? "warn" : "good", "Number of jobs that have missed their target completion date."],
-        ["Utilization", fmtPct(snap.utilization), snap.utilization, "info", "How busy your workcenters are (0% = idle, 100% = fully busy)."],
+        ["Workstation Utilization", fmtPct(snap.utilization), snap.utilization, "info", "How busy your workstations are (0% = idle, 100% = fully busy)."],
         ["Cost", fmtNum(snap.cost), Math.min(1, snap.cost / 28000), "warn", "Total additional costs from rescheduling, expediting, and resolving issues."],
         ["Schedule Risk", `${Math.round(snap.scheduleRisk)}/100`, snap.scheduleRisk / 100, snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good", "Overall probability of missing the deadline (0 = safe, 100 = critical)."]
       ];
@@ -1055,18 +1269,18 @@ INDEX_HTML = r"""<!doctype html>
         shop.event || "-"
       ]));
 
-      table($("piecesTable"), ["Piece", "Status", "Progress", "Jobs", "Blocked", "Critical", "Est.", "Risk"], state.pieces.sort((a, b) => {
+      table($("piecesTable"), ["Piece", "Status", "Progress", "Jobs", "Blocked", "Critical", "Due Date", "Risk"], state.pieces.sort((a, b) => {
         const numA = parseInt(a.id.replace(/\D/g, '')) || 0;
         const numB = parseInt(b.id.replace(/\D/g, '')) || 0;
         return numA - numB;
       }).map(piece => [
         `<button class="link-button" onclick="openPieceModal('${piece.id}')">${escapeHtml(piece.id)}</button>`,
-        badge(piece.status, piece.status.includes("Risk") || piece.status.includes("Blocked") ? "warn" : piece.status.includes("Ready") ? "good" : "info"),
+        badge(pieceStatusLabel(piece.status), piece.status.includes("Risk") || piece.status.includes("Blocked") ? "warn" : piece.status.includes("Ready") ? "good" : "info"),
         progressCell(piece.progress),
         `${piece.completed}/${piece.total}`,
         piece.blocked,
         piece.critical ? "Yes" : "",
-        piece.estimated,
+        piece.dueDate,
         Math.round(piece.risk)
       ]));
 
@@ -1121,7 +1335,7 @@ INDEX_HTML = r"""<!doctype html>
         return;
       }
 
-      progress.textContent = `${chosenCount}/${totalCount} decisions`;
+      progress.textContent = `${chosenCount}/${totalCount} Daily Decisions Handled`;
       progress.className = `badge ${remainingCount ? "warn" : "good"}`;
       decisionBtn.disabled = false;
       decisionBtn.textContent = remainingCount ? `Daily Decisions (${remainingCount})` : "Daily Decisions";
@@ -1222,7 +1436,7 @@ INDEX_HTML = r"""<!doctype html>
         ["Pieces ready", p.piecesCompleted, a.piecesCompleted],
         ["Jobs completed", p.jobsCompleted, a.jobsCompleted],
         ["Jobs late", p.jobsLate, a.jobsLate],
-        ["Utilization", fmtPct(p.utilization), fmtPct(a.utilization)],
+        ["Workstation Utilization", fmtPct(p.utilization), fmtPct(a.utilization)],
         ["Idle time", p.idleTime, a.idleTime],
         ["Reschedules", p.reschedules, a.reschedules],
         ["Cost", fmtNum(p.cost), fmtNum(a.cost)],
@@ -1244,6 +1458,10 @@ INDEX_HTML = r"""<!doctype html>
 
     function badge(value, tone) {
       return `<span class="badge ${tone || ""}">${escapeHtml(String(value))}</span>`;
+    }
+
+    function pieceStatusLabel(status) {
+      return status === "Ready for Integration" ? "Job Done" : status;
     }
 
     function jobLabel(value, hasRework) {
@@ -1269,20 +1487,33 @@ INDEX_HTML = r"""<!doctype html>
     });
 
     $("shopSelect").addEventListener("change", renderTables);
-    $("newRunBtn").addEventListener("click", newRun);
+    $("settingsMenuBtn").addEventListener("click", toggleSettingsMenu);
+    $("openNewRunModalBtn").addEventListener("click", openNewRunModal);
     $("decisionBtn").addEventListener("click", openDecisionModal);
     $("advanceBtn").addEventListener("click", prepareAdvanceDay);
+    $("runPresetSelect").addEventListener("change", applyRunPreset);
+    ["runDaysInput", "runPiecesInput", "runMinJobsInput", "runMaxJobsInput"].forEach(id => {
+      $(id).addEventListener("input", markSettingsEdited);
+    });
     document.addEventListener("click", (e) => {
       const summaryOverlay = document.getElementById("summaryModalOverlay");
       const finalOverlay = document.getElementById("finalModalOverlay");
       const pieceOverlay = document.getElementById("pieceModalOverlay");
       const welcomeOverlay = document.getElementById("welcomeModalOverlay");
       const decisionOverlay = document.getElementById("decisionModalOverlay");
+      const newRunOverlay = document.getElementById("newRunModalOverlay");
+      const settingsWrap = document.querySelector(".settings-wrap");
+      if (settingsWrap && !settingsWrap.contains(e.target)) {
+        closeSettingsMenu();
+      }
       if (e.target && e.target.id === "closeWelcomeBtn") {
         closeWelcomeModal();
       }
       if (e.target && e.target.id === "closeDecisionBtn") {
         dismissDecisionModal();
+      }
+      if (e.target && e.target.id === "closeNewRunModalBtn") {
+        closeNewRunModal();
       }
       if (e.target && e.target.id === "closeModalBtn") {
         modalVisible = false;
@@ -1316,6 +1547,9 @@ INDEX_HTML = r"""<!doctype html>
       if (decisionOverlay && e.target === decisionOverlay) {
         dismissDecisionModal();
       }
+      if (newRunOverlay && e.target === newRunOverlay) {
+        closeNewRunModal();
+      }
     });
 
     function initDarkMode() {
@@ -1327,8 +1561,8 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function updateThemeButton(theme) {
-      const btn = $("themeToggle");
-      if (btn) btn.textContent = theme === "dark" ? "☀️" : "🌙";
+      const btn = $("themeMenuBtn");
+      if (btn) btn.textContent = theme === "dark" ? "Light Mode" : "Dark Mode";
     }
 
     function toggleDarkMode() {
@@ -1339,7 +1573,7 @@ INDEX_HTML = r"""<!doctype html>
       updateThemeButton(next);
     }
 
-    $("themeToggle").addEventListener("click", toggleDarkMode);
+    $("themeMenuBtn").addEventListener("click", toggleDarkMode);
 
     initDarkMode();
     welcomeModalVisible = localStorage.getItem(welcomeStorageKey) !== "true";

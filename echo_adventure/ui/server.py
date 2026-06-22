@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import threading
+from dataclasses import replace
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -32,7 +33,7 @@ class GameSession:
     scenario so the final reveal compares scheduling policy, not scenario luck.
     """
 
-    def __init__(self, seed: int | None = None, demo: bool = False) -> None:
+    def __init__(self, seed: int | None = None, demo: bool = False, settings: dict[str, Any] | None = None) -> None:
         # RLock allows helper methods called inside locked public methods to
         # safely reuse the same lock if the implementation grows later.
         self.lock = threading.RLock()
@@ -40,7 +41,8 @@ class GameSession:
         # replay the exact generated scenario.
         self.seed = resolve_seed(seed)
         self.demo = demo
-        self.config = GameConfig.demo(seed=self.seed) if demo else GameConfig(seed=self.seed)
+        base_config = GameConfig.demo(seed=self.seed) if demo else GameConfig(seed=self.seed)
+        self.config = _apply_config_settings(base_config, settings or {})
         # Both schedulers share a scenario but mutate independent state copies.
         self.scenario = generate_scenario(self.config)
         self.player_state = initialize_state(self.scenario, self.config.shifts_per_day)
@@ -71,7 +73,8 @@ class GameSession:
             # close to the rows and panels it renders.
             payload: dict[str, Any] = {
                 "seed": self.seed,
-                "mode": "demo" if self.demo else "full",
+                "mode": "demo" if self.demo else "normal",
+                "settings": _settings_payload(self.config),
                 "scenarioId": self.scenario.scenario_id,
                 "gameOver": game_over,
                 "day": self.player_state.current_day,
@@ -214,6 +217,7 @@ class GameSession:
         for piece in sorted(self.player_state.pieces.values(), key=lambda item: (-item.risk_score, item.id)):
             blocked = sum(1 for job_id in piece.job_ids if self.player_state.jobs[job_id].is_blocked)
             critical = any(self.player_state.jobs[job_id].critical_path for job_id in piece.job_ids)
+            last_job = self.player_state.jobs[piece.job_ids[-1]] if piece.job_ids else None
             piece_jobs: list[dict[str, Any]] = []
             for job_id in piece.job_ids:
                 job = self.player_state.jobs[job_id]
@@ -247,7 +251,7 @@ class GameSession:
                     "progress": round(piece.percent_complete, 3),
                     "blocked": blocked,
                     "critical": critical,
-                    "estimated": day_shift(piece.estimated_completion_shift, self.config.shifts_per_day),
+                    "dueDate": day_shift(last_job.due_shift, self.config.shifts_per_day) if last_job else "-",
                     "risk": round(piece.risk_score, 1),
                     "jobs": piece_jobs,
                 }
@@ -423,8 +427,13 @@ class GameRequestHandler(BaseHTTPRequestHandler):
                     seed = None
                 else:
                     seed = int(seed)
-                mode = str(data.get("mode", "full")).lower()
-                type(self).session = GameSession(seed=seed, demo=mode == "demo")
+                mode = str(data.get("mode", "normal")).lower()
+                settings = data.get("settings")
+                type(self).session = GameSession(
+                    seed=seed,
+                    demo=mode == "demo",
+                    settings=settings if isinstance(settings, dict) else None,
+                )
                 self._send_json(type(self).session.state_payload())
             elif parsed.path == "/api/choice":
                 data = self._read_json()
@@ -484,7 +493,7 @@ def run_ui_server(seed: int | None = None, host: str = "127.0.0.1", port: int = 
     handler.session = GameSession(seed=seed, demo=demo)
     server = ThreadingHTTPServer((host, port), handler)
     url = f"http://{host}:{port}"
-    mode_label = "demo" if demo else "full"
+    mode_label = "demo" if demo else "normal"
     print(f"ECHO Adventure UI running at {url} ({mode_label} mode)")
     print("Press Ctrl+C to stop.")
     try:
@@ -524,6 +533,42 @@ def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: Simu
         "finalItemCompleted": snapshot.final_item_completed,
         "deadlineMet": snapshot.deadline_met,
         "completion": day_shift(completion_shift, shifts_per_day) if completion_shift else None,
+    }
+
+
+def _apply_config_settings(config: GameConfig, settings: dict[str, Any]) -> GameConfig:
+    """Apply user-entered new-run settings to a preset config."""
+    values: dict[str, int] = {}
+    bounds = {
+        "total_days": (1, 90),
+        "piece_count": (1, 30),
+        "min_jobs_per_piece": (1, 20),
+        "max_jobs_per_piece": (1, 20),
+    }
+    for key, (minimum, maximum) in bounds.items():
+        if key not in settings or settings[key] in ("", None):
+            continue
+        try:
+            value = int(settings[key])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{key.replace('_', ' ').title()} must be a whole number.") from exc
+        if value < minimum or value > maximum:
+            raise ValueError(f"{key.replace('_', ' ').title()} must be between {minimum} and {maximum}.")
+        values[key] = value
+    min_jobs = values.get("min_jobs_per_piece", config.min_jobs_per_piece)
+    max_jobs = values.get("max_jobs_per_piece", config.max_jobs_per_piece)
+    if min_jobs > max_jobs:
+        raise ValueError("Minimum jobs per piece cannot be greater than maximum jobs per piece.")
+    return replace(config, **values)
+
+
+def _settings_payload(config: GameConfig) -> dict[str, int]:
+    """Return editable new-run settings for the browser modal."""
+    return {
+        "totalDays": config.total_days,
+        "pieceCount": config.piece_count,
+        "minJobsPerPiece": config.min_jobs_per_piece,
+        "maxJobsPerPiece": config.max_jobs_per_piece,
     }
 
 
@@ -606,4 +651,3 @@ def _response_category(event_type: str) -> str:
     if "inspection" in lower or "engineering" in lower or "certification" in lower:
         return "mitigation recommended"
     return "priority review"
-
