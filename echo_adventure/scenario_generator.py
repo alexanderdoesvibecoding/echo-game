@@ -63,10 +63,6 @@ def generate_scenario(config: GameConfig) -> Scenario:
     rng = random.Random(seed)
     shops, workcenters = _generate_shops_and_workcenters(config, rng)
     pieces, jobs = _generate_pieces_and_jobs(config, rng, shops, workcenters)
-    final_job = _generate_final_integration_job(config, rng, shops, workcenters, jobs)
-    jobs[final_job.id] = final_job
-    for dep_id in final_job.dependency_ids:
-        jobs[dep_id].dependent_job_ids.append(final_job.id)
     dependencies = {job.id: list(job.dependency_ids) for job in jobs.values()}
     events = generate_event_timeline(rng, config, shops, workcenters, pieces, jobs)
     scenario = Scenario(
@@ -78,7 +74,6 @@ def generate_scenario(config: GameConfig) -> Scenario:
         jobs=jobs,
         dependencies=dependencies,
         event_timeline=events,
-        final_integration_job=final_job.id,
         deadline_shift=config.deadline_shift,
     )
     validate_scenario(scenario, config)
@@ -258,39 +253,6 @@ def _candidate_workcenters(
     if not candidate_ids:
         candidate_ids = [wc.id for wc in workcenters.values() if capability in wc.capabilities]
     return candidate_ids
-
-
-def _generate_final_integration_job(
-    config: GameConfig,
-    rng: random.Random,
-    shops: dict[str, Shop],
-    workcenters: dict[str, WorkCenter],
-    jobs: dict[str, Job],
-) -> Job:
-    """Create the final job that depends on every generated piece job."""
-    integration_shops = [shop for shop in shops.values() if "integration" in shop.capabilities]
-    shop = integration_shops[0]
-    candidate_ids = [wc.id for wc in workcenters.values() if "integration" in wc.capabilities]
-    rng.shuffle(candidate_ids)
-    return Job(
-        id="JOB-FINAL-001",
-        piece_id="FINAL",
-        shop_id=shop.id,
-        required_capability="integration",
-        candidate_workcenter_ids=candidate_ids[:8],
-        assigned_workcenter_id=None,
-        base_duration_shifts=config.final_integration_duration_shifts,
-        remaining_duration_shifts=config.final_integration_duration_shifts,
-        setup_time_shifts=0,
-        transport_delay_shifts=0,
-        dependency_ids=list(jobs.keys()),
-        status=JobStatus.NOT_READY,
-        priority=100,
-        due_shift=config.deadline_shift,
-        risk_score=50,
-        cost_weight=2.0,
-        original_duration_shifts=config.final_integration_duration_shifts,
-    )
 
 
 def _assert_acyclic(jobs: dict[str, Job]) -> None:

@@ -41,7 +41,7 @@ def generate_decision_cards(state: SimulationState, day: int, config: GameConfig
     if len(cards) < target_count and _has_idle_opportunity(state):
         cards.append(_idle_card(state, len(cards) + 1, day))
     if len(cards) < target_count and not state.all_pieces_ready():
-        cards.append(_final_integration_card(state, len(cards) + 1, day))
+        cards.append(_completion_readiness_card(state, len(cards) + 1, day))
     if not cards:
         cards.append(_strategic_card(state, len(cards) + 1, day))
     while len(cards) < target_count:
@@ -220,7 +220,7 @@ def _bottleneck_card(state: SimulationState, shop: Shop, ordinal: int, day: int)
 def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int) -> DecisionCard:
     """Build a card for a job that threatens final completion timing."""
     piece = state.pieces.get(job.piece_id)
-    piece_name = piece.name if piece else "Final integration"
+    piece_name = piece.name if piece else "Project work"
     return DecisionCard(
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
@@ -356,23 +356,28 @@ def _idle_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
     )
 
 
-def _final_integration_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
-    """Build a card for late-stage readiness of final integration."""
+def _completion_readiness_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
+    """Build a card for late-stage readiness of remaining puzzle pieces."""
     complete_pieces = sum(1 for piece in state.pieces.values() if piece.ready_for_integration)
     total_pieces = len(state.pieces)
     late_stage_day = max(1, int((state.deadline_shift / state.shifts_per_day) * 0.67))
+    incomplete_pieces = sorted(
+        [piece for piece in state.pieces.values() if not piece.ready_for_integration],
+        key=lambda piece: (-piece.risk_score, piece.estimated_completion_shift, piece.id),
+    )
+    target_ids = [piece.id for piece in incomplete_pieces[:3]]
     return DecisionCard(
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
-        type=DecisionType.FINAL_INTEGRATION,
-        title="Final integration readiness",
-        description=f"{complete_pieces}/{total_pieces} puzzle pieces are ready; late dependencies can starve the final integration bay.",
-        target_ids=[state.final_integration_job],
+        type=DecisionType.COMPLETION_READINESS,
+        title="Project completion readiness",
+        description=f"{complete_pieces}/{total_pieces} puzzle pieces are complete; late dependencies can still push the project past deadline.",
+        target_ids=target_ids,
         severity=4 if day >= late_stage_day else 3,
         choices=[
             DecisionChoice(
                 id="1",
-                label="Protect final dependencies",
+                label="Protect remaining dependencies",
                 description="Raise priority on jobs that unlock the most remaining pieces.",
                 immediate_effects={"type": "protect_critical"},
                 risk_effect=-7,
@@ -381,8 +386,8 @@ def _final_integration_card(state: SimulationState, ordinal: int, day: int) -> D
             ),
             DecisionChoice(
                 id="2",
-                label="Expedite acceptance",
-                description="Spend cost points to reduce handoff delay for the most complete pieces.",
+                label="Expedite near-complete pieces",
+                description="Spend cost points to pull the closest pieces across the finish line.",
                 immediate_effects={"type": "pull_forward"},
                 risk_effect=-5,
                 cost_effect=22,
@@ -390,8 +395,8 @@ def _final_integration_card(state: SimulationState, ordinal: int, day: int) -> D
             ),
             DecisionChoice(
                 id="3",
-                label="Hold integration buffer",
-                description="Avoid overloading final integration before more pieces are ready.",
+                label="Hold capacity buffer",
+                description="Avoid queue churn and preserve capacity for disruption recovery.",
                 immediate_effects={"type": "wait"},
                 risk_effect=3,
                 cost_effect=0,
@@ -505,9 +510,9 @@ def _resequence(state: SimulationState, card: DecisionCard) -> str:
 def _wait_and_absorb(state: SimulationState, card: DecisionCard) -> str:
     """Accept near-term delay and increase future pressure for affected work."""
     affected = 0
-    limit = 8 if card.type in {DecisionType.CRITICAL_PATH, DecisionType.FINAL_INTEGRATION} else 4
+    limit = 8 if card.type in {DecisionType.CRITICAL_PATH, DecisionType.COMPLETION_READINESS} else 4
     delay = 3 if card.severity >= 4 else 2
-    if card.type in {DecisionType.CRITICAL_PATH, DecisionType.FINAL_INTEGRATION}:
+    if card.type in {DecisionType.CRITICAL_PATH, DecisionType.COMPLETION_READINESS}:
         delay += 1
     for job in _jobs_for_card(state, card)[:limit]:
         if job.status not in {JobStatus.COMPLETE, JobStatus.RUNNING}:

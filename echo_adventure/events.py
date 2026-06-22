@@ -43,7 +43,7 @@ def generate_event_timeline(
 ) -> list[Event]:
     """Build the base disruption timeline for a scenario."""
     deadline = config.deadline_shift
-    all_jobs = [job for job in jobs.values() if job.id != "JOB-FINAL-001"]
+    all_jobs = list(jobs.values())
     timeline: list[Event] = []
     event_count = rng.randint(config.min_base_events, config.max_base_events)
     extra_rework_count = rng.randint(
@@ -436,11 +436,6 @@ def _insert_urgent_job(state: SimulationState, event: Event) -> None:
         priority=85 + event.severity,
         label="URG",
     )
-    if state.final_integration_job in state.jobs:
-        final_job = state.jobs[state.final_integration_job]
-        if new_job.id not in final_job.dependency_ids:
-            final_job.dependency_ids.append(new_job.id)
-            new_job.dependent_job_ids.append(final_job.id)
     state.cost += 25 * event.severity
 
 

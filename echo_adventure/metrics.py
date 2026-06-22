@@ -76,7 +76,7 @@ def calculate_schedule_risk(state: SimulationState, projected_completion_shift: 
     )
     remaining_jobs = sum(1 for job in state.jobs.values() if not job.is_complete)
     completed_pieces = sum(1 for piece in state.pieces.values() if piece.ready_for_integration)
-    integration_gap = max(0, len(state.pieces) - completed_pieces) * (
+    completion_gap = max(0, len(state.pieces) - completed_pieces) * (
         1.0 if state.current_shift > state.deadline_shift * 0.67 else 0.45
     )
     slack_risk = max(0, 22 - slack) * 0.9
@@ -91,7 +91,7 @@ def calculate_schedule_risk(state: SimulationState, projected_completion_shift: 
         + down_centers * 1.4
         + len(state.active_events) * 3.5
         + len(state.known_warnings) * 2.0
-        + integration_gap
+        + completion_gap
         + work_risk
     )
     if state.final_item_completed:
@@ -127,10 +127,10 @@ def recalculate_critical_path(state: SimulationState) -> int:
     max_path = max(score for score, _job in scored)
     threshold = max(1, int(max_path * 0.72))
     for score, job in scored:
-        # Jobs near the longest path, with low slack, or representing final
-        # integration are all treated as critical-path attention targets.
+        # Jobs near the longest path or with low slack are treated as
+        # critical-path attention targets.
         slack = state.deadline_shift - (state.current_shift + score)
-        if score >= threshold or slack <= 10 or job.id == state.final_integration_job:
+        if score >= threshold or slack <= 10:
             job.critical_path = True
         job.risk_score = _job_risk(job, slack)
     return state.current_shift + max_path
@@ -176,9 +176,7 @@ def _refresh_job_statuses(state: SimulationState) -> None:
         state.blocked_jobs.discard(job.id)
         if job.status in {JobStatus.RUNNING, JobStatus.QUEUED, JobStatus.PAUSED, JobStatus.REWORK_REQUIRED}:
             continue
-        if job.id == state.final_integration_job and not state.all_pieces_ready():
-            job.status = JobStatus.NOT_READY
-        elif state.is_dependency_complete(job.id):
+        if state.is_dependency_complete(job.id):
             job.status = JobStatus.READY
         else:
             job.status = JobStatus.NOT_READY
@@ -204,19 +202,22 @@ def _refresh_piece_statuses(state: SimulationState) -> None:
         )
         if completed == piece.total_job_count:
             piece.ready_for_integration = True
-            piece.status = PieceStatus.INTEGRATED if piece.integrated else PieceStatus.READY_FOR_INTEGRATION
+            piece.status = PieceStatus.COMPLETE
         elif blocked:
+            piece.ready_for_integration = False
             piece.status = PieceStatus.BLOCKED
         elif completed == 0:
+            piece.ready_for_integration = False
             piece.status = PieceStatus.NOT_STARTED
         elif piece.risk_score >= 65:
+            piece.ready_for_integration = False
             piece.status = PieceStatus.AT_RISK
         else:
+            piece.ready_for_integration = False
             piece.status = PieceStatus.IN_PROGRESS
-    if state.final_item_completed:
-        for piece in state.pieces.values():
-            piece.integrated = True
-            piece.status = PieceStatus.INTEGRATED
+    if state.all_pieces_ready() and not state.final_item_completed:
+        state.final_item_completed = True
+        state.completion_shift = state.current_shift
 
 
 def _refresh_shop_statuses(state: SimulationState) -> None:

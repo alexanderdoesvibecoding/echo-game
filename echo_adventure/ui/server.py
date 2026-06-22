@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
+import math
 import threading
 from dataclasses import replace
 from http import HTTPStatus
@@ -13,7 +15,7 @@ from urllib.parse import urlparse
 
 from ..config import GameConfig, resolve_seed
 from ..decisions import apply_choice, generate_decision_cards
-from ..enums import JobStatus, TargetType
+from ..enums import JobStatus, TargetType, WorkCenterStatus
 from ..metrics import calculate_snapshot, day_shift, update_state_metrics
 from ..models import DecisionCard, DecisionChoice, Event, MetricSnapshot, SimulationState
 from ..scenario_generator import generate_scenario
@@ -84,6 +86,7 @@ class GameSession:
                 "snapshot": _snapshot_payload(snapshot, self.config.shifts_per_day),
                 "overview": self._overview(snapshot),
                 "shops": self._shops_payload(),
+                "dailyCalendar": self._daily_calendar_payload(),
                 "pieces": self._pieces_payload(),
                 "workcenters": self._workcenters_payload(),
                 "criticalPath": self._critical_path_payload(),
@@ -160,7 +163,7 @@ class GameSession:
         self.current_cards = generate_decision_cards(self.player_state, self.player_state.current_day, self.config)
 
     def _game_over(self) -> bool:
-        """The run ends at final completion or the configured deadline."""
+        """The run ends at project completion or the configured deadline."""
         return self.player_state.final_item_completed or self.player_state.current_shift >= self.player_state.deadline_shift
 
     def _finish_automated(self) -> None:
@@ -293,6 +296,80 @@ class GameSession:
             grouped[shop.id] = rows
         return grouped
 
+    def _daily_calendar_payload(self) -> dict[str, Any]:
+        """Return a non-mutating preview of jobs scheduled across today's shifts."""
+        preview = copy.deepcopy(self.player_state)
+        update_state_metrics(preview)
+        known_events = [
+            event
+            for event in preview.event_timeline
+            if event.id in preview.known_warnings or event.id in preview.active_events
+        ]
+        ManualScheduler().plan_day(preview, known_events)
+
+        day = preview.current_day
+        day_start_shift = (day - 1) * self.config.shifts_per_day
+        shifts: list[dict[str, Any]] = [
+            {
+                "index": shift_index + 1,
+                "label": f"Shift {shift_index + 1}",
+                "dayLabel": day_shift(day_start_shift + shift_index + 1, self.config.shifts_per_day),
+                "jobs": [],
+            }
+            for shift_index in range(self.config.shifts_per_day)
+        ]
+        active_by_wc: dict[str, str | None] = {}
+        remaining_by_wc: dict[str, int] = {}
+        status_by_wc: dict[str, str] = {}
+        queues_by_wc = {wc.id: list(wc.queue) for wc in preview.workcenters.values()}
+
+        for wc in preview.workcenters.values():
+            if wc.current_job_id and wc.current_job_id in preview.jobs and wc.status == WorkCenterStatus.BUSY:
+                active_by_wc[wc.id] = wc.current_job_id
+                remaining_by_wc[wc.id] = max(1, preview.jobs[wc.current_job_id].remaining_duration_shifts)
+                status_by_wc[wc.id] = "Running"
+            else:
+                active_by_wc[wc.id] = None
+                remaining_by_wc[wc.id] = 0
+                status_by_wc[wc.id] = ""
+
+        for shift in shifts:
+            for shop in preview.shops.values():
+                for wc_id in shop.workcenter_ids:
+                    wc = preview.workcenters[wc_id]
+                    job_id = active_by_wc[wc.id]
+                    if job_id is None:
+                        if wc.status not in {WorkCenterStatus.AVAILABLE, WorkCenterStatus.IDLE}:
+                            continue
+                        job_id = _next_calendar_job(preview, wc, queues_by_wc[wc.id])
+                        if job_id is None:
+                            continue
+                        active_by_wc[wc.id] = job_id
+                        remaining_by_wc[wc.id] = _calendar_duration(preview.jobs[job_id], wc)
+                        status_by_wc[wc.id] = "Scheduled"
+
+                    job = preview.jobs[job_id]
+                    shift["jobs"].append(
+                        _calendar_job_payload(
+                            preview,
+                            job,
+                            wc,
+                            shop.name,
+                            status_by_wc[wc.id],
+                            remaining_by_wc[wc.id],
+                        )
+                    )
+                    remaining_by_wc[wc.id] = max(0, remaining_by_wc[wc.id] - 1)
+                    if remaining_by_wc[wc.id] == 0:
+                        active_by_wc[wc.id] = None
+                        status_by_wc[wc.id] = ""
+
+        return {
+            "day": day,
+            "label": f"Day {day}",
+            "shifts": shifts,
+        }
+
     def _critical_path_payload(self) -> list[dict[str, Any]]:
         """Return critical-path rows capped for a readable dashboard table."""
         rows = []
@@ -310,7 +387,7 @@ class GameSession:
                     "remaining": job.remaining_duration_shifts,
                     "slack": slack,
                     "block": job.block_reason or "-",
-                    "impact": "Final integration" if job.id == self.player_state.final_integration_job else job.piece_id,
+                    "impact": job.piece_id,
                     "risk": round(job.risk_score, 1),
                     "rework": job.rework_count > 0 or job.status == JobStatus.REWORK_REQUIRED,
                 }
@@ -594,6 +671,61 @@ def _choice_payload(choice: DecisionChoice) -> dict[str, Any]:
         "riskEffect": choice.risk_effect,
         "costEffect": choice.cost_effect,
         "rescheduleEffect": choice.reschedule_effect,
+    }
+
+
+def _next_calendar_job(state: SimulationState, wc, queue: list[str]) -> str | None:
+    """Pop the next queue job that could actually start on this workcenter."""
+    while queue:
+        job_id = queue.pop(0)
+        if job_id not in state.jobs:
+            continue
+        job = state.jobs[job_id]
+        if job.status in {JobStatus.COMPLETE, JobStatus.CANCELLED}:
+            continue
+        if job.block_reason or not state.is_dependency_complete(job_id):
+            continue
+        if job.required_capability not in wc.capabilities:
+            continue
+        return job_id
+    return None
+
+
+def _calendar_duration(job, wc) -> int:
+    """Estimate how many shifts a queued job will occupy on the chosen workcenter."""
+    if job.started_once:
+        return max(1, job.remaining_duration_shifts)
+    duration = max(1, math.ceil(job.planned_duration / max(0.2, wc.efficiency)))
+    if wc.id != job.candidate_workcenter_ids[0]:
+        duration += 1
+    return duration
+
+
+def _calendar_job_payload(
+    state: SimulationState,
+    job,
+    wc,
+    shop_name: str,
+    status: str,
+    remaining: int,
+) -> dict[str, Any]:
+    """Convert one scheduled job occurrence into a daily calendar card."""
+    piece = state.pieces.get(job.piece_id)
+    return {
+        "id": job.id,
+        "piece": job.piece_id,
+        "pieceName": piece.name if piece else "Project",
+        "shop": shop_name,
+        "workcenter": wc.id,
+        "workcenterName": wc.name,
+        "capability": job.required_capability.replace("_", " "),
+        "status": status,
+        "remaining": max(1, remaining),
+        "due": day_shift(job.due_shift, state.shifts_per_day),
+        "late": state.current_shift > job.due_shift,
+        "critical": job.critical_path,
+        "risk": round(job.risk_score, 1),
+        "rework": job.rework_count > 0 or job.status == JobStatus.REWORK_REQUIRED,
     }
 
 

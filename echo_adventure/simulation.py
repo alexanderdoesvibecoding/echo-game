@@ -40,7 +40,6 @@ def initialize_state(scenario: Scenario, shifts_per_day: int) -> SimulationState
         pieces=copy.deepcopy(scenario.pieces),
         jobs=copy.deepcopy(scenario.jobs),
         event_timeline=copy.deepcopy(scenario.event_timeline),
-        final_integration_job=scenario.final_integration_job,
     )
     update_state_metrics(state)
     return state
@@ -108,18 +107,12 @@ def complete_job(state: SimulationState, job_id: str) -> None:
         state.cost += 18 + (job.completed_shift - job.due_shift) * 3
     else:
         state.cost += max(1, 4 - (job.due_shift - job.completed_shift) * 0.02)
-    if job_id == state.final_integration_job:
-        state.final_item_completed = True
-        state.completion_shift = state.current_shift
-        state.daily_notes.append(f"Final integration completed at shift {state.current_shift}.")
-    else:
-        state.daily_notes.append(f"Completed {job_id}.")
+    state.daily_notes.append(f"Completed {job_id}.")
+    _complete_project_if_ready(state)
 
 
 def _maybe_require_completion_rework(state: SimulationState, job) -> bool:
     """Deterministically decide whether a finished job needs final rework."""
-    if job.id == state.final_integration_job:
-        return False
     if job.rework_count >= MAX_COMPLETION_REWORK_PER_JOB:
         return False
     # Use a seeded local RNG so the same scenario and shift history produce the
@@ -146,6 +139,20 @@ def _maybe_require_completion_rework(state: SimulationState, job) -> bool:
             wc.status = WorkCenterStatus.AVAILABLE
     state.daily_notes.append(f"Quality rework flagged on {job.id}; added {extra_shifts} shift(s).")
     return True
+
+
+def _complete_project_if_ready(state: SimulationState) -> None:
+    """Mark the run complete once every puzzle piece job is finished."""
+    if state.final_item_completed:
+        return
+    if not all(
+        all(state.jobs[job_id].status == JobStatus.COMPLETE for job_id in piece.job_ids)
+        for piece in state.pieces.values()
+    ):
+        return
+    state.final_item_completed = True
+    state.completion_shift = state.current_shift
+    state.daily_notes.append(f"All puzzle pieces completed at shift {state.current_shift}.")
 
 
 def _start_available_jobs(state: SimulationState) -> None:

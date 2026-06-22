@@ -168,6 +168,27 @@ INDEX_HTML = r"""<!doctype html>
       color: #f0f3f5;
     }
 
+    html[data-theme="dark"] .shift-lane,
+    html[data-theme="dark"] .calendar-job {
+      background: #252d38;
+      border-color: #3a4352;
+    }
+
+    html[data-theme="dark"] .shift-lane-head {
+      background: #1a202a;
+      border-color: #3a4352;
+    }
+
+    html[data-theme="dark"] .calendar-meta,
+    html[data-theme="dark"] .calendar-empty {
+      color: #a5b0b8;
+    }
+
+    html[data-theme="dark"] .calendar-empty {
+      background: #1a202a;
+      border-color: #3a4352;
+    }
+
     html[data-theme="dark"] .settings-panel {
       background: #1a202a;
       border-color: #3a4352;
@@ -421,6 +442,80 @@ INDEX_HTML = r"""<!doctype html>
     }
     tr:last-child td { border-bottom: none; }
     .table-wrap { max-height: 520px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+
+    .daily-calendar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .shift-lane {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcf9;
+    }
+    .shift-lane-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 10px;
+      padding: 10px 11px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+    }
+    .shift-jobs {
+      display: grid;
+      gap: 8px;
+      max-height: 520px;
+      overflow: auto;
+      padding: 10px;
+    }
+    .calendar-job {
+      min-width: 0;
+      padding: 9px;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--teal);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .calendar-job.warn { border-left-color: var(--amber); }
+    .calendar-job.danger { border-left-color: var(--red); }
+    .calendar-job.info { border-left-color: var(--teal); }
+    .calendar-job-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .calendar-tags {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+    .calendar-meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 4px 8px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .calendar-meta span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .calendar-empty {
+      padding: 14px;
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--muted);
+      text-align: center;
+      font-weight: 650;
+    }
 
     .badge {
       display: inline-flex;
@@ -677,12 +772,14 @@ INDEX_HTML = r"""<!doctype html>
         </div>
         <div class="tabbar">
           <button data-tab="shops" class="active">Shops<span class="info-icon" data-tooltip="Shows queue pressure, blocked work, workstation utilization, idle time, shop risk, and active disruptions by shop.">i</span></button>
+          <button data-tab="calendar">Daily Calendar<span class="info-icon" data-tooltip="Shows the jobs planned across today's three work shifts from current workcenter queues.">i</span></button>
           <button data-tab="pieces">Pieces<span class="info-icon" data-tooltip="Shows each puzzle piece's completion progress, blocked job count, critical-path exposure, last-job due date, and risk.">i</span></button>
           <button data-tab="workcenters">Workcenters<span class="info-icon" data-tooltip="Shows the selected shop's machines or stations, current job, queue depth, next job, capability, and downtime.">i</span></button>
           <button data-tab="critical">Critical Path<span class="info-icon" data-tooltip="Shows jobs most likely to control the final completion date, including slack, blockers, downstream impact, and risk.">i</span></button>
           <button data-tab="risks">Risk Register<span class="info-icon" data-tooltip="Shows active disruptions, warnings, and blocked jobs that need schedule response or mitigation.">i</span></button>
         </div>
         <div id="shops" class="view active"><div class="table-wrap"><table id="shopsTable"></table></div></div>
+        <div id="calendar" class="view"><div id="dailyCalendar" class="daily-calendar"></div></div>
         <div id="pieces" class="view"><div class="table-wrap"><table id="piecesTable"></table></div></div>
         <div id="workcenters" class="view">
           <div class="view-controls">
@@ -698,7 +795,7 @@ INDEX_HTML = r"""<!doctype html>
         <div class="section-head"><h2>End-of-Day Summary</h2></div>
         <div class="split">
           <div class="reveal-panel" id="summaryMetrics"></div>
-          <div class="reveal-panel"><h3>Notable Consequences</h3><ul class="notes" id="summaryNotes"></ul></div>
+          <div class="reveal-panel"><h3>Updates</h3><ul class="notes" id="summaryNotes"></ul></div>
         </div>
       </section>
 
@@ -723,7 +820,7 @@ INDEX_HTML = r"""<!doctype html>
       <h1 id="welcomeModalTitle">Welcome</h1>
       <div class="welcome-copy">
         <p>You are managing a manufacturing schedule under disruption. Each day, inspect the operating board, read the active risks, and choose how the yard should respond.</p>
-        <p>Your goal is to get every puzzle piece ready for final integration before <span id="welcomeDeadline">the deadline</span> while balancing cost, reschedules, workstation utilization, and schedule risk.</p>
+        <p>Your goal is to complete every puzzle piece before <span id="welcomeDeadline">the deadline</span> while balancing cost, reschedules, workstation utilization, and schedule risk.</p>
         <ul>
           <li>Review shops, workcenters, pieces, the critical path, and the risk register.</li>
           <li>Answer the daily decision cards to resequence, reroute, expedite, or protect critical work.</li>
@@ -1184,7 +1281,7 @@ INDEX_HTML = r"""<!doctype html>
           <tbody>
             <tr><td>Jobs completed today</td><td>${summary.completedToday}</td></tr>
             <tr><td>Jobs remaining</td><td>${summary.jobsRemaining}</td></tr>
-            <tr><td>Pieces ready</td><td>${summary.piecesCompleted}/${state.pieces.length}</td></tr>
+            <tr><td>Pieces complete</td><td>${summary.piecesCompleted}/${state.pieces.length}</td></tr>
             <tr><td>Jobs late</td><td>${summary.jobsLate}</td></tr>
             <tr><td>Cost</td><td>${fmtNum(summary.cost)}</td></tr>
             <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
@@ -1213,9 +1310,9 @@ INDEX_HTML = r"""<!doctype html>
         <table>
           <tbody>
             <tr><td>Deadline met</td><td>${p.deadlineMet ? "Yes" : "No"}</td><td>${a.deadlineMet ? "Yes" : "No"}</td></tr>
-            <tr><td>Final item completed</td><td>${p.finalItemCompleted ? "Yes" : "No"}</td><td>${a.finalItemCompleted ? "Yes" : "No"}</td></tr>
+            <tr><td>Project completed</td><td>${p.finalItemCompleted ? "Yes" : "No"}</td><td>${a.finalItemCompleted ? "Yes" : "No"}</td></tr>
             <tr><td>Completion</td><td>${p.completion || "Not complete"}</td><td>${a.completion || "Not complete"}</td></tr>
-            <tr><td>Pieces ready</td><td>${p.piecesCompleted}</td><td>${a.piecesCompleted}</td></tr>
+            <tr><td>Pieces complete</td><td>${p.piecesCompleted}</td><td>${a.piecesCompleted}</td></tr>
             <tr><td>Jobs completed</td><td>${p.jobsCompleted}</td><td>${a.jobsCompleted}</td></tr>
             <tr><td>Jobs late</td><td>${p.jobsLate}</td><td>${a.jobsLate}</td></tr>
             <tr><td>Workstation Utilization</td><td>${fmtPct(p.utilization)}</td><td>${fmtPct(a.utilization)}</td></tr>
@@ -1294,7 +1391,7 @@ INDEX_HTML = r"""<!doctype html>
     function renderMetrics() {
       const snap = state.snapshot;
       const metrics = [
-        ["Pieces Ready", `${snap.piecesCompleted}/${state.pieces.length}`, snap.piecesCompleted / state.pieces.length, "good", "How many puzzle pieces are complete and ready to assemble."],
+        ["Pieces Complete", `${snap.piecesCompleted}/${state.pieces.length}`, snap.piecesCompleted / state.pieces.length, "good", "How many puzzle pieces are complete."],
         ["Jobs Complete", fmtNum(snap.jobsCompleted), snap.jobsCompleted / Math.max(1, snap.jobsCompleted + snap.jobsRemaining), "good", "Total jobs finished out of all required work."],
         ["Jobs Late", fmtNum(snap.jobsLate), Math.min(1, snap.jobsLate / 20), snap.jobsLate > 0 ? "warn" : "good", "Number of jobs that have missed their target completion date."],
         ["Workstation Utilization", fmtPct(snap.utilization), snap.utilization, "info", "How busy your workstations are (0% = idle, 100% = fully busy)."],
@@ -1383,6 +1480,52 @@ INDEX_HTML = r"""<!doctype html>
         risk.source || "-",
         risk.response
       ]));
+
+      renderDailyCalendar();
+    }
+
+    function renderDailyCalendar() {
+      const target = $("dailyCalendar");
+      if (!target) return;
+      const calendar = state.dailyCalendar || { label: "Day", shifts: [] };
+      target.innerHTML = (calendar.shifts || []).map(shift => `
+        <div class="shift-lane">
+          <div class="shift-lane-head">
+            <div>
+              <h3>${escapeHtml(shift.dayLabel || shift.label)}</h3>
+              <div class="subtle">${escapeHtml(calendar.label || "")}</div>
+            </div>
+            <span class="badge info">${(shift.jobs || []).length} jobs</span>
+          </div>
+          <div class="shift-jobs">
+            ${(shift.jobs || []).length ? shift.jobs.map(renderCalendarJob).join("") : `<div class="calendar-empty">No scheduled jobs</div>`}
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderCalendarJob(job) {
+      const tone = job.late ? "danger" : job.critical ? "warn" : job.status === "Running" ? "info" : "";
+      const statusTone = job.late ? "danger" : job.status === "Running" ? "info" : "good";
+      return `
+        <article class="calendar-job ${tone}">
+          <div class="calendar-job-top">
+            <strong>${jobLabel(job.id, job.rework)}</strong>
+            <div class="calendar-tags">
+              ${badge(job.late ? "Late" : job.status, statusTone)}
+              ${job.critical ? badge("Critical", "warn") : ""}
+            </div>
+          </div>
+          <div class="calendar-meta">
+            <span>${escapeHtml(job.piece)}</span>
+            <span>${escapeHtml(job.shop)}</span>
+            <span>${escapeHtml(job.workcenter)}</span>
+            <span>${escapeHtml(job.capability)}</span>
+            <span>Remain ${escapeHtml(job.remaining)}</span>
+            <span>Due ${escapeHtml(job.due)}</span>
+          </div>
+        </article>
+      `;
     }
 
     function renderDecisions() {
@@ -1450,7 +1593,7 @@ INDEX_HTML = r"""<!doctype html>
           </div>
         `;
         footer.innerHTML = `
-          <button onclick="dismissDecisionModal()">Dismiss</button>
+          <button onclick="dismissDecisionModal()">Close</button>
           <button ${!pendingChoice ? "disabled" : ""} class="primary" onclick="submitDecision('${nextCard.id}')">Submit</button>
         `;
         return;
@@ -1463,7 +1606,7 @@ INDEX_HTML = r"""<!doctype html>
         </div>
       `;
       footer.innerHTML = `
-        <button onclick="dismissDecisionModal()">Dismiss</button>
+        <button onclick="dismissDecisionModal()">Close</button>
         <button class="primary" onclick="prepareAdvanceDay()">End Day</button>
       `;
     }
@@ -1478,7 +1621,7 @@ INDEX_HTML = r"""<!doctype html>
           <tbody>
             <tr><td>Jobs completed today</td><td>${summary.completedToday}</td></tr>
             <tr><td>Jobs remaining</td><td>${summary.jobsRemaining}</td></tr>
-            <tr><td>Pieces ready</td><td>${summary.piecesCompleted}/${state.pieces.length}</td></tr>
+            <tr><td>Pieces complete</td><td>${summary.piecesCompleted}/${state.pieces.length}</td></tr>
             <tr><td>Jobs late</td><td>${summary.jobsLate}</td></tr>
             <tr><td>Cost</td><td>${fmtNum(summary.cost)}</td></tr>
             <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
@@ -1497,9 +1640,9 @@ INDEX_HTML = r"""<!doctype html>
       const a = final.automated;
       table($("finalTable"), ["Metric", "Player", "ECHO"], [
         ["Deadline met", p.deadlineMet ? "Yes" : "No", a.deadlineMet ? "Yes" : "No"],
-        ["Final item completed", p.finalItemCompleted ? "Yes" : "No", a.finalItemCompleted ? "Yes" : "No"],
+        ["Project completed", p.finalItemCompleted ? "Yes" : "No", a.finalItemCompleted ? "Yes" : "No"],
         ["Completion", p.completion || "Not complete", a.completion || "Not complete"],
-        ["Pieces ready", p.piecesCompleted, a.piecesCompleted],
+        ["Pieces complete", p.piecesCompleted, a.piecesCompleted],
         ["Jobs completed", p.jobsCompleted, a.jobsCompleted],
         ["Jobs late", p.jobsLate, a.jobsLate],
         ["Workstation Utilization", fmtPct(p.utilization), fmtPct(a.utilization)],
@@ -1527,7 +1670,7 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function pieceStatusLabel(status) {
-      return status === "Ready for Integration" ? "Job Done" : status;
+      return status;
     }
 
     function jobLabel(value, hasRework) {
@@ -1645,7 +1788,7 @@ INDEX_HTML = r"""<!doctype html>
       <h1>Daily Summary</h1>
       <div class="modal-body" id="summaryModalBody"></div>
       <div>
-        <h3>Notable Consequences</h3>
+        <h3>Updates</h3>
         <ul class="notes" id="summaryModalNotes"></ul>
       </div>
       <div class="modal-footer">

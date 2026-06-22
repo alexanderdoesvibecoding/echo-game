@@ -43,8 +43,6 @@ class PieceStatus(str, Enum):
     BLOCKED = "Blocked"
     AT_RISK = "At Risk"
     COMPLETE = "Complete"
-    READY_FOR_INTEGRATION = "Ready for Integration"
-    INTEGRATED = "Integrated"
 
 
 class EventType(str, Enum):
@@ -95,5 +93,5 @@ class DecisionType(str, Enum):
     IDLE_WORKCENTER = "Workcenter idle despite available work"
     ALTERNATE_ROUTING = "Alternate routing opportunity"
     QUEUE_CONGESTION = "Queue congestion"
-    FINAL_INTEGRATION = "Final integration risk"
+    COMPLETION_READINESS = "Completion readiness risk"
     STRATEGIC_PRIORITY = "Strategic prioritization"

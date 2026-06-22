@@ -8,7 +8,7 @@ The player acts as a manual scheduler trying to finish a 15-piece project in 30 
 
 Each day, the player reviews the operating board and responds to daily decision cards.
 
-The goal is to complete all puzzle pieces and final integration before the deadline while balancing:
+The goal is to complete all puzzle pieces before the deadline while balancing:
 
 - Schedule risk
 - Late jobs
@@ -70,6 +70,7 @@ The browser dashboard has three main responsibilities:
 The Operating Board tabs are:
 
 - `Shops`: queue pressure, blocked work, utilization, idle time, shop risk, and active disruptions.
+- `Daily Calendar`: scheduled work for the current day, split across the three shifts.
 - `Pieces`: progress and risk for each puzzle piece, with drill-down into subjobs.
 - `Workcenters`: machines/stations for the selected shop. The shop selector appears only in this tab.
 - `Critical Path`: jobs most likely to drive final completion timing.
@@ -88,7 +89,6 @@ A scenario contains:
 - Puzzle pieces
 - Jobs
 - Job dependencies
-- Final integration job
 - Event timeline
 - Deadline
 
@@ -199,6 +199,7 @@ Returns the complete UI state payload:
 
 - Metrics snapshot
 - Shops
+- Daily calendar
 - Pieces and subjobs
 - Workcenters grouped by shop
 - Critical path rows

@@ -61,7 +61,6 @@ class PuzzlePiece:
     risk_score: float = 0.0
     estimated_completion_shift: int = 0
     ready_for_integration: bool = False
-    integrated: bool = False
 
     @property
     def percent_complete(self) -> float:
@@ -201,7 +200,6 @@ class Scenario:
     jobs: dict[str, Job]
     dependencies: dict[str, list[str]]
     event_timeline: list[Event]
-    final_integration_job: str
     deadline_shift: int
 
 
@@ -218,7 +216,6 @@ class SimulationState:
     pieces: dict[str, PuzzlePiece]
     jobs: dict[str, Job]
     event_timeline: list[Event]
-    final_integration_job: str
     current_shift: int = 0
     active_events: list[str] = field(default_factory=list)
     known_warnings: list[str] = field(default_factory=list)
@@ -267,8 +264,6 @@ class SimulationState:
                 continue
             if job.block_reason:
                 continue
-            if job.id == self.final_integration_job and not self.all_pieces_ready():
-                continue
             if self.is_dependency_complete(job.id):
                 ready.append(job)
         return ready
@@ -305,7 +300,7 @@ class SimulationState:
         )[:limit]
 
     def all_pieces_ready(self) -> bool:
-        """Return whether final integration is allowed to start."""
+        """Return whether every puzzle piece has completed its required jobs."""
         return all(piece.ready_for_integration for piece in self.pieces.values())
 
     def remove_job_from_queues(self, job_id: str) -> None:

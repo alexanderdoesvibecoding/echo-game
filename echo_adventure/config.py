@@ -10,12 +10,12 @@ import random
 class GameConfig:
     """Tunable game/scenario parameters shared by the UI and tests."""
 
-    total_days: int = 30
+    total_days: int = 15
     shifts_per_day: int = 3
     piece_count: int = 15
     shop_count: int = 10
     min_workcenters_per_shop: int = 1
-    max_workcenters_per_shop: int = 7
+    max_workcenters_per_shop: int = 5
     min_decisions_per_day: int = 1
     max_decisions_per_day: int = 5
     min_jobs_per_piece: int = 5
@@ -24,7 +24,6 @@ class GameConfig:
     max_job_duration_shifts: int = 4
     setup_time_choices: tuple[int, ...] = (0, 0, 1)
     transport_delay_probability: float = 0.65
-    final_integration_duration_shifts: int = 2
     min_base_events: int = 22
     max_base_events: int = 30
     min_extra_quality_rework_events: int = 5
@@ -46,12 +45,11 @@ class GameConfig:
             piece_count=5,
             min_decisions_per_day=1,
             max_decisions_per_day=2,
-            min_jobs_per_piece=1,
-            max_jobs_per_piece=2,
-            max_job_duration_shifts=1,
+            min_jobs_per_piece=3,
+            max_jobs_per_piece=5,
+            max_job_duration_shifts=5,
             setup_time_choices=(0,),
             transport_delay_probability=0.0,
-            final_integration_duration_shifts=1,
             min_base_events=0,
             max_base_events=0,
             min_extra_quality_rework_events=0,
