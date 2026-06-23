@@ -84,7 +84,7 @@ def generate_scenario(config: GameConfig) -> Scenario:
 def validate_scenario(scenario: Scenario, config: GameConfig) -> None:
     """Check generated objects for configured counts and dependency validity."""
     if len(scenario.pieces) != config.piece_count:
-        raise ValueError(f"Scenario must contain exactly {config.piece_count} puzzle pieces.")
+        raise ValueError(f"Scenario must contain exactly {config.piece_count} jobs.")
     if len(scenario.shops) != config.shop_count:
         raise ValueError(f"Scenario must contain exactly {config.shop_count} shops.")
     for shop in scenario.shops.values():
@@ -92,7 +92,7 @@ def validate_scenario(scenario: Scenario, config: GameConfig) -> None:
             raise ValueError(f"{shop.id} workcenter count outside configured range.")
     for piece in scenario.pieces.values():
         if not config.min_jobs_per_piece <= piece.total_job_count <= config.max_jobs_per_piece:
-            raise ValueError(f"{piece.id} job count outside configured range.")
+            raise ValueError(f"{piece.id} subjob count outside configured range.")
     for job in scenario.jobs.values():
         if not job.candidate_workcenter_ids:
             raise ValueError(f"{job.id} has no capable workcenter.")
@@ -168,7 +168,7 @@ def _generate_pieces_and_jobs(
     shops: dict[str, Shop],
     workcenters: dict[str, WorkCenter],
 ) -> tuple[dict[str, PuzzlePiece], dict[str, Job]]:
-    """Create puzzle pieces and their dependency-linked job chains."""
+    """Create top-level jobs and their dependency-linked subjob chains."""
     pieces: dict[str, PuzzlePiece] = {}
     jobs: dict[str, Job] = {}
     shop_ids = list(shops.keys())
@@ -184,7 +184,7 @@ def _generate_pieces_and_jobs(
         previous_job_ids: list[str] = []
         previous_shop_id: str | None = None
         for job_index in range(1, job_count + 1):
-            # Pieces usually cluster around a dominant shop, but occasional
+            # Top-level jobs usually cluster around a dominant shop, but occasional
             # cross-shop work creates transport delays and scheduling tradeoffs.
             shop_id = dominant_shop if rng.random() < 0.45 else rng.choice(piece_shops)
             shop = shops[shop_id]
@@ -239,7 +239,7 @@ def _generate_pieces_and_jobs(
             previous_shop_id = shop_id
         pieces[piece_id] = PuzzlePiece(
             id=piece_id,
-            name=f"Puzzle Piece {piece_index:02d} - {PIECE_NAMES[piece_index - 1]}",
+            name=f"Job {piece_index:02d} - {PIECE_NAMES[piece_index - 1]}",
             job_ids=piece_job_ids,
             total_job_count=len(piece_job_ids),
         )

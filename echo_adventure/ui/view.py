@@ -780,11 +780,11 @@ INDEX_HTML = r"""<!doctype html>
         </div>
         <div class="tabbar">
           <button data-tab="shops" class="active">Shops<span class="info-icon" data-tooltip="Shows queue pressure, blocked work, workstation utilization, idle time, shop risk, and active disruptions by shop.">i</span></button>
-          <button data-tab="calendar">Daily Calendar<span class="info-icon" data-tooltip="Shows the jobs planned across today's three work shifts from current workcenter queues.">i</span></button>
-          <button data-tab="pieces">Pieces<span class="info-icon" data-tooltip="Shows each puzzle piece's completion progress, blocked job count, critical-path exposure, last-job due date, and risk.">i</span></button>
-          <button data-tab="workcenters">Workcenters<span class="info-icon" data-tooltip="Shows the selected shop's machines or stations, current job, queue depth, next job, capability, and downtime.">i</span></button>
-          <button data-tab="critical">Critical Path<span class="info-icon" data-tooltip="Shows jobs most likely to control the final completion date, including slack, blockers, downstream impact, and risk.">i</span></button>
-          <button data-tab="risks">Risk Register<span class="info-icon" data-tooltip="Shows active disruptions, warnings, and blocked jobs that need schedule response or mitigation.">i</span></button>
+          <button data-tab="calendar">Daily Calendar<span class="info-icon" data-tooltip="Shows the subjobs planned across today's three work shifts from current workcenter queues.">i</span></button>
+          <button data-tab="pieces">Jobs<span class="info-icon" data-tooltip="Shows each job's completion progress, blocked subjob count, critical-path exposure, final subjob due date, and risk.">i</span></button>
+          <button data-tab="workcenters">Workcenters<span class="info-icon" data-tooltip="Shows the selected shop's machines or stations, current subjob, queue depth, next subjob, capability, and downtime.">i</span></button>
+          <button data-tab="critical">Critical Path<span class="info-icon" data-tooltip="Shows subjobs most likely to control the final completion date, including slack, blockers, downstream impact, and risk.">i</span></button>
+          <button data-tab="risks">Risk Register<span class="info-icon" data-tooltip="Shows active disruptions, warnings, and blocked subjobs that need schedule response or mitigation.">i</span></button>
         </div>
         <div id="shops" class="view active"><div class="table-wrap"><table id="shopsTable"></table></div></div>
         <div id="calendar" class="view"><div id="dailyCalendar" class="daily-calendar"></div></div>
@@ -828,9 +828,9 @@ INDEX_HTML = r"""<!doctype html>
       <h1 id="welcomeModalTitle">Welcome</h1>
       <div class="welcome-copy">
         <p>You are managing a manufacturing schedule under disruption. Each day, inspect the operating board, read the active risks, and choose how the yard should respond.</p>
-        <p>Your goal is to complete every puzzle piece before <span id="welcomeDeadline">the deadline</span> while balancing cost, reschedules, workstation utilization, and schedule risk.</p>
+        <p>Your goal is to complete every job before <span id="welcomeDeadline">the deadline</span> while balancing cost, reschedules, workstation utilization, and schedule risk.</p>
         <ul>
-          <li>Review shops, workcenters, pieces, the critical path, and the risk register.</li>
+          <li>Review shops, workcenters, jobs, the critical path, and the risk register.</li>
           <li>Answer the daily decision cards to resequence, reroute, expedite, or protect critical work.</li>
           <li>End the day to see the consequences of your choices and move the schedule forward.</li>
         </ul>
@@ -888,15 +888,15 @@ INDEX_HTML = r"""<!doctype html>
               <input id="runDaysInput" type="number" min="1" max="90">
             </label>
             <label>
-              Pieces
+              Jobs
               <input id="runPiecesInput" type="number" min="1" max="30">
             </label>
             <label>
-              Min Jobs per Piece
+              Min Subjobs per Job
               <input id="runMinJobsInput" type="number" min="1" max="20">
             </label>
             <label>
-              Max Jobs per Piece
+              Max Subjobs per Job
               <input id="runMaxJobsInput" type="number" min="1" max="20">
             </label>
           </div>
@@ -921,9 +921,9 @@ INDEX_HTML = r"""<!doctype html>
     let settingsEdited = false;
     let finalModalDismissed = false;
     let dismissedDecisionKey = null;
-    const welcomeStorageKey = "echoAdventureWelcomeSeen";
+    let suppressNextDecisionPrompt = false;
     const runPresets = {
-      normal: { totalDays: 30, pieceCount: 15, minJobsPerPiece: 5, maxJobsPerPiece: 10 },
+      normal: { totalDays: 15, pieceCount: 15, minJobsPerPiece: 5, maxJobsPerPiece: 10 },
       demo: { totalDays: 5, pieceCount: 5, minJobsPerPiece: 1, maxJobsPerPiece: 2 }
     };
 
@@ -982,7 +982,7 @@ INDEX_HTML = r"""<!doctype html>
         const minJobs = Number($("runMinJobsInput").value);
         const maxJobs = Number($("runMaxJobsInput").value);
         if (minJobs > maxJobs) {
-          showNewRunError("Minimum jobs per piece cannot be greater than maximum jobs per piece.");
+          showNewRunError("Minimum subjobs per job cannot be greater than maximum subjobs per job.");
           return;
         }
         const seed = $("runSeedInput").value.trim();
@@ -1003,6 +1003,7 @@ INDEX_HTML = r"""<!doctype html>
         pendingChoice = null;
         dismissedDecisionKey = null;
         decisionModalVisible = false;
+        welcomeModalVisible = true;
         newRunModalVisible = false;
         finalModalDismissed = false;
         showNewRunError("");
@@ -1072,6 +1073,7 @@ INDEX_HTML = r"""<!doctype html>
       state = pendingAdvanceState;
       pendingAdvanceState = null;
       modalVisible = false;
+      suppressNextDecisionPrompt = true;
       render();
     }
 
@@ -1105,7 +1107,7 @@ INDEX_HTML = r"""<!doctype html>
 
     function render() {
       if (!state) return;
-      $("dayBadge").textContent = state.shiftLabel;
+      $("dayBadge").textContent = `Day ${state.day}`;
       $("welcomeDeadline").textContent = state.deadlineLabel;
       $("projectedText").textContent = `Projected completion: ${state.overview.projectedCompletion}`;
 
@@ -1150,6 +1152,16 @@ INDEX_HTML = r"""<!doctype html>
         return;
       }
       const hasOpenDecision = state.decisions.some(card => !card.selectedChoice);
+      if (!hasOpenDecision) {
+        suppressNextDecisionPrompt = false;
+        return;
+      }
+      if (hasOpenDecision && suppressNextDecisionPrompt) {
+        dismissedDecisionKey = decisionPromptKey();
+        suppressNextDecisionPrompt = false;
+        decisionModalVisible = false;
+        return;
+      }
       if (hasOpenDecision && dismissedDecisionKey !== decisionPromptKey()) {
         decisionModalVisible = true;
       }
@@ -1181,7 +1193,7 @@ INDEX_HTML = r"""<!doctype html>
 
     function closeWelcomeModal() {
       welcomeModalVisible = false;
-      localStorage.setItem(welcomeStorageKey, "true");
+      suppressNextDecisionPrompt = true;
       renderWelcomeModal();
       maybeAutoOpenDecisionModal();
       renderDecisionModal();
@@ -1294,10 +1306,10 @@ INDEX_HTML = r"""<!doctype html>
       body.innerHTML = `
         <table>
           <tbody>
-            <tr><td>Jobs completed today</td><td>${summary.completedToday}</td></tr>
-            <tr><td>Jobs remaining</td><td>${summary.jobsRemaining}</td></tr>
-            <tr><td>Pieces complete</td><td>${summary.piecesCompleted}/${state.pieces.length}</td></tr>
-            <tr><td>Jobs late</td><td>${summary.jobsLate}</td></tr>
+            <tr><td>Subjobs completed today</td><td>${summary.completedToday}</td></tr>
+            <tr><td>Subjobs remaining</td><td>${summary.jobsRemaining}</td></tr>
+            <tr><td>Jobs complete</td><td>${summary.piecesCompleted}/${state.pieces.length}</td></tr>
+            <tr><td>Subjobs late</td><td>${summary.jobsLate}</td></tr>
             <tr><td>Cost</td><td>${fmtNum(summary.cost)}</td></tr>
             <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
             <tr><td>Projected completion</td><td>${summary.projectedCompletion}</td></tr>
@@ -1327,9 +1339,9 @@ INDEX_HTML = r"""<!doctype html>
             <tr><td>Deadline met</td><td>${p.deadlineMet ? "Yes" : "No"}</td><td>${a.deadlineMet ? "Yes" : "No"}</td></tr>
             <tr><td>Project completed</td><td>${p.finalItemCompleted ? "Yes" : "No"}</td><td>${a.finalItemCompleted ? "Yes" : "No"}</td></tr>
             <tr><td>Completion</td><td>${p.completion || "Not complete"}</td><td>${a.completion || "Not complete"}</td></tr>
-            <tr><td>Pieces complete</td><td>${p.piecesCompleted}</td><td>${a.piecesCompleted}</td></tr>
-            <tr><td>Jobs completed</td><td>${p.jobsCompleted}</td><td>${a.jobsCompleted}</td></tr>
-            <tr><td>Jobs late</td><td>${p.jobsLate}</td><td>${a.jobsLate}</td></tr>
+            <tr><td>Jobs complete</td><td>${p.piecesCompleted}</td><td>${a.piecesCompleted}</td></tr>
+            <tr><td>Subjobs completed</td><td>${p.jobsCompleted}</td><td>${a.jobsCompleted}</td></tr>
+            <tr><td>Subjobs late</td><td>${p.jobsLate}</td><td>${a.jobsLate}</td></tr>
             <tr><td>Workstation Utilization</td><td>${fmtPct(p.utilization)}</td><td>${fmtPct(a.utilization)}</td></tr>
             <tr><td>Idle time</td><td>${p.idleTime}</td><td>${a.idleTime}</td></tr>
             <tr><td>Reschedules</td><td>${p.reschedules}</td><td>${a.reschedules}</td></tr>
@@ -1357,14 +1369,14 @@ INDEX_HTML = r"""<!doctype html>
       body.innerHTML = `
         <div style="margin-bottom: 16px;">
           <h3>${escapeHtml(piece.name)}</h3>
-          <p class="subtle">${escapeHtml(piece.id)}</p>
+          <p class="subtle">${escapeHtml(piece.displayId || piece.id)}</p>
           <table>
             <tbody>
               <tr><td>Status</td><td>${escapeHtml(pieceStatusLabel(piece.status))}</td></tr>
               <tr><td>Progress</td><td>${fmtPct(piece.progress)}</td></tr>
-              <tr><td>Jobs complete</td><td>${piece.completed}/${piece.total}</td></tr>
-              <tr><td>Jobs blocked</td><td>${blockedCount}</td></tr>
-              <tr><td>Critical jobs</td><td>${criticalCount}</td></tr>
+              <tr><td>Subjobs complete</td><td>${piece.completed}/${piece.total}</td></tr>
+              <tr><td>Subjobs blocked</td><td>${blockedCount}</td></tr>
+              <tr><td>Critical subjobs</td><td>${criticalCount}</td></tr>
               <tr><td>Due date</td><td>${escapeHtml(piece.dueDate)}</td></tr>
               <tr><td>Risk</td><td>${Math.round(piece.risk)}</td></tr>
             </tbody>
@@ -1374,7 +1386,7 @@ INDEX_HTML = r"""<!doctype html>
         <table>
           <thead>
             <tr>
-              <th>Job</th>
+              <th>Subjob</th>
               <th>Status</th>
               <th>Shop</th>
               <th>Workcenter</th>
@@ -1406,9 +1418,9 @@ INDEX_HTML = r"""<!doctype html>
     function renderMetrics() {
       const snap = state.snapshot;
       const metrics = [
-        ["Pieces Complete", `${snap.piecesCompleted}/${state.pieces.length}`, snap.piecesCompleted / state.pieces.length, "good", "How many puzzle pieces are complete."],
-        ["Jobs Complete", fmtNum(snap.jobsCompleted), snap.jobsCompleted / Math.max(1, snap.jobsCompleted + snap.jobsRemaining), "good", "Total jobs finished out of all required work."],
-        ["Jobs Late", fmtNum(snap.jobsLate), Math.min(1, snap.jobsLate / 20), snap.jobsLate > 0 ? "warn" : "good", "Number of jobs that have missed their target completion date."],
+        ["Jobs Complete", `${snap.piecesCompleted}/${state.pieces.length}`, snap.piecesCompleted / state.pieces.length, "good", "How many top-level jobs are complete."],
+        ["Subjobs Complete", fmtNum(snap.jobsCompleted), snap.jobsCompleted / Math.max(1, snap.jobsCompleted + snap.jobsRemaining), "good", "Total subjobs finished out of all required work."],
+        ["Subjobs Late", fmtNum(snap.jobsLate), Math.min(1, snap.jobsLate / 20), snap.jobsLate > 0 ? "warn" : "good", "Number of subjobs that have missed their target completion date."],
         ["Workstation Utilization", fmtPct(snap.utilization), snap.utilization, "info", "How busy your workstations are (0% = idle, 100% = fully busy)."],
         ["Cost", fmtNum(snap.cost), Math.min(1, snap.cost / 28000), "warn", "Total additional costs from rescheduling, expediting, and resolving issues."],
         ["Schedule Risk", `${Math.round(snap.scheduleRisk)}/100`, snap.scheduleRisk / 100, snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good", "Overall probability of missing the deadline (0 = safe, 100 = critical)."]
@@ -1434,7 +1446,7 @@ INDEX_HTML = r"""<!doctype html>
     function renderTables() {
       // Tables are rebuilt from the latest state payload. This is simple and
       // adequate for the small local dashboard; no client-side cache is needed.
-      table($("shopsTable"), ["Shop", "Active", "Queued", "Blocked", "Complete", "Util.", "Idle", "Risk", "Risk Piece", "Event"], state.shops.map(shop => [
+      table($("shopsTable"), ["Shop", "Active", "Queued", "Blocked", "Complete", "Util.", "Idle", "Risk", "Risk Job", "Event"], state.shops.map(shop => [
         shop.name,
         shop.active,
         shop.queued,
@@ -1447,12 +1459,12 @@ INDEX_HTML = r"""<!doctype html>
         shop.event || "-"
       ]));
 
-      table($("piecesTable"), ["Piece", "Status", "Progress", "Jobs", "Blocked", "Critical", "Due Date", "Risk"], state.pieces.sort((a, b) => {
+      table($("piecesTable"), ["Job", "Status", "Progress", "Subjobs", "Blocked", "Critical", "Due Date", "Risk"], state.pieces.sort((a, b) => {
         const numA = parseInt(a.id.replace(/\D/g, '')) || 0;
         const numB = parseInt(b.id.replace(/\D/g, '')) || 0;
         return numA - numB;
       }).map(piece => [
-        `<button class="link-button" onclick="openPieceModal('${piece.id}')">${escapeHtml(piece.id)}</button>`,
+        `<button class="link-button" onclick="openPieceModal('${piece.id}')">${escapeHtml(piece.displayId || piece.id)}</button>`,
         badge(pieceStatusLabel(piece.status), pieceStatusTone(piece.status)),
         progressCell(piece.progress, piece.status),
         `${piece.completed}/${piece.total}`,
@@ -1474,7 +1486,7 @@ INDEX_HTML = r"""<!doctype html>
         wc.down
       ]));
 
-      table($("criticalTable"), ["Job", "Shop", "WC", "Remain", "Slack", "Block", "Impact", "Risk"], state.criticalPath.map(job => [
+      table($("criticalTable"), ["Subjob", "Shop", "WC", "Remain", "Slack", "Block", "Impact", "Risk"], state.criticalPath.map(job => [
         jobLabel(job.id, job.rework),
         job.shop,
         job.workcenter,
@@ -1510,10 +1522,10 @@ INDEX_HTML = r"""<!doctype html>
               <h3>${escapeHtml(shift.dayLabel || shift.label)}</h3>
               <div class="subtle">${escapeHtml(calendar.label || "")}</div>
             </div>
-            <span class="badge info">${(shift.jobs || []).length} jobs</span>
+            <span class="badge info">${(shift.jobs || []).length} subjobs</span>
           </div>
           <div class="shift-jobs">
-            ${(shift.jobs || []).length ? shift.jobs.map(renderCalendarJob).join("") : `<div class="calendar-empty">No scheduled jobs</div>`}
+            ${(shift.jobs || []).length ? shift.jobs.map(renderCalendarJob).join("") : `<div class="calendar-empty">No scheduled subjobs</div>`}
           </div>
         </div>
       `).join("");
@@ -1634,10 +1646,10 @@ INDEX_HTML = r"""<!doctype html>
         <h3>Day Result</h3>
         <table>
           <tbody>
-            <tr><td>Jobs completed today</td><td>${summary.completedToday}</td></tr>
-            <tr><td>Jobs remaining</td><td>${summary.jobsRemaining}</td></tr>
-            <tr><td>Pieces complete</td><td>${summary.piecesCompleted}/${state.pieces.length}</td></tr>
-            <tr><td>Jobs late</td><td>${summary.jobsLate}</td></tr>
+            <tr><td>Subjobs completed today</td><td>${summary.completedToday}</td></tr>
+            <tr><td>Subjobs remaining</td><td>${summary.jobsRemaining}</td></tr>
+            <tr><td>Jobs complete</td><td>${summary.piecesCompleted}/${state.pieces.length}</td></tr>
+            <tr><td>Subjobs late</td><td>${summary.jobsLate}</td></tr>
             <tr><td>Cost</td><td>${fmtNum(summary.cost)}</td></tr>
             <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
             <tr><td>Projected completion</td><td>${summary.projectedCompletion}</td></tr>
@@ -1657,9 +1669,9 @@ INDEX_HTML = r"""<!doctype html>
         ["Deadline met", p.deadlineMet ? "Yes" : "No", a.deadlineMet ? "Yes" : "No"],
         ["Project completed", p.finalItemCompleted ? "Yes" : "No", a.finalItemCompleted ? "Yes" : "No"],
         ["Completion", p.completion || "Not complete", a.completion || "Not complete"],
-        ["Pieces complete", p.piecesCompleted, a.piecesCompleted],
-        ["Jobs completed", p.jobsCompleted, a.jobsCompleted],
-        ["Jobs late", p.jobsLate, a.jobsLate],
+        ["Jobs complete", p.piecesCompleted, a.piecesCompleted],
+        ["Subjobs completed", p.jobsCompleted, a.jobsCompleted],
+        ["Subjobs late", p.jobsLate, a.jobsLate],
         ["Workstation Utilization", fmtPct(p.utilization), fmtPct(a.utilization)],
         ["Idle time", p.idleTime, a.idleTime],
         ["Reschedules", p.reschedules, a.reschedules],
@@ -1800,7 +1812,7 @@ INDEX_HTML = r"""<!doctype html>
     $("themeMenuBtn").addEventListener("click", toggleDarkMode);
 
     initDarkMode();
-    welcomeModalVisible = localStorage.getItem(welcomeStorageKey) !== "true";
+    welcomeModalVisible = true;
     renderWelcomeModal();
     loadState();
   </script>

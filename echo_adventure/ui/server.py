@@ -219,10 +219,10 @@ class GameSession:
         ]
 
     def _pieces_payload(self) -> list[dict[str, Any]]:
-        """Return piece rows plus nested job rows for piece drill-down modals."""
+        """Return top-level job rows plus nested subjob rows for drill-down modals."""
         pieces = []
-        # Highest-risk pieces are listed first in the payload; the browser later
-        # sorts by piece id for the default table, but risk ordering is still
+        # Highest-risk jobs are listed first in the payload; the browser later
+        # sorts by internal id for the default table, but risk ordering is still
         # useful to callers and future views.
         for piece in sorted(self.player_state.pieces.values(), key=lambda item: (-item.risk_score, item.id)):
             blocked = sum(1 for job_id in piece.job_ids if self.player_state.jobs[job_id].is_blocked)
@@ -232,7 +232,7 @@ class GameSession:
             for job_id in piece.job_ids:
                 job = self.player_state.jobs[job_id]
                 # Resolve display names here so the frontend does not need to
-                # join jobs back to shops/workcenters.
+                # join subjobs back to shops/workcenters.
                 wc = self.player_state.workcenters.get(job.assigned_workcenter_id) if job.assigned_workcenter_id else None
                 shop = self.player_state.shops.get(job.shop_id)
                 piece_jobs.append(
@@ -254,6 +254,7 @@ class GameSession:
             pieces.append(
                 {
                     "id": piece.id,
+                    "displayId": _piece_display_id(piece.id),
                     "name": piece.name,
                     "status": piece.status.value,
                     "completed": piece.completed_job_count,
@@ -278,8 +279,8 @@ class GameSession:
                 current = wc.current_job_id
                 current_job = self.player_state.jobs.get(current) if current else None
                 next_job = self.player_state.jobs.get(wc.queue[0]) if wc.queue else None
-                # Rework flags are calculated for current/next jobs separately
-                # so the UI can add a compact red marker next to job ids.
+                # Rework flags are calculated for current/next subjobs separately
+                # so the UI can add a compact red marker next to subjob ids.
                 rows.append(
                     {
                         "id": wc.id,
@@ -394,7 +395,7 @@ class GameSession:
                     "remaining": job.remaining_duration_shifts,
                     "slack": slack,
                     "block": job.block_reason or "-",
-                    "impact": job.piece_id,
+                    "impact": _piece_display_id(job.piece_id),
                     "risk": round(job.risk_score, 1),
                     "rework": job.rework_count > 0 or job.status == JobStatus.REWORK_REQUIRED,
                 }
@@ -402,7 +403,7 @@ class GameSession:
         return rows
 
     def _risk_payload(self) -> list[dict[str, Any]]:
-        """Return active warnings/disruptions plus blocked jobs for risk review."""
+        """Return active warnings/disruptions plus blocked subjobs for risk review."""
         rows = []
         for event in self.player_state.event_timeline:
             if event.id not in self.player_state.active_events and event.id not in self.player_state.known_warnings:
@@ -428,14 +429,14 @@ class GameSession:
                 }
             )
         for job in self.player_state.get_blocked_jobs()[:12]:
-            # Blocked jobs are shown alongside events because they require the
+            # Blocked subjobs are shown alongside events because they require the
             # same scheduling attention even when they are not event objects.
             rows.append(
                 {
                     "status": "Blocked",
                     "id": job.id,
-                    "type": "Job block",
-                    "affected": job.piece_id,
+                    "type": "Subjob block",
+                    "affected": _piece_display_id(job.piece_id),
                     "severity": round(job.risk_score, 1),
                     "shifts": "-",
                     "response": "mitigation recommended",
@@ -475,7 +476,7 @@ class GameSession:
                 "ECHO continuously reprioritized critical-path work instead of waiting for daily manual decisions.",
                 "It used alternate capable workcenters when queue pressure or downtime threatened slack.",
                 "It reacted to warnings by pulling forward unaffected work and reducing bottleneck idle time.",
-                "It avoided unnecessary preemption while still resequencing around blocked jobs quickly.",
+                "It avoided unnecessary preemption while still resequencing around blocked subjobs quickly.",
                 "Those behaviors reduced cascading delay, cost pressure, and end-of-run schedule risk.",
             ],
         }
@@ -643,7 +644,7 @@ def _apply_config_settings(config: GameConfig, settings: dict[str, Any]) -> Game
     min_jobs = values.get("min_jobs_per_piece", config.min_jobs_per_piece)
     max_jobs = values.get("max_jobs_per_piece", config.max_jobs_per_piece)
     if min_jobs > max_jobs:
-        raise ValueError("Minimum jobs per piece cannot be greater than maximum jobs per piece.")
+                raise ValueError("Minimum subjobs per job cannot be greater than maximum subjobs per job.")
     return replace(config, **values)
 
 
@@ -717,11 +718,11 @@ def _calendar_job_payload(
     status: str,
     remaining: int,
 ) -> dict[str, Any]:
-    """Convert one scheduled job occurrence into a daily calendar card."""
+    """Convert one scheduled subjob occurrence into a daily calendar card."""
     piece = state.pieces.get(job.piece_id)
     return {
         "id": job.id,
-        "piece": job.piece_id,
+        "piece": _piece_display_id(job.piece_id),
         "pieceName": piece.name if piece else "Project",
         "shop": shop_name,
         "workcenter": wc.id,
@@ -738,7 +739,7 @@ def _calendar_job_payload(
 
 
 def _highest_risk_piece(state: SimulationState, shop_id: str) -> str:
-    """Return a compact highest-risk piece label for one shop row."""
+    """Return a compact highest-risk job label for one shop row."""
     piece_scores: dict[str, float] = {}
     for job in state.jobs.values():
         if job.shop_id == shop_id and job.piece_id in state.pieces and not job.is_complete:
@@ -746,7 +747,13 @@ def _highest_risk_piece(state: SimulationState, shop_id: str) -> str:
     if not piece_scores:
         return "-"
     piece_id = max(piece_scores, key=piece_scores.get)
-    return f"{piece_id} ({piece_scores[piece_id]:.0f})"
+    return f"{_piece_display_id(piece_id)} ({piece_scores[piece_id]:.0f})"
+
+
+def _piece_display_id(piece_id: str) -> str:
+    """Convert an internal piece id into the player-facing top-level job label."""
+    suffix = piece_id.split("-")[-1] if piece_id else ""
+    return f"Job {suffix}" if suffix else "Job"
 
 
 def _shop_event_label(state: SimulationState, shop_id: str) -> str:
@@ -785,7 +792,7 @@ def _response_category(event_type: str) -> str:
     if "machine" in lower or "workcenter" in lower or "tooling" in lower:
         return "reroute or protect critical path"
     if "crew" in lower:
-        return "split capacity or protect critical jobs"
+        return "split capacity or protect critical subjobs"
     if "rework" in lower:
         return "contain quality impact"
     if "inspection" in lower or "engineering" in lower or "certification" in lower:

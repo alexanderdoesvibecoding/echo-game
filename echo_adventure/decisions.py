@@ -135,7 +135,7 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
         DecisionChoice(
             id="1",
             label="Resequence ready work",
-            description="Move ready jobs around the affected path while preserving current work in progress.",
+            description="Move ready subjobs around the affected path while preserving current work in progress.",
             immediate_effects={"type": "resequence", "event_id": event.id},
             risk_effect=-5,
             cost_effect=4,
@@ -174,7 +174,7 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
             DecisionChoice(
                 id="4",
                 label="Reroute affected work",
-                description="Move the highest-risk affected job to an alternate capable workcenter if one is open.",
+                description="Move the highest-risk affected subjob to an alternate capable workcenter if one is open.",
                 immediate_effects={"type": "reroute", "event_id": event.id},
                 risk_effect=-6,
                 cost_effect=18,
@@ -214,7 +214,7 @@ def _bottleneck_card(state: SimulationState, shop: Shop, ordinal: int, day: int)
         day=day,
         type=DecisionType.BOTTLENECK,
         title=f"Bottleneck pressure in {shop.name}",
-        description=f"{queued} queued jobs and {blocked} blocked jobs are concentrating risk in this shop.",
+        description=f"{queued} queued subjobs and {blocked} blocked subjobs are concentrating risk in this shop.",
         target_ids=[shop.id],
         severity=min(5, 1 + queued // 4 + blocked // 2),
         choices=[
@@ -229,8 +229,8 @@ def _bottleneck_card(state: SimulationState, shop: Shop, ordinal: int, day: int)
             ),
             DecisionChoice(
                 id="2",
-                label="Protect critical jobs",
-                description="Move critical-path jobs to the front and let lower-risk work wait.",
+                label="Protect critical subjobs",
+                description="Move critical-path subjobs to the front and let lower-risk work wait.",
                 immediate_effects={"type": "protect_critical"},
                 risk_effect=-8,
                 cost_effect=10,
@@ -239,7 +239,7 @@ def _bottleneck_card(state: SimulationState, shop: Shop, ordinal: int, day: int)
             DecisionChoice(
                 id="3",
                 label="Defer low-risk work",
-                description="Reduce congestion by lowering priority on jobs with more slack.",
+                description="Reduce congestion by lowering priority on subjobs with more slack.",
                 immediate_effects={"type": "defer"},
                 risk_effect=-3,
                 cost_effect=4,
@@ -250,7 +250,7 @@ def _bottleneck_card(state: SimulationState, shop: Shop, ordinal: int, day: int)
 
 
 def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int) -> DecisionCard:
-    """Build a card for a job that threatens final completion timing."""
+    """Build a card for a subjob that threatens final completion timing."""
     piece = state.pieces.get(job.piece_id)
     piece_name = piece.name if piece else "Project work"
     return DecisionCard(
@@ -273,7 +273,7 @@ def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int
             ),
             DecisionChoice(
                 id="2",
-                label="Reroute job",
+                label="Reroute subjob",
                 description="Use an alternate capable workcenter even if setup cost rises.",
                 immediate_effects={"type": "reroute"},
                 risk_effect=-6,
@@ -303,7 +303,7 @@ def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int
 
 
 def _alternate_card(state: SimulationState, job: Job, ordinal: int, day: int) -> DecisionCard:
-    """Build a card when a risky job has viable alternate routing."""
+    """Build a card when a risky subjob has viable alternate routing."""
     return DecisionCard(
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
@@ -315,8 +315,8 @@ def _alternate_card(state: SimulationState, job: Job, ordinal: int, day: int) ->
         choices=[
             DecisionChoice(
                 id="1",
-                label="Reroute job",
-                description="Move the job to the best open alternate workcenter.",
+                label="Reroute subjob",
+                description="Move the subjob to the best open alternate workcenter.",
                 immediate_effects={"type": "reroute"},
                 risk_effect=-6,
                 cost_effect=18,
@@ -334,7 +334,7 @@ def _alternate_card(state: SimulationState, job: Job, ordinal: int, day: int) ->
             DecisionChoice(
                 id="3",
                 label="Pull forward peers",
-                description="Use the alternate capacity for other ready jobs in the same capability family.",
+                description="Use the alternate capacity for other ready subjobs in the same capability family.",
                 immediate_effects={"type": "pull_forward"},
                 risk_effect=-4,
                 cost_effect=8,
@@ -353,14 +353,14 @@ def _idle_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
         day=day,
         type=DecisionType.IDLE_WORKCENTER,
         title="Idle capacity while work is ready",
-        description=f"{idle_count} workcenters are open while {ready_count} jobs are ready or nearly ready.",
+        description=f"{idle_count} workcenters are open while {ready_count} subjobs are ready or nearly ready.",
         target_ids=[],
         severity=3,
         choices=[
             DecisionChoice(
                 id="1",
                 label="Pull forward ready work",
-                description="Release additional ready jobs into available queues.",
+                description="Release additional ready subjobs into available queues.",
                 immediate_effects={"type": "pull_forward"},
                 risk_effect=-4,
                 cost_effect=6,
@@ -368,7 +368,7 @@ def _idle_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
             ),
             DecisionChoice(
                 id="2",
-                label="Protect critical jobs",
+                label="Protect critical subjobs",
                 description="Use idle capacity only where it helps critical dependencies.",
                 immediate_effects={"type": "protect_critical"},
                 risk_effect=-6,
@@ -389,7 +389,7 @@ def _idle_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
 
 
 def _completion_readiness_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
-    """Build a card for late-stage readiness of remaining puzzle pieces."""
+    """Build a card for late-stage readiness of remaining top-level jobs."""
     complete_pieces = sum(1 for piece in state.pieces.values() if piece.completed)
     total_pieces = len(state.pieces)
     late_stage_day = max(1, int((state.deadline_shift / state.shifts_per_day) * 0.67))
@@ -403,14 +403,14 @@ def _completion_readiness_card(state: SimulationState, ordinal: int, day: int) -
         day=day,
         type=DecisionType.COMPLETION_READINESS,
         title="Project completion readiness",
-        description=f"{complete_pieces}/{total_pieces} puzzle pieces are complete; late dependencies can still push the project past deadline.",
+        description=f"{complete_pieces}/{total_pieces} jobs are complete; late dependencies can still push the project past deadline.",
         target_ids=target_ids,
         severity=4 if day >= late_stage_day else 3,
         choices=[
             DecisionChoice(
                 id="1",
                 label="Protect remaining dependencies",
-                description="Raise priority on jobs that unlock the most remaining pieces.",
+                description="Raise priority on subjobs that unlock the most remaining jobs.",
                 immediate_effects={"type": "protect_critical"},
                 risk_effect=-7,
                 cost_effect=12,
@@ -418,8 +418,8 @@ def _completion_readiness_card(state: SimulationState, ordinal: int, day: int) -
             ),
             DecisionChoice(
                 id="2",
-                label="Expedite near-complete pieces",
-                description="Spend cost points to pull the closest pieces across the finish line.",
+                label="Expedite near-complete jobs",
+                description="Spend cost points to pull the closest jobs across the finish line.",
                 immediate_effects={"type": "pull_forward"},
                 risk_effect=-5,
                 cost_effect=22,
@@ -454,7 +454,7 @@ def _strategic_card(state: SimulationState, ordinal: int, day: int) -> DecisionC
             DecisionChoice(
                 id="1",
                 label="Earliest due first",
-                description="Favor jobs with the nearest target milestone.",
+                description="Favor subjobs with the nearest target milestone.",
                 immediate_effects={"type": "resequence"},
                 risk_effect=-3,
                 cost_effect=4,
@@ -463,7 +463,7 @@ def _strategic_card(state: SimulationState, ordinal: int, day: int) -> DecisionC
             DecisionChoice(
                 id="2",
                 label="Critical path first",
-                description="Favor jobs with low slack and high downstream dependency value.",
+                description="Favor subjobs with low slack and high downstream dependency value.",
                 immediate_effects={"type": "protect_critical"},
                 risk_effect=-5,
                 cost_effect=8,
@@ -557,18 +557,18 @@ def _wait_and_absorb(state: SimulationState, card: DecisionCard) -> str:
             event.duration_shifts += 1
             event.effects["mitigation_score"] = int(event.effects.get("mitigation_score", 0)) - 2
     if affected:
-        return f"Held sequence; {affected} affected job(s) absorbed extra queue or coordination delay."
+        return f"Held sequence; {affected} affected subjob(s) absorbed extra queue or coordination delay."
     return "Held current sequence and accepted near-term risk."
 
 
 def _protect_critical(state: SimulationState) -> str:
-    """Raise critical-path job priorities and pull queued ones forward."""
+    """Raise critical-path subjob priorities and pull queued ones forward."""
     critical = state.get_critical_path_jobs()[:10]
     for job in critical:
         job.priority += 10
         if job.assigned_workcenter_id and job.status == JobStatus.QUEUED:
             state.assign_job(job.id, job.assigned_workcenter_id, front=True)
-    return f"Protected {len(critical)} critical-path jobs by raising priority and queue position."
+    return f"Protected {len(critical)} critical-path subjobs by raising priority and queue position."
 
 
 def _expedite_event(state: SimulationState, event_id: str | None) -> str:
@@ -595,7 +595,7 @@ def _expedite_event(state: SimulationState, event_id: str | None) -> str:
 
 
 def _reroute_targets(state: SimulationState, card: DecisionCard) -> str:
-    """Move affected jobs to less-loaded alternate workcenters."""
+    """Move affected subjobs to less-loaded alternate workcenters."""
     jobs = _jobs_for_card(state, card)
     moved = 0
     for job in jobs[:3]:
@@ -604,7 +604,7 @@ def _reroute_targets(state: SimulationState, card: DecisionCard) -> str:
             state.assign_job(job.id, alt.id, front=job.critical_path)
             job.priority += 5
             moved += 1
-    return f"Rerouted {moved} affected job(s) to alternate capable workcenters."
+    return f"Rerouted {moved} affected subjob(s) to alternate capable workcenters."
 
 
 def _preempt_for_card(state: SimulationState, card: DecisionCard) -> str:
@@ -633,12 +633,12 @@ def _split_capacity(state: SimulationState, card: DecisionCard) -> str:
                 state.assign_job(job.id, alt.id)
                 moved += 1
                 if moved >= 6:
-                    return f"Split {moved} queued jobs across alternate capacity."
-    return f"Split {moved} queued jobs across alternate capacity."
+                    return f"Split {moved} queued subjobs across alternate capacity."
+    return f"Split {moved} queued subjobs across alternate capacity."
 
 
 def _defer_lower_risk(state: SimulationState, card: DecisionCard) -> str:
-    """Lower priority on slack-rich jobs so urgent work can flow first."""
+    """Lower priority on slack-rich subjobs so urgent work can flow first."""
     shop_ids = [target for target in card.target_ids if target in state.shops]
     jobs = [
         job
@@ -647,11 +647,11 @@ def _defer_lower_risk(state: SimulationState, card: DecisionCard) -> str:
     ]
     for job in sorted(jobs, key=lambda item: (item.risk_score, -item.due_shift))[:12]:
         job.priority = max(10, job.priority - 8)
-    return f"Deferred {min(12, len(jobs))} lower-risk jobs to relieve queue pressure."
+    return f"Deferred {min(12, len(jobs))} lower-risk subjobs to relieve queue pressure."
 
 
 def _pull_forward_unaffected(state: SimulationState, card: DecisionCard) -> str:
-    """Queue ready jobs into available capacity before it is wasted."""
+    """Queue ready subjobs into available capacity before it is wasted."""
     moved = 0
     ready = sorted(state.get_ready_jobs(), key=lambda job: (-job.priority, job.due_shift))
     for job in ready[:18]:
@@ -659,7 +659,7 @@ def _pull_forward_unaffected(state: SimulationState, card: DecisionCard) -> str:
         if alt:
             state.assign_job(job.id, alt.id, front=job.critical_path)
             moved += 1
-    return f"Pulled forward {moved} ready jobs into available capacity."
+    return f"Pulled forward {moved} ready subjobs into available capacity."
 
 
 def _use_echo_recommendation(state: SimulationState, card: DecisionCard) -> str:
@@ -677,7 +677,7 @@ def _use_echo_recommendation(state: SimulationState, card: DecisionCard) -> str:
         if job.status in {JobStatus.QUEUED, JobStatus.READY, JobStatus.SCHEDULED} and job.remaining_duration_shifts > 1:
             job.remaining_duration_shifts -= 1
             accelerated += 1
-    return f"ECHO recommendation worked: {protected_note} {pulled_note} Accelerated {accelerated} critical job(s)."
+    return f"ECHO recommendation worked: {protected_note} {pulled_note} Accelerated {accelerated} critical subjob(s)."
 
 
 def _apply_forward_decision_effect(

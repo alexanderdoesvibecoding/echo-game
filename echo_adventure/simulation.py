@@ -142,7 +142,7 @@ def _maybe_require_completion_rework(state: SimulationState, job) -> bool:
 
 
 def _complete_project_if_ready(state: SimulationState) -> None:
-    """Mark the run complete once every puzzle piece job is finished."""
+    """Mark the run complete once every top-level job's subjobs are finished."""
     if state.final_item_completed:
         return
     if not all(
@@ -152,7 +152,7 @@ def _complete_project_if_ready(state: SimulationState) -> None:
         return
     state.final_item_completed = True
     state.completion_shift = state.current_shift
-    state.daily_notes.append(f"All puzzle pieces completed at shift {state.current_shift}.")
+    state.daily_notes.append(f"All jobs completed at shift {state.current_shift}.")
 
 
 def _start_available_jobs(state: SimulationState) -> None:

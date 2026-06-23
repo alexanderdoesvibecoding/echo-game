@@ -2,16 +2,16 @@
 
 ECHO Adventure is a scheduling strategy game set in a fictional advanced manufacturing yard.
 
-The player acts as a manual scheduler trying to finish a 15-piece project in 30 in-game days. Every run creates a reproducible manufacturing scenario with shops, workcenters, jobs, dependencies, material problems, quality findings, equipment failures, weather, crew pressure, engineering holds, certification issues, and downstream event cascades. A hidden automated scheduler runs the same scenario in parallel and is revealed only at the end as an operational benchmark.
+The player acts as a manual scheduler trying to finish a 15-job project in 15 in-game days. Every run creates a reproducible manufacturing scenario with shops, workcenters, subjobs, dependencies, material problems, quality findings, equipment failures, weather, crew pressure, engineering holds, certification issues, and downstream event cascades. A hidden automated scheduler runs the same scenario in parallel and is revealed only at the end as an operational benchmark.
 
 ## Gameplay
 
 Each day, the player reviews the operating board and responds to daily decision cards.
 
-The goal is to complete all puzzle pieces before the deadline while balancing:
+The goal is to complete all jobs before the deadline while balancing:
 
 - Schedule risk
-- Late jobs
+- Late subjobs
 - Cost
 - Reschedules
 - Workcenter utilization
@@ -43,7 +43,7 @@ python -m echo_adventure --port 8766
 
 Use a seed when comparing changes. The same seed should generate the same scenario and event timeline unless scenario-generation logic changes.
 
-The demo mode is a five-day run with five puzzle pieces, shorter job chains, no random disruptions, and one or two decisions per day. It is intended to be finishable in five minutes or less.
+The demo mode is a five-day run with five jobs, shorter subjob chains, no random disruptions, and one or two decisions per day. It is intended to be finishable in five minutes or less.
 
 With a fixed seed:
 
@@ -71,10 +71,10 @@ The Operating Board tabs are:
 
 - `Shops`: queue pressure, blocked work, utilization, idle time, shop risk, and active disruptions.
 - `Daily Calendar`: scheduled work for the current day, split across the three shifts.
-- `Pieces`: progress and risk for each puzzle piece, with drill-down into subjobs.
+- `Jobs`: progress and risk for each top-level job, with drill-down into subjobs.
 - `Workcenters`: machines/stations for the selected shop. The shop selector appears only in this tab.
-- `Critical Path`: jobs most likely to drive final completion timing.
-- `Risk Register`: active warnings, active disruptions, blocked jobs, and chained event sources.
+- `Critical Path`: subjobs most likely to drive final completion timing.
+- `Risk Register`: active warnings, active disruptions, blocked subjobs, and chained event sources.
 
 Daily decisions appear as a modal. The modal can be dismissed so the main board remains inspectable, but all decisions must be submitted before the day can advance.
 
@@ -86,17 +86,17 @@ A scenario contains:
 
 - Shops
 - Workcenters
-- Puzzle pieces
 - Jobs
+- Subjobs
 - Job dependencies
 - Event timeline
 - Deadline
 
 Scenario generation lives in `echo_adventure/scenario_generator.py`.
 
-### Jobs
+### Jobs and Subjobs
 
-Jobs represent the actual work required to complete puzzle pieces. Jobs can be:
+Jobs are the top-level deliverables the player must finish before the deadline. Subjobs represent the actual work required to complete each job. Subjobs can be:
 
 - Not ready
 - Ready
@@ -107,7 +107,7 @@ Jobs represent the actual work required to complete puzzle pieces. Jobs can be:
 - Complete
 - Rework required
 
-Jobs carry priority, due shift, risk score, cost weight, candidate workcenters, and dependency links.
+Subjobs carry priority, due shift, risk score, cost weight, candidate workcenters, and dependency links.
 
 ### Rework
 
@@ -117,7 +117,7 @@ Rework is intentionally common. It can happen through:
 - Rework spillover events.
 - Completion-time inspection rework.
 
-The UI marks jobs that have had rework with a small red dot next to the job id.
+The UI marks subjobs that have had rework with a small red dot next to the subjob id.
 
 ### Events
 
@@ -151,7 +151,7 @@ Examples:
 
 - A material delay can become supplier escalation or logistics backlog.
 - A machine failure can become tooling damage or crew shortage.
-- Quality rework can spill into related piece work.
+- Quality rework can spill into related job work.
 - Inspection delay can become a certification audit.
 - Engineering holds can become engineering data revisions.
 
@@ -200,7 +200,7 @@ Returns the complete UI state payload:
 - Metrics snapshot
 - Shops
 - Daily calendar
-- Pieces and subjobs
+- Jobs and subjobs
 - Workcenters grouped by shop
 - Critical path rows
 - Risk register rows

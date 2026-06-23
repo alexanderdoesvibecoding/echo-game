@@ -399,7 +399,6 @@ def _apply_quality_rework(state: SimulationState, event: Event) -> None:
             dependencies=[job.id],
             duration=max(1, event.severity),
             priority=job.priority + 12,
-            label="RQ",
         )
         new_job.rework_count = 1
     else:
@@ -425,7 +424,7 @@ def _apply_priority_change(state: SimulationState, event: Event) -> None:
 
 
 def _insert_urgent_job(state: SimulationState, event: Event) -> None:
-    """Insert a new required job into a piece during the active run."""
+    """Insert a new required subjob into a top-level job during the active run."""
     piece_id = event.target_id
     piece = state.pieces[piece_id]
     existing_jobs = [state.jobs[job_id] for job_id in piece.job_ids]
@@ -445,7 +444,6 @@ def _insert_urgent_job(state: SimulationState, event: Event) -> None:
         dependencies=dependencies,
         duration=1 + min(2, max(1, event.severity // 2)),
         priority=85 + event.severity,
-        label="URG",
     )
     state.cost += 25 * event.severity
 
@@ -459,12 +457,10 @@ def _create_follow_on_job(
     dependencies: list[str],
     duration: int,
     priority: int,
-    label: str,
 ) -> Job:
-    """Create a generated job caused by rework or urgent inserted work."""
+    """Create a generated subjob caused by rework or urgent inserted work."""
     piece = state.pieces[piece_id]
-    suffix = len(state.jobs) + 1
-    job_id = f"JOB-{piece_id.split('-')[-1]}-{label}-{suffix:03d}"
+    job_id = _next_subjob_id(state, piece_id)
     candidate_ids = [
         wc.id for wc in state.workcenters.values() if capability in wc.capabilities
     ]
@@ -494,8 +490,21 @@ def _create_follow_on_job(
         if dep_id in state.jobs and job.id not in state.jobs[dep_id].dependent_job_ids:
             state.jobs[dep_id].dependent_job_ids.append(job.id)
     event.effects.setdefault("inserted_job_ids", []).append(job.id)
-    state.daily_notes.append(f"Inserted required job {job.id} into {piece.name}.")
+    state.daily_notes.append(f"Inserted required subjob {job.id} into {piece.name}.")
     return job
+
+
+def _next_subjob_id(state: SimulationState, piece_id: str) -> str:
+    """Return the next JOB-XX-XXX id for a top-level job."""
+    prefix = f"JOB-{piece_id.split('-')[-1]}-"
+    max_index = 0
+    for job_id in state.jobs:
+        if not job_id.startswith(prefix):
+            continue
+        suffix = job_id.removeprefix(prefix)
+        if suffix.isdigit():
+            max_index = max(max_index, int(suffix))
+    return f"{prefix}{max_index + 1:03d}"
 
 
 def schedule_follow_on_event(
