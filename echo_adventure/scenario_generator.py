@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from operator import index
 import random
 
 from .config import GameConfig
 from .enums import JobStatus
 from .events import generate_event_timeline
 from .models import Job, PuzzlePiece, Scenario, Shop, WorkCenter
+from echo_adventure import config
 
 
 SHOP_BLUEPRINTS = [
@@ -125,8 +127,17 @@ def _generate_shops_and_workcenters(
     
     for index, (name, capabilities) in enumerate(SHOP_BLUEPRINTS[: config.shop_count], start=1):
         shop_id = f"SHOP-{index:02d}"
-        min_count, max_count = shop_size_factors.get(index - 1, (3, 4))
-        count = max(rng.randint(min_count, max_count), len(capabilities))
+        # min_count, max_count = shop_size_factors.get(index - 1, (3, 4))
+        # count = max(rng.randint(min_count, max_count), len(capabilities))
+        configured_min = config.min_workcenters_per_shop
+        configured_max = config.max_workcenters_per_shop
+
+        blueprint_min, blueprint_max = shop_size_factors.get(index - 1, (3, 4))
+
+        min_count = max(configured_min, min(blueprint_min, configured_max))
+        max_count = min(configured_max, max(blueprint_max, min_count))
+
+        count = rng.randint(min_count, max_count)
         workcenter_ids: list[str] = []
         for wc_index in range(1, count + 1):
             wc_id = f"WC-{index:02d}-{wc_index:03d}"
@@ -252,6 +263,10 @@ def _candidate_workcenters(
     candidate_ids.extend(alternates[: rng.randint(0, min(3, len(alternates)))])
     if not candidate_ids:
         candidate_ids = [wc.id for wc in workcenters.values() if capability in wc.capabilities]
+    if not candidate_ids:
+        candidate_ids = [wc.id for wc in workcenters.values() if wc.shop_id == primary_shop_id]
+    if not candidate_ids:
+        candidate_ids = list(workcenters.keys())
     return candidate_ids
 
 
