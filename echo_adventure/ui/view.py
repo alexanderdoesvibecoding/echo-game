@@ -94,6 +94,11 @@ INDEX_HTML = r"""<!doctype html>
       color: #5dd9e0;
     }
 
+    html[data-theme="dark"] .badge.progress {
+      background: #2b2548;
+      color: #c8bcff;
+    }
+
     html[data-theme="dark"] table,
     html[data-theme="dark"] th,
     html[data-theme="dark"] td {
@@ -392,6 +397,8 @@ INDEX_HTML = r"""<!doctype html>
     .bar.warn { background: var(--amber); }
     .bar.danger { background: var(--red); }
     .bar.good { background: var(--green); }
+    .bar.info { background: var(--teal); }
+    .bar.muted { background: var(--line); }
 
     .tabbar {
       display: flex;
@@ -532,6 +539,7 @@ INDEX_HTML = r"""<!doctype html>
     .badge.warn { background: #fbf0da; color: var(--amber); }
     .badge.danger { background: #f8e4e4; color: var(--red); }
     .badge.info { background: #e7f1f1; color: var(--teal-dark); }
+    .badge.progress { background: #ece8f8; color: var(--violet); }
 
     .link-button {
       appearance: none;
@@ -735,7 +743,7 @@ INDEX_HTML = r"""<!doctype html>
           <span></span>
         </button>
         <div id="settingsPanel" class="settings-panel">
-          <button id="openNewRunModalBtn">New Run</button>
+          <button id="openNewRunModalBtn">New Game</button>
           <button id="themeMenuBtn">Light/Dark Mode</button>
         </div>
       </div>
@@ -851,7 +859,7 @@ INDEX_HTML = r"""<!doctype html>
     <div class="modal">
       <div class="modal-titlebar">
         <div>
-          <h1 id="newRunModalTitle">New Run</h1>
+          <h1 id="newRunModalTitle">New Game</h1>
           <div class="subtle">Choose a preset, seed, and scenario size.</div>
         </div>
         <button id="closeNewRunModalBtn" class="icon-button" title="Close new run settings" onclick="closeNewRunModal()">×</button>
@@ -863,6 +871,7 @@ INDEX_HTML = r"""<!doctype html>
             <select id="runPresetSelect">
               <option value="normal">Normal</option>
               <option value="demo">Demo</option>
+              <option value="custom">Custom</option>
             </select>
           </label>
           <label>
@@ -895,7 +904,7 @@ INDEX_HTML = r"""<!doctype html>
       </div>
       <div class="modal-footer">
         <button onclick="closeNewRunModal()">Cancel</button>
-        <button class="primary" onclick="startNewRun()">Start Run</button>
+        <button class="primary" onclick="startNewRun()">Start Game</button>
       </div>
     </div>
   </div>
@@ -1232,6 +1241,11 @@ INDEX_HTML = r"""<!doctype html>
 
     function applyRunPreset() {
       const preset = $("runPresetSelect").value;
+      if (preset === "custom") {
+        settingsEdited = true;
+        renderNewRunModal();
+        return;
+      }
       applyRunSettings(runPresets[preset] || runPresets.normal);
       settingsEdited = false;
       renderNewRunModal();
@@ -1239,6 +1253,7 @@ INDEX_HTML = r"""<!doctype html>
 
     function markSettingsEdited() {
       clampRunInput(this);
+      $("runPresetSelect").value = "custom";
       settingsEdited = true;
       showNewRunError("");
       renderNewRunModal();
@@ -1438,8 +1453,8 @@ INDEX_HTML = r"""<!doctype html>
         return numA - numB;
       }).map(piece => [
         `<button class="link-button" onclick="openPieceModal('${piece.id}')">${escapeHtml(piece.id)}</button>`,
-        badge(pieceStatusLabel(piece.status), piece.status.includes("Risk") || piece.status.includes("Blocked") ? "warn" : piece.status.includes("Ready") ? "good" : "info"),
-        progressCell(piece.progress),
+        badge(pieceStatusLabel(piece.status), pieceStatusTone(piece.status)),
+        progressCell(piece.progress, piece.status),
         `${piece.completed}/${piece.total}`,
         piece.blocked,
         piece.critical ? "Yes" : "",
@@ -1661,8 +1676,9 @@ INDEX_HTML = r"""<!doctype html>
       `;
     }
 
-    function progressCell(value) {
-      return `<div>${fmtPct(value)}</div><div class="progress"><div class="bar good" style="width:${Math.max(0, Math.min(1, value)) * 100}%"></div></div>`;
+    function progressCell(value, status = "") {
+      const tone = status === "Complete" ? "good" : status === "Not Started" ? "muted" : status === "Blocked" || status === "At Risk" ? "warn" : "info";
+      return `<div>${fmtPct(value)}</div><div class="progress"><div class="bar ${tone}" style="width:${Math.max(0, Math.min(1, value)) * 100}%"></div></div>`;
     }
 
     function badge(value, tone) {
@@ -1671,6 +1687,13 @@ INDEX_HTML = r"""<!doctype html>
 
     function pieceStatusLabel(status) {
       return status;
+    }
+
+    function pieceStatusTone(status) {
+      if (status === "Complete") return "good";
+      if (status === "In Progress") return "progress";
+      if (status === "At Risk" || status === "Blocked") return "warn";
+      return "info";
     }
 
     function jobLabel(value, hasRework) {

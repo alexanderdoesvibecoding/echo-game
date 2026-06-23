@@ -35,7 +35,13 @@ class GameSession:
     scenario so the final reveal compares scheduling policy, not scenario luck.
     """
 
-    def __init__(self, seed: int | None = None, demo: bool = False, settings: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        seed: int | None = None,
+        demo: bool = False,
+        settings: dict[str, Any] | None = None,
+        mode: str | None = None,
+    ) -> None:
         # RLock allows helper methods called inside locked public methods to
         # safely reuse the same lock if the implementation grows later.
         self.lock = threading.RLock()
@@ -45,6 +51,7 @@ class GameSession:
         self.demo = demo
         base_config = GameConfig.demo(seed=self.seed) if demo else GameConfig(seed=self.seed)
         self.config = _apply_config_settings(base_config, settings or {})
+        self.mode = mode or ("demo" if demo else "normal")
         # Both schedulers share a scenario but mutate independent state copies.
         self.scenario = generate_scenario(self.config)
         self.player_state = initialize_state(self.scenario, self.config.shifts_per_day)
@@ -75,7 +82,7 @@ class GameSession:
             # close to the rows and panels it renders.
             payload: dict[str, Any] = {
                 "seed": self.seed,
-                "mode": "demo" if self.demo else "normal",
+                "mode": self.mode,
                 "settings": _settings_payload(self.config),
                 "scenarioId": self.scenario.scenario_id,
                 "gameOver": game_over,
@@ -510,6 +517,7 @@ class GameRequestHandler(BaseHTTPRequestHandler):
                     seed=seed,
                     demo=mode == "demo",
                     settings=settings if isinstance(settings, dict) else None,
+                    mode=mode if mode in {"normal", "demo", "custom"} else None,
                 )
                 self._send_json(type(self).session.state_payload())
             elif parsed.path == "/api/choice":

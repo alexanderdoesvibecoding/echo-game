@@ -32,7 +32,7 @@ def calculate_snapshot(state: SimulationState) -> MetricSnapshot:
         for job in state.jobs.values()
         if job.completed_shift is not None and job.completed_shift > job.due_shift
     )
-    pieces_completed = sum(1 for piece in state.pieces.values() if piece.ready_for_integration)
+    pieces_completed = sum(1 for piece in state.pieces.values() if piece.completed)
     utilization = (
         state.busy_shift_count / state.available_shift_count
         if state.available_shift_count
@@ -75,7 +75,7 @@ def calculate_schedule_risk(state: SimulationState, projected_completion_shift: 
         if wc.status in {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}
     )
     remaining_jobs = sum(1 for job in state.jobs.values() if not job.is_complete)
-    completed_pieces = sum(1 for piece in state.pieces.values() if piece.ready_for_integration)
+    completed_pieces = sum(1 for piece in state.pieces.values() if piece.completed)
     completion_gap = max(0, len(state.pieces) - completed_pieces) * (
         1.0 if state.current_shift > state.deadline_shift * 0.67 else 0.45
     )
@@ -201,19 +201,19 @@ def _refresh_piece_statuses(state: SimulationState) -> None:
             or [state.current_shift]
         )
         if completed == piece.total_job_count:
-            piece.ready_for_integration = True
+            piece.completed = True
             piece.status = PieceStatus.COMPLETE
         elif blocked:
-            piece.ready_for_integration = False
+            piece.completed = False
             piece.status = PieceStatus.BLOCKED
         elif completed == 0:
-            piece.ready_for_integration = False
+            piece.completed = False
             piece.status = PieceStatus.NOT_STARTED
         elif piece.risk_score >= 65:
-            piece.ready_for_integration = False
+            piece.completed = False
             piece.status = PieceStatus.AT_RISK
         else:
-            piece.ready_for_integration = False
+            piece.completed = False
             piece.status = PieceStatus.IN_PROGRESS
     if state.all_pieces_ready() and not state.final_item_completed:
         state.final_item_completed = True

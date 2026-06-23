@@ -75,6 +75,8 @@ def apply_choice(state: SimulationState, card: DecisionCard, choice: DecisionCho
         note = _defer_lower_risk(state, card)
     elif effect_type == "pull_forward":
         note = _pull_forward_unaffected(state, card)
+    elif effect_type == "echo_recommendation":
+        note = _use_echo_recommendation(state, card)
     else:
         note = "Recorded the scheduling preference for today."
     # Choices affect both the current board and the future event chain. The
@@ -99,6 +101,36 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
     dtype = _decision_type_for_event(event.type)
     status = "active" if event.id in state.active_events else "warning"
     target = _target_name(state, event.target_type, event.target_id)
+    if event.type == EventType.ECHO_RECOMMENDATION:
+        return DecisionCard(
+            id=f"DAY-{day:02d}-DEC-{ordinal}",
+            day=day,
+            type=dtype,
+            title="ECHO recommendation available",
+            description=event.description,
+            target_ids=[event.target_id, event.id],
+            severity=event.severity,
+            choices=[
+                DecisionChoice(
+                    id="1",
+                    label="Use ECHO recommendation",
+                    description="Accept the risk that this experimental software may not work, but may also be faster if it does work.",
+                    immediate_effects={"type": "echo_recommendation", "event_id": event.id},
+                    risk_effect=-8,
+                    cost_effect=10,
+                    reschedule_effect=1,
+                ),
+                DecisionChoice(
+                    id="2",
+                    label="Do nothing",
+                    description="Ignore the recommendation and keep today's scheduling approach unchanged.",
+                    immediate_effects={"type": "wait", "event_id": event.id},
+                    risk_effect=2,
+                    cost_effect=0,
+                    reschedule_effect=0,
+                ),
+            ],
+        )
     choices = [
         DecisionChoice(
             id="1",
@@ -358,11 +390,11 @@ def _idle_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
 
 def _completion_readiness_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
     """Build a card for late-stage readiness of remaining puzzle pieces."""
-    complete_pieces = sum(1 for piece in state.pieces.values() if piece.ready_for_integration)
+    complete_pieces = sum(1 for piece in state.pieces.values() if piece.completed)
     total_pieces = len(state.pieces)
     late_stage_day = max(1, int((state.deadline_shift / state.shifts_per_day) * 0.67))
     incomplete_pieces = sorted(
-        [piece for piece in state.pieces.values() if not piece.ready_for_integration],
+        [piece for piece in state.pieces.values() if not piece.completed],
         key=lambda piece: (-piece.risk_score, piece.estimated_completion_shift, piece.id),
     )
     target_ids = [piece.id for piece in incomplete_pieces[:3]]
@@ -630,6 +662,24 @@ def _pull_forward_unaffected(state: SimulationState, card: DecisionCard) -> str:
     return f"Pulled forward {moved} ready jobs into available capacity."
 
 
+def _use_echo_recommendation(state: SimulationState, card: DecisionCard) -> str:
+    """Apply the experimental ECHO recommendation with a deterministic failure chance."""
+    event_id = next((target_id for target_id in card.target_ids if _event_by_id(state, target_id)), card.id)
+    roll = random.Random(f"{state.seed}:{event_id}:echo-recommendation")
+    if roll.random() < 0.28:
+        state.cost += 12
+        return "ECHO recommendation did not produce a usable move; the team lost some analysis time."
+
+    protected_note = _protect_critical(state)
+    pulled_note = _pull_forward_unaffected(state, card)
+    accelerated = 0
+    for job in state.get_critical_path_jobs()[:4]:
+        if job.status in {JobStatus.QUEUED, JobStatus.READY, JobStatus.SCHEDULED} and job.remaining_duration_shifts > 1:
+            job.remaining_duration_shifts -= 1
+            accelerated += 1
+    return f"ECHO recommendation worked: {protected_note} {pulled_note} Accelerated {accelerated} critical job(s)."
+
+
 def _apply_forward_decision_effect(
     state: SimulationState,
     card: DecisionCard,
@@ -648,6 +698,7 @@ def _apply_forward_decision_effect(
         "split_capacity": 1,
         "pull_forward": 1,
         "preempt": 1,
+        "echo_recommendation": 2,
         "wait": -2,
         "defer": -1,
     }.get(effect_type, 0)
@@ -724,6 +775,12 @@ def _schedule_decision_follow_on(
 
 def _decision_follow_on_target(state: SimulationState, source_event: Event) -> tuple[EventType, TargetType, str]:
     """Choose the plausible event type/target for a decision-driven cascade."""
+    if source_event.type == EventType.ECHO_RECOMMENDATION:
+        shop = max(
+            state.shops.values(),
+            key=lambda item: (len(item.queued_job_ids) + len(item.blocked_job_ids), item.risk_score),
+        )
+        return EventType.LOGISTICS_BACKLOG, TargetType.SHOP, shop.id
     if source_event.type in {EventType.MISSING_MATERIAL, EventType.DELAYED_MATERIAL, EventType.SUPPLIER_ESCALATION}:
         if source_event.target_type == TargetType.JOB and source_event.target_id in state.jobs:
             job = state.jobs[source_event.target_id]
@@ -893,6 +950,7 @@ def _decision_type_for_event(event_type: EventType) -> DecisionType:
         EventType.REWORK_SPILLOVER: DecisionType.QUALITY_REWORK,
         EventType.CERTIFICATION_AUDIT: DecisionType.INSPECTION_DELAY,
         EventType.ENGINEERING_DATA_REVISION: DecisionType.ENGINEERING_HOLD,
+        EventType.ECHO_RECOMMENDATION: DecisionType.ECHO_RECOMMENDATION,
     }[event_type]
 
 

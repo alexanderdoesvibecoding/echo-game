@@ -31,6 +31,7 @@ EVENT_SEQUENCE = [
 ]
 
 MAX_EVENT_CHAIN_DEPTH = 2
+ECHO_RECOMMENDATION_PROBABILITY = 0.18
 
 
 def generate_event_timeline(
@@ -64,6 +65,9 @@ def generate_event_timeline(
             + [rng.choice(EVENT_SEQUENCE) for _ in range(filler_count)]
         )
     rng.shuffle(event_types)
+    if rng.random() < ECHO_RECOMMENDATION_PROBABILITY:
+        event_types.append(EventType.ECHO_RECOMMENDATION)
+        rng.shuffle(event_types)
 
     # Force at least one early warning for weather and one for delayed material.
     if event_types and EventType.WEATHER not in event_types:
@@ -73,7 +77,9 @@ def generate_event_timeline(
 
     for index, event_type in enumerate(event_types, start=1):
         latest_start = deadline - 5
-        if event_type in {EventType.URGENT_JOB, EventType.QUALITY_REWORK}:
+        if event_type == EventType.ECHO_RECOMMENDATION:
+            latest_start = max(6, deadline - 3)
+        elif event_type in {EventType.URGENT_JOB, EventType.QUALITY_REWORK}:
             latest_start = deadline - 11
         elif event_type in {EventType.ENGINEERING_HOLD, EventType.FACILITY_OUTAGE}:
             latest_start = deadline - 8
@@ -122,6 +128,7 @@ def _duration_for(event_type: EventType, severity: int, rng: Random) -> int:
         EventType.REWORK_SPILLOVER: (1, 3),
         EventType.CERTIFICATION_AUDIT: (2, 4),
         EventType.ENGINEERING_DATA_REVISION: (1, 3),
+        EventType.ECHO_RECOMMENDATION: (1, 1),
     }[event_type]
     return min(8, rng.randint(*base) + max(0, severity - 3))
 
@@ -150,6 +157,8 @@ def _target_for(
         return TargetType.PIECE, rng.choice(list(pieces.keys()))
     if event_type == EventType.PRIORITY_CHANGE and rng.random() < 0.35:
         return TargetType.PIECE, rng.choice(list(pieces.keys()))
+    if event_type == EventType.ECHO_RECOMMENDATION:
+        return TargetType.CAPABILITY, "ECHO"
     return TargetType.JOB, rng.choice(jobs).id
 
 
@@ -190,6 +199,8 @@ def _description_for(event_type: EventType, target_type: TargetType, target_id: 
         return f"Certification audit requests additional evidence for {target}."
     if event_type == EventType.ENGINEERING_DATA_REVISION:
         return f"Engineering data revision changes acceptance criteria for {target}."
+    if event_type == EventType.ECHO_RECOMMENDATION:
+        return "Someone is working on this app called ECHO; would you want to use its recommendation?"
     return f"Severity {severity} disruption affects {target_type.value} {target_id}."
 
 

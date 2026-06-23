@@ -13,7 +13,7 @@ class GameConfig:
     total_days: int = 15
     shifts_per_day: int = 3
     piece_count: int = 15
-    shop_count: int = 10
+    shop_count: int = 9
     min_workcenters_per_shop: int = 1
     max_workcenters_per_shop: int = 5
     min_decisions_per_day: int = 1

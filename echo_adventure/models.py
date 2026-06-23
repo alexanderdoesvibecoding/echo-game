@@ -60,7 +60,7 @@ class PuzzlePiece:
     total_job_count: int = 0
     risk_score: float = 0.0
     estimated_completion_shift: int = 0
-    ready_for_integration: bool = False
+    completed: bool = False
 
     @property
     def percent_complete(self) -> float:
@@ -301,7 +301,7 @@ class SimulationState:
 
     def all_pieces_ready(self) -> bool:
         """Return whether every puzzle piece has completed its required jobs."""
-        return all(piece.ready_for_integration for piece in self.pieces.values())
+        return all(piece.completed for piece in self.pieces.values())
 
     def remove_job_from_queues(self, job_id: str) -> None:
         """Remove a job from every workcenter/shop queue that may reference it."""

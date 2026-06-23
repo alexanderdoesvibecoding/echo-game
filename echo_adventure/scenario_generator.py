@@ -19,10 +19,9 @@ SHOP_BLUEPRINTS = [
     ("Coating Studio", ["coating", "surface_prep", "curing", "finishing"]),
     ("Assembly Hall", ["assembly", "fitting", "fastening", "tooling"]),
     ("Calibration Lab", ["calibration", "metrology", "inspection", "systems_fit"]),
-    ("Systems Integration", ["systems_fit", "wiring", "calibration", "integration"]),
+    ("Systems Assembly", ["systems_fit", "wiring", "calibration", "assembly"]),
     ("Metrology Loft", ["inspection", "metrology", "alignment", "certification"]),
     ("Tooling Annex", ["tooling", "fixture", "forming", "alignment"]),
-    ("Final Integration Bay", ["integration", "assembly", "certification", "finishing"]),
 ]
 
 PIECE_NAMES = [
@@ -119,10 +118,9 @@ def _generate_shops_and_workcenters(
         3: (3, 5),    # Coating Studio - medium
         4: (4, 6),    # Assembly Hall - large
         5: (2, 3),    # Calibration Lab - small specialized
-        6: (3, 4),    # Systems Integration - medium
+        6: (3, 4),    # Systems Assembly - medium
         7: (2, 3),    # Metrology Loft - small specialized
         8: (2, 3),    # Tooling Annex - small specialized
-        9: (3, 4),    # Final Integration Bay - medium
     }
     
     for index, (name, capabilities) in enumerate(SHOP_BLUEPRINTS[: config.shop_count], start=1):
