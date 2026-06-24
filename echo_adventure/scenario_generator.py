@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from operator import index
+import copy
 import random
 
 from .config import GameConfig
+from .decisions import generate_decision_graph
 from .enums import JobStatus
 from .events import generate_event_timeline
-from .models import Job, PuzzlePiece, Scenario, Shop, WorkCenter
-from echo_adventure import config
+from .models import Job, PuzzlePiece, Scenario, Shop, SimulationState, WorkCenter
 
 
 SHOP_BLUEPRINTS = [
@@ -78,6 +78,22 @@ def generate_scenario(config: GameConfig) -> Scenario:
         deadline_shift=config.deadline_shift,
     )
     validate_scenario(scenario, config)
+    graph_state = SimulationState(
+        scenario_id=scenario.scenario_id,
+        seed=scenario.seed,
+        deadline_shift=scenario.deadline_shift,
+        shifts_per_day=config.shifts_per_day,
+        shops=copy.deepcopy(scenario.shops),
+        workcenters=copy.deepcopy(scenario.workcenters),
+        pieces=copy.deepcopy(scenario.pieces),
+        jobs=copy.deepcopy(scenario.jobs),
+        event_timeline=copy.deepcopy(scenario.event_timeline),
+    )
+    (
+        scenario.decision_cards,
+        scenario.daily_decision_roots,
+        scenario.daily_decision_counts,
+    ) = generate_decision_graph(graph_state, config)
     return scenario
 
 
@@ -109,7 +125,7 @@ def _generate_shops_and_workcenters(
     """Create shop blueprints and a varied number of capable workcenters."""
     shops: dict[str, Shop] = {}
     workcenters: dict[str, WorkCenter] = {}
-    
+
     # Shop size mapping: larger shops have more workcenters, smaller specialized shops have fewer
     shop_size_factors = {
         0: (4, 6),    # Fabrication Gallery - large
@@ -122,7 +138,7 @@ def _generate_shops_and_workcenters(
         7: (2, 3),    # Metrology Loft - small specialized
         8: (2, 3),    # Tooling Annex - small specialized
     }
-    
+
     for zero_index in range(config.shop_count):
         index = zero_index + 1
         blueprint_index = zero_index % len(SHOP_BLUEPRINTS)

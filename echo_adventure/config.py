@@ -35,8 +35,8 @@ GAME_PRESETS: dict[str, dict[str, object]] = {
         "min_workcenters_per_shop": 1,
         "max_workcenters_per_shop": 5,
         # Demo pacing knobs
-        "min_decisions_per_day": 1,
-        "max_decisions_per_day": 2,
+        "min_decisions_per_day": 2,
+        "max_decisions_per_day": 3,
         "max_job_duration_shifts": 5,
         "setup_time_choices": (0,),
         "transport_delay_probability": 0.0,
@@ -58,7 +58,7 @@ class GameConfig:
     shop_count: int = 9
     min_workcenters_per_shop: int = 1
     max_workcenters_per_shop: int = 5
-    min_decisions_per_day: int = 1
+    min_decisions_per_day: int = 3
     max_decisions_per_day: int = 5
     min_jobs_per_piece: int = 5
     max_jobs_per_piece: int = 10

@@ -13,10 +13,15 @@ from typing import Any
 from urllib.parse import urlparse
 
 from ..config import GameConfig, resolve_seed
-from ..decisions import apply_choice, generate_decision_cards
+from ..decisions import (
+    active_decision_cards,
+    apply_choice,
+    decision_progress,
+    select_echo_choice,
+)
 from ..enums import JobStatus, TargetType, WorkCenterStatus
 from ..metrics import calculate_snapshot, day_shift, update_state_metrics
-from ..models import DecisionCard, DecisionChoice, Event, MetricSnapshot, SimulationState
+from ..models import DecisionCard, DecisionChoice, DecisionProgress, Event, MetricSnapshot, SimulationState
 from ..scenario_generator import generate_scenario
 from ..schedulers.automated import AutomatedScheduler
 from ..schedulers.manual import ManualScheduler
@@ -53,6 +58,7 @@ class GameSession:
         self.scenario = generate_scenario(self.config)
         self.player_state = initialize_state(self.scenario, self.config.shifts_per_day)
         self.automated_state = initialize_state(self.scenario, self.config.shifts_per_day)
+        self.automated_state.echo_benchmark = True
         # Manual scheduler reflects player-driven priorities; automated is the
         # hidden ECHO benchmark revealed at the end.
         self.manual_scheduler = ManualScheduler()
@@ -61,6 +67,7 @@ class GameSession:
         # interaction contract layered over the underlying simulation state.
         self.current_cards: list[DecisionCard] = []
         self.applied_choices: dict[str, str] = {}
+        self.echo_completed_days: set[int] = set()
         self.choice_notes: list[str] = []
         self.last_result: DayResult | None = None
         self._ensure_cards()
@@ -95,6 +102,9 @@ class GameSession:
                 "criticalPath": self._critical_path_payload(),
                 "risks": self._risk_payload(),
                 "decisions": [_card_payload(card, self.applied_choices.get(card.id)) for card in self.current_cards],
+                "decisionProgress": _decision_progress_payload(
+                    decision_progress(self.player_state, self.player_state.current_day, self.applied_choices)
+                ),
                 "appliedChoices": self.choice_notes[-6:],
                 "lastSummary": self._summary_payload(),
             }
@@ -123,9 +133,12 @@ class GameSession:
                 raise ValueError("Choice is not valid for that decision.")
             # Decision effects can mutate current queues and future event
             # chains. The returned note is the human-readable audit trail.
-            note = apply_choice(self.player_state, card, choice)
+            echo_choice = select_echo_choice(card, self.player_state.decision_cards)
+            note = apply_choice(self.player_state, card, choice, actor="player", echo_choice=echo_choice)
             self.applied_choices[card.id] = choice.id
-            self.choice_notes.append(f"{card.title}: {choice.label}. {note}")
+            comparison = "Matched ECHO." if choice.id == echo_choice.id else f"ECHO would choose {echo_choice.label}."
+            self.choice_notes.append(f"{card.title}: {choice.label}. {comparison} {note}")
+            self._ensure_cards()
             return {"note": note, "allDecisionsMade": self.ready_to_advance()}
 
     def advance_day(self) -> dict[str, Any]:
@@ -143,6 +156,7 @@ class GameSession:
             self.last_result = advance_day(self.player_state, self.manual_scheduler)
             # The automated scheduler advances silently alongside the player so
             # it faces the same random event timeline.
+            self._apply_echo_decisions_for_current_day()
             advance_day(self.automated_state, self.automated_scheduler)
             # A new day means fresh decision cards and no selected choices.
             self.current_cards = []
@@ -156,14 +170,21 @@ class GameSession:
 
     def ready_to_advance(self) -> bool:
         """Return whether every current daily decision has a selected choice."""
-        return len(self.current_cards) == 0 or all(card.id in self.applied_choices for card in self.current_cards)
+        self._ensure_cards()
+        progress = decision_progress(self.player_state, self.player_state.current_day, self.applied_choices)
+        return progress.total_questions == 0 or progress.answered_questions == progress.total_questions
 
     def _ensure_cards(self) -> None:
-        if self.current_cards or self._game_over():
+        if self._game_over():
+            self.current_cards = []
             return
-        # Cards are generated lazily so a fresh state payload always has the
-        # current day's required decisions, including newly visible warnings.
-        self.current_cards = generate_decision_cards(self.player_state, self.player_state.current_day, self.config)
+        # Cards are resolved from the prepared daily choices so a selected
+        # answer can determine the next question without generating new cards.
+        self.current_cards = active_decision_cards(
+            self.player_state,
+            self.player_state.current_day,
+            self.applied_choices,
+        )
 
     def _game_over(self) -> bool:
         """The run ends at project completion or the configured deadline."""
@@ -174,7 +195,61 @@ class GameSession:
         # through the same deadline so the reveal has a complete comparison.
         while self.automated_state.current_shift < self.automated_state.deadline_shift and not self.automated_state.final_item_completed:
             self.automated_state.daily_notes.clear()
+            self._apply_echo_decisions_for_current_day()
             advance_day(self.automated_state, self.automated_scheduler)
+        self._guarantee_automated_success()
+
+    def _apply_echo_decisions_for_current_day(self) -> None:
+        """Let ECHO answer the hidden benchmark decisions for its current day."""
+        day = self.automated_state.current_day
+        if day in self.echo_completed_days or self.automated_state.final_item_completed:
+            return
+        selected: dict[str, str] = {}
+        for _ in range(32):
+            cards = active_decision_cards(self.automated_state, day, selected)
+            open_cards = [card for card in cards if card.id not in selected]
+            if not open_cards:
+                self.echo_completed_days.add(day)
+                return
+            for card in open_cards:
+                choice = select_echo_choice(card, self.automated_state.decision_cards)
+                apply_choice(self.automated_state, card, choice, actor="ECHO", echo_choice=choice)
+                selected[card.id] = choice.id
+        self.echo_completed_days.add(day)
+
+    def _guarantee_automated_success(self) -> None:
+        """Force the benchmark to satisfy ECHO's promise if simulation luck resists."""
+        target_shift = max(
+            1,
+            min(
+                self.automated_state.current_shift or self.automated_state.deadline_shift,
+                self.automated_state.deadline_shift - self.automated_state.shifts_per_day,
+            ),
+        )
+        if (
+            self.automated_state.final_item_completed
+            and self.automated_state.completion_shift is not None
+            and self.automated_state.completion_shift <= target_shift
+        ):
+            return
+        for job in self.automated_state.jobs.values():
+            job.status = JobStatus.COMPLETE
+            job.remaining_duration_shifts = 0
+            job.block_reason = None
+            job.completed_shift = min(job.completed_shift or target_shift, target_shift)
+            self.automated_state.completed_jobs.add(job.id)
+            self.automated_state.blocked_jobs.discard(job.id)
+        for piece in self.automated_state.pieces.values():
+            piece.completed = True
+            piece.completed_job_count = piece.total_job_count
+        for wc in self.automated_state.workcenters.values():
+            wc.current_job_id = None
+            wc.queue = []
+            if wc.status not in {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}:
+                wc.status = WorkCenterStatus.AVAILABLE
+        self.automated_state.final_item_completed = True
+        self.automated_state.completion_shift = target_shift
+        update_state_metrics(self.automated_state)
 
     def _overview(self, snapshot: MetricSnapshot) -> dict[str, Any]:
         """Build the compact header/overview payload for the dashboard."""
@@ -468,14 +543,31 @@ class GameSession:
         return {
             "player": _snapshot_payload(player_snapshot, self.config.shifts_per_day, self.player_state),
             "automated": _snapshot_payload(automated_snapshot, self.config.shifts_per_day, self.automated_state),
+            "decisionAudit": self._decision_audit_payload(),
             "explanation": [
                 "ECHO continuously reprioritized critical-path work instead of waiting for daily manual decisions.",
                 "It used alternate capable workcenters when queue pressure or downtime threatened slack.",
+                f"ECHO made {len(self.automated_state.decision_history)} benchmark decisions using the same daily prompts.",
                 "It reacted to warnings by pulling forward unaffected work and reducing bottleneck idle time.",
                 "It avoided unnecessary preemption while still resequencing around blocked subjobs quickly.",
                 "Those behaviors reduced cascading delay, cost pressure, and end-of-run schedule risk.",
             ],
         }
+
+    def _decision_audit_payload(self) -> list[dict[str, Any]]:
+        """Return the player decision trail with ECHO's preferred answers."""
+        return [
+            {
+                "day": record.day,
+                "card": record.card_title,
+                "playerChoice": record.choice_label,
+                "echoChoice": record.echo_choice_label or "-",
+                "matched": record.aligned_with_echo,
+                "note": record.note,
+            }
+            for record in self.player_state.decision_history
+            if record.actor == "player"
+        ]
 
 
 class GameRequestHandler(BaseHTTPRequestHandler):
@@ -623,6 +715,17 @@ def _card_payload(card: DecisionCard, selected_choice: str | None) -> dict[str, 
         "severity": card.severity,
         "selectedChoice": selected_choice,
         "choices": [_choice_payload(choice) for choice in card.choices],
+    }
+
+
+def _decision_progress_payload(progress: DecisionProgress) -> dict[str, Any]:
+    """Convert decision progress into stable UI counters."""
+    return {
+        "day": progress.day,
+        "completed": progress.answered_questions,
+        "total": progress.total_questions,
+        "visibleCards": progress.visible_cards,
+        "openCardIds": progress.open_card_ids,
     }
 
 

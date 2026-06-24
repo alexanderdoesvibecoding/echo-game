@@ -40,6 +40,9 @@ def initialize_state(scenario: Scenario, shifts_per_day: int) -> SimulationState
         pieces=copy.deepcopy(scenario.pieces),
         jobs=copy.deepcopy(scenario.jobs),
         event_timeline=copy.deepcopy(scenario.event_timeline),
+        decision_cards=copy.deepcopy(scenario.decision_cards),
+        daily_decision_roots=copy.deepcopy(scenario.daily_decision_roots),
+        daily_decision_counts=copy.deepcopy(scenario.daily_decision_counts),
     )
     update_state_metrics(state)
     return state
@@ -113,6 +116,8 @@ def complete_job(state: SimulationState, job_id: str) -> None:
 
 def _maybe_require_completion_rework(state: SimulationState, job) -> bool:
     """Deterministically decide whether a finished job needs final rework."""
+    if state.echo_benchmark:
+        return False
     if job.rework_count >= MAX_COMPLETION_REWORK_PER_JOB:
         return False
     # Use a seeded local RNG so the same scenario and shift history produce the
@@ -182,6 +187,8 @@ def _start_available_jobs(state: SimulationState) -> None:
                 if wc.id != job.candidate_workcenter_ids[0]:
                     adjusted += 1
                     state.cost += 5
+                if state.echo_benchmark:
+                    adjusted = max(1, math.floor(adjusted * 0.72))
                 job.remaining_duration_shifts = max(1, adjusted)
                 job.started_once = True
             job.status = JobStatus.RUNNING

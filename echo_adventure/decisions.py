@@ -9,11 +9,152 @@ from .config import GameConfig
 from .enums import DecisionType, EventType, JobStatus, TargetType, WorkCenterStatus
 from .events import schedule_follow_on_event
 from .metrics import update_state_metrics
-from .models import DecisionCard, DecisionChoice, Event, Job, Shop, SimulationState, WorkCenter
+from .models import (
+    DecisionCard,
+    DecisionChoice,
+    DecisionRecord,
+    DecisionProgress,
+    Event,
+    Job,
+    Shop,
+    SimulationState,
+    WorkCenter,
+)
 
 
-def generate_decision_cards(state: SimulationState, day: int, config: GameConfig | None = None) -> list[DecisionCard]:
-    """Generate the day's required decision cards from visible operating risk."""
+def generate_decision_graph(
+    state: SimulationState,
+    config: GameConfig,
+) -> tuple[dict[str, DecisionCard], dict[int, list[str]], dict[int, int]]:
+    """Prepare all daily decision paths once at scenario creation."""
+    cards: dict[str, DecisionCard] = {}
+    roots_by_day: dict[int, list[str]] = {}
+    counts_by_day: dict[int, int] = {}
+    for day in range(1, config.total_days + 1):
+        _prime_graph_state_for_day(state, day, config)
+        day_cards = _generate_root_decision_cards(state, day, config)
+        counts_by_day[day] = len(day_cards)
+        if not day_cards:
+            roots_by_day[day] = []
+            continue
+        root = day_cards[0]
+        root.id = f"DAY-{day:02d}-Q01"
+        root.parent_card_id = None
+        root.parent_choice_id = None
+        cards[root.id] = root
+        roots_by_day[day] = [root.id]
+        _attach_next_question_cards(root, cards, day=day, question_number=2, total_questions=len(day_cards))
+    for card in cards.values():
+        card.echo_choice_id = select_echo_choice(card, cards).id
+    return cards, roots_by_day, counts_by_day
+
+
+def active_decision_cards(
+    state: SimulationState,
+    day: int,
+    selected_choices: dict[str, str],
+) -> list[DecisionCard]:
+    """Return the currently visible daily questions."""
+    cards: list[DecisionCard] = []
+    question_limit = state.daily_decision_counts.get(day, 0)
+    for root_id in state.daily_decision_roots.get(day, []):
+        card_id: str | None = root_id
+        visited: set[str] = set()
+        while card_id and card_id not in visited and len(cards) < question_limit:
+            visited.add(card_id)
+            card = state.decision_cards.get(card_id)
+            if not card:
+                break
+            cards.append(card)
+            choice_id = selected_choices.get(card.id)
+            if not choice_id:
+                break
+            choice = next((candidate for candidate in card.choices if candidate.id == choice_id), None)
+            card_id = choice.next_card_id if choice else None
+    return cards
+
+
+def decision_progress(
+    state: SimulationState,
+    day: int,
+    selected_choices: dict[str, str],
+) -> DecisionProgress:
+    """Return progress through the day's fixed number of questions."""
+    total_questions = state.daily_decision_counts.get(day, len(state.daily_decision_roots.get(day, [])))
+    visible = 0
+    answered = 0
+    open_card_ids: list[str] = []
+
+    for root_id in state.daily_decision_roots.get(day, []):
+        card_id: str | None = root_id
+        visited: set[str] = set()
+        while card_id and card_id not in visited and visible < total_questions:
+            visited.add(card_id)
+            card = state.decision_cards.get(card_id)
+            if not card:
+                break
+            visible += 1
+            choice_id = selected_choices.get(card.id)
+            if not choice_id:
+                open_card_ids.append(card.id)
+                break
+            answered += 1
+            if answered >= total_questions:
+                break
+            choice = next((candidate for candidate in card.choices if candidate.id == choice_id), None)
+            if not choice or not choice.next_card_id or choice.next_card_id not in state.decision_cards:
+                break
+            card_id = choice.next_card_id
+
+    return DecisionProgress(
+        day=day,
+        total_questions=total_questions,
+        answered_questions=min(answered, total_questions),
+        visible_cards=visible,
+        open_card_ids=open_card_ids,
+    )
+
+
+def select_echo_choice(card: DecisionCard, graph: dict[str, DecisionCard] | None = None) -> DecisionChoice:
+    """Return the benchmark choice ECHO treats as the correct response."""
+    if graph is None and card.echo_choice_id:
+        selected = next((choice for choice in card.choices if choice.id == card.echo_choice_id), None)
+        if selected:
+            return selected
+    return min(
+        card.choices,
+        key=lambda choice: (_choice_path_score(choice, graph), choice.id),
+    )
+
+
+def _choice_path_score(choice: DecisionChoice, graph: dict[str, DecisionCard] | None) -> float:
+    """Score a choice plus its best downstream decision path for ECHO."""
+    effect_rank = {
+        "echo_recommendation": 0,
+        "expedite_event": 1,
+        "protect_critical": 2,
+        "reroute": 3,
+        "split_capacity": 4,
+        "pull_forward": 5,
+        "resequence": 6,
+        "preempt": 7,
+        "defer": 8,
+        "wait": 9,
+    }
+    immediate = (
+        choice.risk_effect * 12
+        + effect_rank.get(choice.immediate_effects.get("type", "note"), 20) * 3
+        + choice.reschedule_effect * 4
+        + choice.cost_effect * 0.08
+    )
+    if not graph or not choice.next_card_id or choice.next_card_id not in graph:
+        return immediate
+    child = graph[choice.next_card_id]
+    return immediate + min(_choice_path_score(child_choice, graph) for child_choice in child.choices) * 0.9
+
+
+def _generate_root_decision_cards(state: SimulationState, day: int, config: GameConfig | None = None) -> list[DecisionCard]:
+    """Generate root cards used as fixed daily decision threads."""
     if config is None:
         config = GameConfig()
         update_state_metrics(state)
@@ -73,8 +214,16 @@ def _decision_rng(state: SimulationState, day: int, config: GameConfig) -> rando
     return random.Random(seed_int)
 
 
-def apply_choice(state: SimulationState, card: DecisionCard, choice: DecisionChoice) -> str:
+def apply_choice(
+    state: SimulationState,
+    card: DecisionCard,
+    choice: DecisionChoice,
+    actor: str = "player",
+    echo_choice: DecisionChoice | None = None,
+) -> str:
     """Apply one selected choice and return a player-facing audit note."""
+    if echo_choice is None:
+        echo_choice = select_echo_choice(card)
     effects = choice.immediate_effects
     effect_type = effects.get("type", "note")
     state.cost += max(0, choice.cost_effect)
@@ -109,8 +258,175 @@ def apply_choice(state: SimulationState, card: DecisionCard, choice: DecisionCho
     if forward_note:
         note = f"{note} {forward_note}"
     state.daily_notes.append(note)
+    state.decision_history.append(
+        DecisionRecord(
+            day=card.day,
+            card_id=card.id,
+            card_title=card.title,
+            actor=actor,
+            choice_id=choice.id,
+            choice_label=choice.label,
+            echo_choice_id=echo_choice.id if echo_choice else None,
+            echo_choice_label=echo_choice.label if echo_choice else None,
+            aligned_with_echo=bool(echo_choice and choice.id == echo_choice.id),
+            note=note,
+        )
+    )
     update_state_metrics(state)
     return note
+
+
+def _prime_graph_state_for_day(state: SimulationState, day: int, config: GameConfig) -> None:
+    """Set deterministic event visibility for graph generation."""
+    state.current_shift = max(0, (day - 1) * config.shifts_per_day)
+    state.active_events = []
+    state.known_warnings = []
+    for event in state.event_timeline:
+        event.started = event.start_shift <= state.current_shift < event.end_shift
+        event.resolved = state.current_shift >= event.end_shift
+        if event.started and not event.resolved:
+            state.active_events.append(event.id)
+        elif (
+            event.has_advance_warning
+            and event.warning_shift is not None
+            and event.warning_shift <= state.current_shift < event.start_shift
+        ):
+            state.known_warnings.append(event.id)
+    update_state_metrics(state)
+
+
+def _attach_next_question_cards(
+    parent: DecisionCard,
+    cards: dict[str, DecisionCard],
+    day: int,
+    question_number: int,
+    total_questions: int,
+) -> None:
+    """Create answer-specific next questions under a parent card."""
+    if question_number > total_questions:
+        return
+    for choice in parent.choices:
+        child_id = f"DAY-{day:02d}-Q{question_number:02d}-{parent.id.split('-', 2)[-1]}-C{choice.id}"
+        child = _next_question_card(parent, choice, child_id, question_number)
+        choice.next_card_id = child.id
+        cards[child.id] = child
+        _attach_next_question_cards(child, cards, day, question_number + 1, total_questions)
+
+
+def _next_question_card(
+    parent: DecisionCard,
+    parent_choice: DecisionChoice,
+    card_id: str,
+    question_number: int,
+) -> DecisionCard:
+    """Build the next daily decision selected by a previous answer."""
+    recommended = _recommended_effect_for_card(parent)
+    event_id = parent_choice.immediate_effects.get("event_id") or next(
+        (target_id for target_id in parent.target_ids if isinstance(target_id, str) and target_id.startswith("EVT-")),
+        None,
+    )
+    title = f"Decision {question_number}: {parent_choice.label}"
+    description = (
+        f"{parent_choice.label} changes how the team handles {parent.title.lower()}. "
+        "Choose the next scheduling response for today."
+    )
+    choices = _next_question_choices(recommended, event_id, question_number)
+    return DecisionCard(
+        id=card_id,
+        day=parent.day,
+        type=parent.type,
+        title=title,
+        description=description,
+        target_ids=list(parent.target_ids),
+        severity=max(1, parent.severity - (1 if question_number > 2 else 0)),
+        choices=choices,
+        parent_card_id=parent.id,
+        parent_choice_id=parent_choice.id,
+    )
+
+
+def _next_question_choices(
+    recommended_effect: str,
+    event_id: str | None,
+    question_number: int,
+) -> list[DecisionChoice]:
+    """Return a compact set of choices for a next-question card."""
+    event_payload = {"event_id": event_id} if event_id else {}
+    risk_bonus = 1 if question_number > 2 else 0
+    recommended_label = _effect_label(recommended_effect)
+    return [
+        DecisionChoice(
+            id="1",
+            label=f"Commit to {recommended_label}",
+            description="Keep the response focused on the highest-leverage work and give it priority through the remaining shifts.",
+            immediate_effects={"type": recommended_effect, **event_payload},
+            risk_effect=-6 + risk_bonus,
+            cost_effect=10 + question_number * 4,
+            reschedule_effect=1,
+        ),
+        DecisionChoice(
+            id="2",
+            label="Broaden the recovery move",
+            description="Use the same response pattern on adjacent work so the related queue does not become tomorrow's constraint.",
+            immediate_effects={"type": "pull_forward", **event_payload},
+            risk_effect=-4 + risk_bonus,
+            cost_effect=14 + question_number * 5,
+            reschedule_effect=2,
+        ),
+        DecisionChoice(
+            id="3",
+            label="Limit churn",
+            description="Take the smallest possible action and preserve the current sequence unless the board gets worse.",
+            immediate_effects={"type": "resequence", **event_payload},
+            risk_effect=-1 + risk_bonus,
+            cost_effect=4,
+            reschedule_effect=1,
+        ),
+        DecisionChoice(
+            id="4",
+            label="Stand down",
+            description="Stop adding interventions today and accept that unresolved pressure may affect later work.",
+            immediate_effects={"type": "wait", **event_payload},
+            risk_effect=3 + question_number,
+            cost_effect=0,
+            reschedule_effect=0,
+        ),
+    ]
+
+
+def _recommended_effect_for_card(card: DecisionCard) -> str:
+    """Choose the response ECHO should prefer for a card category."""
+    if card.type in {DecisionType.MACHINE_DOWN, DecisionType.ALTERNATE_ROUTING}:
+        return "reroute"
+    if card.type in {
+        DecisionType.MISSING_MATERIAL,
+        DecisionType.INSPECTION_DELAY,
+        DecisionType.ENGINEERING_HOLD,
+    }:
+        return "expedite_event"
+    if card.type in {DecisionType.BOTTLENECK, DecisionType.QUEUE_CONGESTION}:
+        return "split_capacity"
+    if card.type == DecisionType.IDLE_WORKCENTER:
+        return "pull_forward"
+    if card.type == DecisionType.ECHO_RECOMMENDATION:
+        return "echo_recommendation"
+    return "protect_critical"
+
+
+def _effect_label(effect_type: str) -> str:
+    """Return short player-facing text for a decision effect."""
+    return {
+        "echo_recommendation": "ECHO's recommendation",
+        "expedite_event": "expedite recovery",
+        "protect_critical": "critical-path protection",
+        "reroute": "alternate routing",
+        "split_capacity": "split capacity",
+        "pull_forward": "pull-forward work",
+        "resequence": "resequence queues",
+        "preempt": "preemption",
+        "defer": "deferred work",
+        "wait": "waiting",
+    }.get(effect_type, "the response")
 
 
 def _visible_events(state: SimulationState) -> list[Event]:

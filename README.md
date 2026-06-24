@@ -19,7 +19,7 @@ The goal is to complete all jobs before the deadline while balancing:
 - Rework
 - Cascading disruption risk
 
-Daily decisions are intentionally limited. You usually cannot fix everything. A strong response can reduce future related disruption, while waiting or deferring can create follow-on risks later in the timeline.
+Daily decisions are prepared at game start. Each choice determines the next daily question, but the number shown for the day is exact. If the day has two decisions, the player answers two questions. A strong response can reduce future related disruption, while waiting or deferring can create follow-on risks later in the timeline.
 
 ## Run The Browser Game
 
@@ -43,7 +43,7 @@ python -m echo_adventure --port 8766
 
 Use a seed when comparing changes. The same seed should generate the same scenario and event timeline unless scenario-generation logic changes.
 
-The demo mode is a five-day run with five jobs, shorter subjob chains, no random disruptions, and one or two decisions per day. It is intended to be finishable in five minutes or less.
+The demo mode is a five-day run with five jobs, shorter subjob chains, no random disruptions, and two or three decisions per day. It is intended to be finishable in five minutes or less.
 
 With a fixed seed:
 
@@ -64,8 +64,8 @@ The UI is served by Python's standard-library HTTP server. There is no frontend 
 The browser dashboard has three main responsibilities:
 
 - Show current project position and operating-board tables.
-- Force completion of daily decision cards before `End Day`.
-- Reveal the daily summary and final ECHO comparison.
+- Force completion of the day's decision cards before `End Day`.
+- Reveal the daily summary, final ECHO comparison, and player-vs-ECHO decision audit.
 
 The Operating Board tabs are:
 
@@ -76,7 +76,7 @@ The Operating Board tabs are:
 - `Critical Path`: subjobs most likely to drive final completion timing.
 - `Risk Register`: active warnings, active disruptions, blocked subjobs, and chained event sources.
 
-Daily decisions appear as a modal. The modal can be dismissed so the main board remains inspectable, but all decisions must be submitted before the day can advance.
+Daily decisions appear as a modal. The modal can be dismissed so the main board remains inspectable, but all of the day's questions must be submitted before the day can advance.
 
 ## Simulation Concepts
 
@@ -174,7 +174,7 @@ echo_adventure/
   scenario_generator.py  Scenario construction and validation
   simulation.py          Shift/day advancement and job processing
   events.py              Event timeline generation, event handlers, cascades
-  decisions.py           Daily decision-card generation and choice effects
+  decisions.py           Daily decision preparation, next-question selection, and choice effects
   metrics.py             Snapshot, risk, critical path, and status refresh
   schedulers/
     manual.py            Player-side scheduler behavior
@@ -204,7 +204,7 @@ Returns the complete UI state payload:
 - Workcenters grouped by shop
 - Critical path rows
 - Risk register rows
-- Current daily decision cards
+- Current daily decision cards and fixed daily progress
 - Last daily summary
 - Final reveal, when the run is over
 
@@ -222,20 +222,20 @@ The seed may be empty to use a random seed.
 
 ### `POST /api/choice`
 
-Applies one daily decision choice.
+Applies one daily decision choice and reveals the next daily question when one remains.
 
 Request:
 
 ```json
 {
-  "cardId": "DAY-01-DEC-1",
+  "cardId": "DAY-01-ROOT-01",
   "choiceId": "2"
 }
 ```
 
 ### `POST /api/advance`
 
-Advances the run by one day. The server rejects this if any current daily decision has not been answered.
+Advances the run by one day. The server rejects this if any of the day's questions has not been answered.
 
 ## Development Notes
 

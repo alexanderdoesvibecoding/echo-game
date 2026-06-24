@@ -152,6 +152,7 @@ class DecisionChoice:
     risk_effect: int
     cost_effect: int
     reschedule_effect: int
+    next_card_id: str | None = None
 
 
 @dataclass
@@ -166,6 +167,36 @@ class DecisionCard:
     target_ids: list[str]
     severity: int
     choices: list[DecisionChoice]
+    echo_choice_id: str | None = None
+    parent_card_id: str | None = None
+    parent_choice_id: str | None = None
+
+
+@dataclass
+class DecisionRecord:
+    """A persisted audit entry for a player or ECHO decision."""
+
+    day: int
+    card_id: str
+    card_title: str
+    actor: str
+    choice_id: str
+    choice_label: str
+    echo_choice_id: str | None
+    echo_choice_label: str | None
+    aligned_with_echo: bool
+    note: str
+
+
+@dataclass
+class DecisionProgress:
+    """Progress through a day's fixed number of decision questions."""
+
+    day: int
+    total_questions: int
+    answered_questions: int
+    visible_cards: int
+    open_card_ids: list[str]
 
 
 @dataclass
@@ -201,6 +232,9 @@ class Scenario:
     dependencies: dict[str, list[str]]
     event_timeline: list[Event]
     deadline_shift: int
+    decision_cards: dict[str, DecisionCard] = field(default_factory=dict)
+    daily_decision_roots: dict[int, list[str]] = field(default_factory=dict)
+    daily_decision_counts: dict[int, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -216,6 +250,9 @@ class SimulationState:
     pieces: dict[str, PuzzlePiece]
     jobs: dict[str, Job]
     event_timeline: list[Event]
+    decision_cards: dict[str, DecisionCard] = field(default_factory=dict)
+    daily_decision_roots: dict[int, list[str]] = field(default_factory=dict)
+    daily_decision_counts: dict[int, int] = field(default_factory=dict)
     current_shift: int = 0
     active_events: list[str] = field(default_factory=list)
     known_warnings: list[str] = field(default_factory=list)
@@ -233,6 +270,8 @@ class SimulationState:
     idle_blocked_time: int = 0
     idle_disrupted_time: int = 0
     daily_notes: list[str] = field(default_factory=list)
+    decision_history: list[DecisionRecord] = field(default_factory=list)
+    echo_benchmark: bool = False
 
     @property
     def current_day(self) -> int:

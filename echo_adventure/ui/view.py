@@ -754,7 +754,7 @@ INDEX_HTML = r"""<!doctype html>
         <h1>Shipyard Scheduler Choose Your Own Adventure Game</h1>
         <div class="status-line">
           <span class="badge" id="dayBadge">Day</span>
-          <span class="badge warn" id="decisionProgress">0/0 Daily Decisions Handled</span>
+          <span class="badge warn" id="decisionProgress">0/0 Daily Questions Complete</span>
         </div>
       </div>
       <div class="controls">
@@ -820,6 +820,7 @@ INDEX_HTML = r"""<!doctype html>
         <div class="split">
           <div class="reveal-panel"><h3>Metric Comparison</h3><table id="finalTable"></table></div>
           <div class="reveal-panel"><h3>Outcome Drivers</h3><ul class="notes" id="finalNotes"></ul></div>
+          <div class="reveal-panel"><h3>Decision Audit</h3><table id="decisionAuditTable"></table></div>
         </div>
       </section>
     </div>
@@ -1087,12 +1088,16 @@ INDEX_HTML = r"""<!doctype html>
       renderFinalModal();
     }
 
-    function selectedDecisionCount() {
-      return state ? state.decisions.filter(card => card.selectedChoice).length : 0;
+    function decisionProgress() {
+      if (!state) {
+        return { completed: 0, total: 0, visibleCards: 0, openCardIds: [] };
+      }
+      return state.decisionProgress || { completed: 0, total: 0, visibleCards: 0, openCardIds: [] };
     }
 
     function readyToAdvance() {
-      return Boolean(state && !state.gameOver && selectedDecisionCount() === state.decisions.length);
+      const progress = decisionProgress();
+      return Boolean(state && !state.gameOver && (progress.total === 0 || progress.completed === progress.total));
     }
 
     function decisionPromptKey() {
@@ -1100,7 +1105,8 @@ INDEX_HTML = r"""<!doctype html>
       const nextCard = state.decisions.find(card => !card.selectedChoice);
       // A dismissed decision modal should stay dismissed only until the next
       // unresolved card appears or the day's completion state changes.
-      return `${state.day}:${selectedDecisionCount()}:${nextCard ? nextCard.id : "complete"}`;
+      const progress = decisionProgress();
+      return `${state.day}:${progress.completed}:${progress.visibleCards}:${nextCard ? nextCard.id : "complete"}`;
     }
 
     function maybeAutoOpenDecisionModal() {
@@ -1271,6 +1277,22 @@ INDEX_HTML = r"""<!doctype html>
       `;
       body.scrollTop = 0;
       notes.innerHTML = (final.explanation || []).map(note => `<li>${escapeHtml(note)}</li>`).join("");
+      const audit = document.getElementById("finalModalAudit");
+      const auditRows = (final.decisionAudit || []).slice(0, 12).map(row => `
+        <tr>
+          <td>Day ${row.day}</td>
+          <td>${escapeHtml(row.playerChoice)}</td>
+          <td>${escapeHtml(row.echoChoice)}</td>
+          <td>${row.matched ? "Matched" : "Different"}</td>
+        </tr>
+      `).join("");
+      if (audit) audit.innerHTML = `
+        <h3>Decision Audit</h3>
+        <table>
+          <thead><tr><th>Day</th><th>Player</th><th>ECHO</th><th>Result</th></tr></thead>
+          <tbody>${auditRows || `<tr><td colspan="4">No decisions recorded</td></tr>`}</tbody>
+        </table>
+      `;
     }
 
     function renderPieceModal() {
@@ -1475,9 +1497,11 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function renderDecisions() {
-      const chosenCount = state.decisions.filter(card => card.selectedChoice).length;
-      const totalCount = state.decisions.length;
+      const progressState = decisionProgress();
+      const chosenCount = progressState.completed;
+      const totalCount = progressState.total;
       const remainingCount = Math.max(0, totalCount - chosenCount);
+      const openCount = (progressState.openCardIds || []).length;
       const progress = $("decisionProgress");
       const decisionBtn = $("decisionBtn");
       const advanceBtn = $("advanceBtn");
@@ -1490,10 +1514,10 @@ INDEX_HTML = r"""<!doctype html>
         return;
       }
 
-      progress.textContent = `${chosenCount}/${totalCount} Daily Decisions Handled`;
+      progress.textContent = `${chosenCount}/${totalCount} Daily Questions Complete`;
       progress.className = `badge ${remainingCount ? "warn" : "good"}`;
       decisionBtn.disabled = false;
-      decisionBtn.textContent = remainingCount ? `Daily Decisions (${remainingCount})` : "Daily Decisions";
+      decisionBtn.textContent = openCount ? `Daily Decisions (${openCount})` : "Daily Decisions";
       advanceBtn.disabled = !readyToAdvance();
     }
 
@@ -1509,11 +1533,10 @@ INDEX_HTML = r"""<!doctype html>
         return;
       }
 
-      const chosenCount = selectedDecisionCount();
-      const totalCount = state.decisions.length;
+      const progressState = decisionProgress();
       const nextCard = state.decisions.find(card => !card.selectedChoice);
       overlay.classList.add("active");
-      subtitle.textContent = `${chosenCount}/${totalCount} responses selected`;
+      subtitle.textContent = `${progressState.completed}/${progressState.total} daily questions complete`;
 
       if (nextCard) {
         // Only one open card is shown at a time. Submitting it asks the server
@@ -1598,6 +1621,13 @@ INDEX_HTML = r"""<!doctype html>
         ["Schedule risk", Math.round(p.scheduleRisk), Math.round(a.scheduleRisk)]
       ]);
       $("finalNotes").innerHTML = final.explanation.map(note => `<li>${escapeHtml(note)}</li>`).join("");
+      table($("decisionAuditTable"), ["Day", "Decision", "Player", "ECHO", "Result"], (final.decisionAudit || []).map(row => [
+        row.day,
+        escapeHtml(row.card),
+        escapeHtml(row.playerChoice),
+        escapeHtml(row.echoChoice),
+        badge(row.matched ? "Matched" : "Different", row.matched ? "good" : "warn")
+      ]));
     }
 
     function table(el, headers, rows) {
@@ -1762,6 +1792,7 @@ INDEX_HTML = r"""<!doctype html>
         <h3>Outcome Drivers</h3>
         <ul class="notes" id="finalModalNotes"></ul>
       </div>
+      <div id="finalModalAudit"></div>
       <div class="modal-footer">
         <button id="closeFinalBtn" class="primary" onclick="closeFinalModal()">Close</button>
       </div>
