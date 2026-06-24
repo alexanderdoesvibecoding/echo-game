@@ -123,14 +123,19 @@ def _generate_shops_and_workcenters(
         8: (2, 3),    # Tooling Annex - small specialized
     }
     
-    for index, (name, capabilities) in enumerate(SHOP_BLUEPRINTS[: config.shop_count], start=1):
+    for zero_index in range(config.shop_count):
+        index = zero_index + 1
+        blueprint_index = zero_index % len(SHOP_BLUEPRINTS)
+        blueprint_cycle = zero_index // len(SHOP_BLUEPRINTS)
+        name, capabilities = SHOP_BLUEPRINTS[blueprint_index]
+        display_name = name if blueprint_cycle == 0 else f"{name} Extension {blueprint_cycle + 1}"
         shop_id = f"SHOP-{index:02d}"
         # min_count, max_count = shop_size_factors.get(index - 1, (3, 4))
         # count = max(rng.randint(min_count, max_count), len(capabilities))
         configured_min = config.min_workcenters_per_shop
         configured_max = config.max_workcenters_per_shop
 
-        blueprint_min, blueprint_max = shop_size_factors.get(index - 1, (3, 4))
+        blueprint_min, blueprint_max = shop_size_factors.get(blueprint_index, (3, 4))
 
         min_count = max(configured_min, min(blueprint_min, configured_max))
         max_count = min(configured_max, max(blueprint_max, min_count))
@@ -153,10 +158,17 @@ def _generate_shops_and_workcenters(
                 efficiency=round(rng.uniform(0.85, 1.2), 2),
             )
             workcenter_ids.append(wc_id)
+        shop_capabilities = sorted(
+            {
+                capability
+                for workcenter_id in workcenter_ids
+                for capability in workcenters[workcenter_id].capabilities
+            }
+        )
         shops[shop_id] = Shop(
             id=shop_id,
-            name=name,
-            capabilities=list(capabilities),
+            name=display_name,
+            capabilities=shop_capabilities,
             workcenter_ids=workcenter_ids,
         )
     return shops, workcenters
@@ -174,9 +186,11 @@ def _generate_pieces_and_jobs(
     shop_ids = list(shops.keys())
     for piece_index in range(1, config.piece_count + 1):
         piece_id = f"PIECE-{piece_index:02d}"
-        piece_shop_count = rng.randint(2, 5)
+        max_piece_shop_count = min(5, len(shop_ids))
+        min_piece_shop_count = min(2, max_piece_shop_count)
+        piece_shop_count = rng.randint(min_piece_shop_count, max_piece_shop_count)
         if rng.random() < 0.32:
-            piece_shop_count = 2
+            piece_shop_count = min_piece_shop_count
         piece_shops = rng.sample(shop_ids, k=piece_shop_count)
         dominant_shop = rng.choice(piece_shops)
         job_count = rng.randint(config.min_jobs_per_piece, config.max_jobs_per_piece)
@@ -237,9 +251,12 @@ def _generate_pieces_and_jobs(
             previous_job_ids.append(job_id)
             piece_job_ids.append(job_id)
             previous_shop_id = shop_id
+        base_piece_name = PIECE_NAMES[(piece_index - 1) % len(PIECE_NAMES)]
+        piece_name_cycle = (piece_index - 1) // len(PIECE_NAMES)
+        piece_name = base_piece_name if piece_name_cycle == 0 else f"{base_piece_name} {piece_name_cycle + 1}"
         pieces[piece_id] = PuzzlePiece(
             id=piece_id,
-            name=f"Job {piece_index:02d} - {PIECE_NAMES[piece_index - 1]}",
+            name=f"Job {piece_index:02d} - {piece_name}",
             job_ids=piece_job_ids,
             total_job_count=len(piece_job_ids),
         )

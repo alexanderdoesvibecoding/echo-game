@@ -199,12 +199,6 @@ INDEX_HTML = r"""<!doctype html>
       border-color: #3a4352;
     }
 
-    html[data-theme="dark"] .settings-warning {
-      background: #3a2a1a;
-      border-color: #7a5a2a;
-      color: #f0ad4e;
-    }
-
     html[data-theme="dark"] .modal-error {
       background: #2a1a1a;
       border-color: #5a3a3a;
@@ -284,12 +278,6 @@ INDEX_HTML = r"""<!doctype html>
       display: grid;
       gap: 12px;
     }
-    .settings-fields {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-    }
-    .settings-fields label,
     .settings-form label {
       display: grid;
       gap: 5px;
@@ -297,19 +285,9 @@ INDEX_HTML = r"""<!doctype html>
       font-size: 12px;
       font-weight: 700;
     }
-    .settings-fields input,
-    .settings-form input,
     .settings-form select {
       width: 100%;
       min-width: 0;
-    }
-    .settings-warning {
-      padding: 9px 10px;
-      border: 1px solid #e0b96a;
-      border-radius: 8px;
-      background: #fff7e2;
-      color: #805b13;
-      font-weight: 700;
     }
     .modal-error {
       padding: 9px 10px;
@@ -399,6 +377,23 @@ INDEX_HTML = r"""<!doctype html>
     .bar.good { background: var(--green); }
     .bar.info { background: var(--teal); }
     .bar.muted { background: var(--line); }
+    #piecesTable th:nth-child(2),
+    #piecesTable td:nth-child(2) {
+      width: 108px;
+    }
+    #piecesTable th:nth-child(3),
+    #piecesTable td:nth-child(3) {
+      width: 128px;
+    }
+    #piecesTable td:nth-child(2) .badge {
+      width: 92px;
+      justify-content: center;
+      white-space: nowrap;
+    }
+    #piecesTable .progress {
+      width: 100px;
+      max-width: 100%;
+    }
 
     .tabbar {
       display: flex;
@@ -576,6 +571,14 @@ INDEX_HTML = r"""<!doctype html>
     }
     .choice.selected { border-color: var(--green); background: #eef8f0; }
     .choice small { display: block; color: var(--muted); margin-top: 3px; }
+    .mode-choices {
+      display: grid;
+      gap: 8px;
+    }
+    .mode-choices .choice {
+      width: 100%;
+      margin: 0;
+    }
     .decision-modal {
       max-width: 680px;
     }
@@ -860,46 +863,23 @@ INDEX_HTML = r"""<!doctype html>
       <div class="modal-titlebar">
         <div>
           <h1 id="newRunModalTitle">New Game</h1>
-          <div class="subtle">Choose a preset, seed, and scenario size.</div>
+          <div class="subtle">Choose a preset.</div>
         </div>
         <button id="closeNewRunModalBtn" class="icon-button" title="Close new run settings" onclick="closeNewRunModal()">×</button>
       </div>
       <div class="modal-body">
         <div class="settings-form">
-          <label>
-            Preset
-            <select id="runPresetSelect">
-              <option value="normal">Normal</option>
-              <option value="demo">Demo</option>
-              <option value="custom">Custom</option>
-            </select>
-          </label>
-          <label>
-            Seed
-            <input id="runSeedInput" inputmode="numeric" placeholder="Random">
-          </label>
-          <div id="settingsWarning" class="settings-warning hidden">
-            Editing these fields can make the game unplayable or impossible to finish.
+          <div class="mode-choices">
+            <button id="normalModeBtn" class="choice" type="button" onclick="selectRunMode('normal')">
+              <strong>Normal</strong>
+              <small>Full project run with the standard schedule length, job count, and disruption mix.</small>
+            </button>
+            <button id="demoModeBtn" class="choice" type="button" onclick="selectRunMode('demo')">
+              <strong>Demo</strong>
+              <small>Short five-day run with fewer jobs and faster pacing.</small>
+            </button>
           </div>
           <div id="newRunError" class="modal-error hidden"></div>
-          <div class="settings-fields">
-            <label>
-              Days
-              <input id="runDaysInput" type="number" min="1" max="90">
-            </label>
-            <label>
-              Jobs
-              <input id="runPiecesInput" type="number" min="1" max="30">
-            </label>
-            <label>
-              Min Subjobs per Job
-              <input id="runMinJobsInput" type="number" min="1" max="20">
-            </label>
-            <label>
-              Max Subjobs per Job
-              <input id="runMaxJobsInput" type="number" min="1" max="20">
-            </label>
-          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -918,14 +898,10 @@ INDEX_HTML = r"""<!doctype html>
     let decisionModalVisible = false;
     let newRunModalVisible = false;
     let settingsMenuOpen = false;
-    let settingsEdited = false;
+    let selectedRunMode = "normal";
     let finalModalDismissed = false;
     let dismissedDecisionKey = null;
     let suppressNextDecisionPrompt = false;
-    const runPresets = {
-      normal: { totalDays: 15, pieceCount: 15, minJobsPerPiece: 5, maxJobsPerPiece: 10 },
-      demo: { totalDays: 5, pieceCount: 5, minJobsPerPiece: 1, maxJobsPerPiece: 2 }
-    };
 
     const $ = (id) => document.getElementById(id);
     const fmtPct = (value) => `${Math.round((value || 0) * 100)}%`;
@@ -978,27 +954,9 @@ INDEX_HTML = r"""<!doctype html>
 
     async function startNewRun() {
       try {
-        clampRunSettings();
-        const minJobs = Number($("runMinJobsInput").value);
-        const maxJobs = Number($("runMaxJobsInput").value);
-        if (minJobs > maxJobs) {
-          showNewRunError("Minimum subjobs per job cannot be greater than maximum subjobs per job.");
-          return;
-        }
-        const seed = $("runSeedInput").value.trim();
-        const mode = $("runPresetSelect").value;
         state = await api("/api/new", {
           method: "POST",
-          body: JSON.stringify({
-            seed,
-            mode,
-            settings: {
-              total_days: $("runDaysInput").value,
-              piece_count: $("runPiecesInput").value,
-              min_jobs_per_piece: $("runMinJobsInput").value,
-              max_jobs_per_piece: $("runMaxJobsInput").value
-            }
-          })
+          body: JSON.stringify({ mode: selectedRunMode })
         });
         pendingChoice = null;
         dismissedDecisionKey = null;
@@ -1220,12 +1178,8 @@ INDEX_HTML = r"""<!doctype html>
     function openNewRunModal() {
       closeSettingsMenu();
       newRunModalVisible = true;
-      settingsEdited = false;
       showNewRunError("");
-      const mode = state ? state.mode || "normal" : "normal";
-      $("runPresetSelect").value = mode;
-      applyRunSettings(state && state.settings ? state.settings : runPresets[mode]);
-      $("runSeedInput").value = "";
+      selectedRunMode = state ? state.mode || "normal" : "normal";
       renderNewRunModal();
     }
 
@@ -1237,56 +1191,21 @@ INDEX_HTML = r"""<!doctype html>
 
     function renderNewRunModal() {
       const overlay = $("newRunModalOverlay");
-      const warning = $("settingsWarning");
-      if (!overlay || !warning) return;
+      if (!overlay) return;
       overlay.classList.toggle("active", newRunModalVisible);
-      warning.classList.toggle("hidden", !settingsEdited);
+      ["normal", "demo"].forEach(mode => {
+        const button = $(`${mode}ModeBtn`);
+        if (!button) return;
+        const selected = selectedRunMode === mode;
+        button.classList.toggle("selected", selected);
+        button.setAttribute("aria-pressed", selected ? "true" : "false");
+      });
     }
 
-    function applyRunSettings(settings) {
-      $("runDaysInput").value = settings.totalDays;
-      $("runPiecesInput").value = settings.pieceCount;
-      $("runMinJobsInput").value = settings.minJobsPerPiece;
-      $("runMaxJobsInput").value = settings.maxJobsPerPiece;
-      clampRunSettings();
-    }
-
-    function applyRunPreset() {
-      const preset = $("runPresetSelect").value;
-      if (preset === "custom") {
-        settingsEdited = true;
-        renderNewRunModal();
-        return;
-      }
-      applyRunSettings(runPresets[preset] || runPresets.normal);
-      settingsEdited = false;
-      renderNewRunModal();
-    }
-
-    function markSettingsEdited() {
-      clampRunInput(this);
-      $("runPresetSelect").value = "custom";
-      settingsEdited = true;
+    function selectRunMode(mode) {
+      selectedRunMode = mode === "demo" ? "demo" : "normal";
       showNewRunError("");
       renderNewRunModal();
-    }
-
-    function clampRunInput(input) {
-      if (!input || input.value === "") return;
-      const min = Number(input.min);
-      const max = Number(input.max);
-      let value = Number(input.value);
-      if (!Number.isFinite(value)) {
-        input.value = input.min || "";
-        return;
-      }
-      if (Number.isFinite(min) && value < min) value = min;
-      if (Number.isFinite(max) && value > max) value = max;
-      input.value = String(Math.trunc(value));
-    }
-
-    function clampRunSettings() {
-      ["runDaysInput", "runPiecesInput", "runMinJobsInput", "runMaxJobsInput"].forEach(id => clampRunInput($(id)));
     }
 
     function renderSummaryModal() {
@@ -1605,7 +1524,7 @@ INDEX_HTML = r"""<!doctype html>
               <div class="decision-title">
                 <div>
                   <h2>${escapeHtml(nextCard.title)}</h2>
-                  <div class="subtle">${escapeHtml(nextCard.type)} | Severity ${nextCard.severity}</div>
+                  <div class="subtle">${escapeHtml(nextCard.type)} | ${escapeHtml(decisionUrgencyLabel(nextCard.severity))}</div>
                 </div>
                 <span class="badge warn">Open</span>
               </div>
@@ -1708,6 +1627,14 @@ INDEX_HTML = r"""<!doctype html>
       return "info";
     }
 
+    function decisionUrgencyLabel(severity) {
+      if (severity >= 5) return "Severe urgency";
+      if (severity >= 4) return "High urgency";
+      if (severity >= 3) return "Elevated urgency";
+      if (severity >= 2) return "Moderate urgency";
+      return "Low urgency";
+    }
+
     function jobLabel(value, hasRework) {
       const label = escapeHtml(String(value || "-"));
       if (!hasRework || label === "-") return label;
@@ -1735,10 +1662,6 @@ INDEX_HTML = r"""<!doctype html>
     $("openNewRunModalBtn").addEventListener("click", openNewRunModal);
     $("decisionBtn").addEventListener("click", openDecisionModal);
     $("advanceBtn").addEventListener("click", prepareAdvanceDay);
-    $("runPresetSelect").addEventListener("change", applyRunPreset);
-    ["runDaysInput", "runPiecesInput", "runMinJobsInput", "runMaxJobsInput"].forEach(id => {
-      $(id).addEventListener("input", markSettingsEdited);
-    });
     document.addEventListener("click", (e) => {
       const finalOverlay = document.getElementById("finalModalOverlay");
       const pieceOverlay = document.getElementById("pieceModalOverlay");

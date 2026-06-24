@@ -6,6 +6,48 @@ from dataclasses import dataclass
 import random
 
 
+GAME_PRESETS: dict[str, dict[str, object]] = {
+    "normal": {
+        # Days
+        "total_days": 15,
+        # Jobs
+        "piece_count": 15,
+        # Subjobs per job
+        "min_jobs_per_piece": 5,
+        "max_jobs_per_piece": 10,
+        # Shops
+        "shop_count": 9,
+        # Work centers per shop
+        "min_workcenters_per_shop": 1,
+        "max_workcenters_per_shop": 5,
+    },
+    "demo": {
+        # Days
+        "total_days": 5,
+        # Jobs
+        "piece_count": 5,
+        # Subjobs per job
+        "min_jobs_per_piece": 3,
+        "max_jobs_per_piece": 5,
+        # Shops
+        "shop_count": 9,
+        # Work centers per shop
+        "min_workcenters_per_shop": 1,
+        "max_workcenters_per_shop": 5,
+        # Demo pacing knobs
+        "min_decisions_per_day": 1,
+        "max_decisions_per_day": 2,
+        "max_job_duration_shifts": 5,
+        "setup_time_choices": (0,),
+        "transport_delay_probability": 0.0,
+        "min_base_events": 0,
+        "max_base_events": 0,
+        "min_extra_quality_rework_events": 0,
+        "max_extra_quality_rework_events": 1,
+    },
+}
+
+
 @dataclass(frozen=True)
 class GameConfig:
     """Tunable game/scenario parameters shared by the UI and tests."""
@@ -38,26 +80,24 @@ class GameConfig:
         return self.total_days * self.shifts_per_day
 
     @classmethod
+    def for_preset(
+        cls,
+        preset: str,
+        seed: int | None = None,
+        use_color: bool = True,
+        debug: bool = False,
+    ) -> "GameConfig":
+        """Return a config built from one editable game preset."""
+        values = GAME_PRESETS.get(preset)
+        if values is None:
+            raise ValueError(f"Unknown game preset: {preset}")
+        _validate_preset_values(preset, values)
+        return cls(seed=seed, use_color=use_color, debug=debug, **values)
+
+    @classmethod
     def demo(cls, seed: int | None = None, use_color: bool = True, debug: bool = False) -> "GameConfig":
         """Return a short scenario that can be completed in one sitting."""
-        return cls(
-            total_days=5,
-            piece_count=5,
-            min_decisions_per_day=1,
-            max_decisions_per_day=2,
-            min_jobs_per_piece=3,
-            max_jobs_per_piece=5,
-            max_job_duration_shifts=5,
-            setup_time_choices=(0,),
-            transport_delay_probability=0.0,
-            min_base_events=0,
-            max_base_events=0,
-            min_extra_quality_rework_events=0,
-            max_extra_quality_rework_events=1,
-            seed=seed,
-            use_color=use_color,
-            debug=debug,
-        )
+        return cls.for_preset("demo", seed=seed, use_color=use_color, debug=debug)
 
 
 def resolve_seed(seed: int | None) -> int:
@@ -65,3 +105,27 @@ def resolve_seed(seed: int | None) -> int:
     if seed is not None:
         return seed
     return random.SystemRandom().randint(100_000, 999_999_999)
+
+
+def _validate_preset_values(preset: str, values: dict[str, object]) -> None:
+    """Fail fast when an edited preset has an impossible size range."""
+    positive_fields = [
+        "total_days",
+        "piece_count",
+        "shop_count",
+        "min_jobs_per_piece",
+        "max_jobs_per_piece",
+        "min_workcenters_per_shop",
+        "max_workcenters_per_shop",
+    ]
+    for field in positive_fields:
+        if int(values[field]) < 1:
+            raise ValueError(f"{preset} preset {field} must be at least 1.")
+
+    ordered_ranges = [
+        ("min_jobs_per_piece", "max_jobs_per_piece", "subjobs per job"),
+        ("min_workcenters_per_shop", "max_workcenters_per_shop", "work centers per shop"),
+    ]
+    for minimum, maximum, label in ordered_ranges:
+        if int(values[minimum]) > int(values[maximum]):
+            raise ValueError(f"{preset} preset minimum {label} cannot exceed maximum {label}.")

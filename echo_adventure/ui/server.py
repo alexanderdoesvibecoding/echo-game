@@ -7,7 +7,6 @@ import copy
 import json
 import math
 import threading
-from dataclasses import replace
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -39,7 +38,6 @@ class GameSession:
         self,
         seed: int | None = None,
         demo: bool = False,
-        settings: dict[str, Any] | None = None,
         mode: str | None = None,
     ) -> None:
         # RLock allows helper methods called inside locked public methods to
@@ -48,10 +46,9 @@ class GameSession:
         # Resolve random seeds immediately so the UI can always display and
         # replay the exact generated scenario.
         self.seed = resolve_seed(seed)
-        self.demo = demo
-        base_config = GameConfig.demo(seed=self.seed) if demo else GameConfig(seed=self.seed)
-        self.config = _apply_config_settings(base_config, settings or {})
         self.mode = mode or ("demo" if demo else "normal")
+        self.demo = self.mode == "demo"
+        self.config = GameConfig.for_preset(self.mode, seed=self.seed)
         # Both schedulers share a scenario but mutate independent state copies.
         self.scenario = generate_scenario(self.config)
         self.player_state = initialize_state(self.scenario, self.config.shifts_per_day)
@@ -83,7 +80,6 @@ class GameSession:
             payload: dict[str, Any] = {
                 "seed": self.seed,
                 "mode": self.mode,
-                "settings": _settings_payload(self.config),
                 "scenarioId": self.scenario.scenario_id,
                 "gameOver": game_over,
                 "day": self.player_state.current_day,
@@ -507,18 +503,13 @@ class GameRequestHandler(BaseHTTPRequestHandler):
             # create/read a run, apply decisions, then advance days.
             if parsed.path == "/api/new":
                 data = self._read_json()
-                seed = data.get("seed")
-                if seed in ("", None):
-                    seed = None
-                else:
-                    seed = int(seed)
                 mode = str(data.get("mode", "normal")).lower()
-                settings = data.get("settings")
+                if mode not in {"normal", "demo"}:
+                    raise ValueError("Choose either normal or demo mode.")
                 type(self).session = GameSession(
-                    seed=seed,
+                    seed=None,
                     demo=mode == "demo",
-                    settings=settings if isinstance(settings, dict) else None,
-                    mode=mode if mode in {"normal", "demo", "custom"} else None,
+                    mode=mode,
                 )
                 self._send_json(type(self).session.state_payload())
             elif parsed.path == "/api/choice":
@@ -619,42 +610,6 @@ def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: Simu
         "finalItemCompleted": snapshot.final_item_completed,
         "deadlineMet": snapshot.deadline_met,
         "completion": day_shift(completion_shift, shifts_per_day) if completion_shift else None,
-    }
-
-
-def _apply_config_settings(config: GameConfig, settings: dict[str, Any]) -> GameConfig:
-    """Apply user-entered new-run settings to a preset config."""
-    values: dict[str, int] = {}
-    bounds = {
-        "total_days": (1, 90),
-        "piece_count": (1, 30),
-        "min_jobs_per_piece": (1, 20),
-        "max_jobs_per_piece": (1, 20),
-    }
-    for key, (minimum, maximum) in bounds.items():
-        if key not in settings or settings[key] in ("", None):
-            continue
-        try:
-            value = int(settings[key])
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"{key.replace('_', ' ').title()} must be a whole number.") from exc
-        if value < minimum or value > maximum:
-            raise ValueError(f"{key.replace('_', ' ').title()} must be between {minimum} and {maximum}.")
-        values[key] = value
-    min_jobs = values.get("min_jobs_per_piece", config.min_jobs_per_piece)
-    max_jobs = values.get("max_jobs_per_piece", config.max_jobs_per_piece)
-    if min_jobs > max_jobs:
-                raise ValueError("Minimum subjobs per job cannot be greater than maximum subjobs per job.")
-    return replace(config, **values)
-
-
-def _settings_payload(config: GameConfig) -> dict[str, int]:
-    """Return editable new-run settings for the browser modal."""
-    return {
-        "totalDays": config.total_days,
-        "pieceCount": config.piece_count,
-        "minJobsPerPiece": config.min_jobs_per_piece,
-        "maxJobsPerPiece": config.max_jobs_per_piece,
     }
 
 
