@@ -1214,6 +1214,39 @@ INDEX_HTML = r"""<!doctype html>
       renderNewRunModal();
     }
 
+    function renderPastDueJobs(pastDueJobs) {
+      if (!pastDueJobs || pastDueJobs.length === 0) {
+        return `<p class="subtle">No past due subjobs.</p>`;
+      }
+
+      return `
+        <table>
+          <thead>
+            <tr>
+              <th>Subjob</th>
+              <th>Job</th>
+              <th>Shop</th>
+              <th>Due</th>
+              <th>Late</th>
+              <th>Remaining</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pastDueJobs.map(job => `
+              <tr>
+                <td>${escapeHtml(job.id)}</td>
+                <td>${escapeHtml(job.piece)}</td>
+                <td>${escapeHtml(job.shop)}</td>
+                <td>${escapeHtml(job.due)}</td>
+                <td>${job.daysLate} day${job.daysLate === 1 ? "" : "s"}</td>
+                <td>${job.remaining} shift${job.remaining === 1 ? "" : "s"}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
     function renderSummaryModal() {
       const payload = pendingAdvanceState || state;
       const summary = payload.lastSummary;
@@ -1240,6 +1273,9 @@ INDEX_HTML = r"""<!doctype html>
             <tr><td>Projected completion</td><td>${summary.projectedCompletion}</td></tr>
           </tbody>
         </table>
+
+        <h3>Past Due Subjobs</h3>
+        ${renderPastDueJobs(summary.pastDueJobs)}
       `;
       body.scrollTop = 0;
       notes.innerHTML = (summary.notes || []).map(note => `<li>${escapeHtml(note)}</li>`).join("") || "<li>No notable notes recorded.</li>";
@@ -1258,7 +1294,11 @@ INDEX_HTML = r"""<!doctype html>
       overlay.classList.add("active");
       const p = final.player;
       const a = final.automated;
+      const review = final.review || {};
       body.innerHTML = `
+        <div class="callout">
+          <strong>${escapeHtml(review.headline || "Final review")}</strong>
+        </div>
         <table>
           <tbody>
             <tr><td>Deadline met</td><td>${p.deadlineMet ? "Yes" : "No"}</td><td>${a.deadlineMet ? "Yes" : "No"}</td></tr>
@@ -1276,7 +1316,9 @@ INDEX_HTML = r"""<!doctype html>
         </table>
       `;
       body.scrollTop = 0;
-      notes.innerHTML = (final.explanation || []).map(note => `<li>${escapeHtml(note)}</li>`).join("");
+      notes.innerHTML = (review.reasons || final.explanation || [])
+        .map(note => `<li>${escapeHtml(note)}</li>`)
+        .join("") || "<li>No final review notes recorded.</li>";
       const audit = document.getElementById("finalModalAudit");
       const auditRows = (final.decisionAudit || []).slice(0, 12).map(row => `
         <tr>
@@ -1597,37 +1639,104 @@ INDEX_HTML = r"""<!doctype html>
             <tr><td>Projected completion</td><td>${summary.projectedCompletion}</td></tr>
           </tbody>
         </table>
+
+        <h3>Past Due Subjobs</h3>
+        ${renderPastDueJobs(summary.pastDueJobs)}
       `;
       $("summaryNotes").innerHTML = (summary.notes || []).map(note => `<li>${escapeHtml(note)}</li>`).join("") || "<li>No notable notes recorded.</li>";
     }
 
     function renderFinal() {
-      const final = state.finalReveal;
-      $("finalSection").classList.toggle("hidden", !final);
-      if (!final) return;
+      const final = state.final;
+      if (!final) {
+        $("finalSection").classList.add("hidden");
+        return;
+      }
+
+      $("finalSection").classList.remove("hidden");
+
       const p = final.player;
       const a = final.automated;
-      table($("finalTable"), ["Metric", "Player", "ECHO"], [
-        ["Deadline met", p.deadlineMet ? "Yes" : "No", a.deadlineMet ? "Yes" : "No"],
-        ["Project completed", p.finalItemCompleted ? "Yes" : "No", a.finalItemCompleted ? "Yes" : "No"],
-        ["Completion", p.completion || "Not complete", a.completion || "Not complete"],
-        ["Jobs complete", p.piecesCompleted, a.piecesCompleted],
-        ["Subjobs completed", p.jobsCompleted, a.jobsCompleted],
-        ["Subjobs late", p.jobsLate, a.jobsLate],
-        ["Workstation Utilization", fmtPct(p.utilization), fmtPct(a.utilization)],
-        ["Idle time", p.idleTime, a.idleTime],
-        ["Reschedules", p.reschedules, a.reschedules],
-        ["Cost", fmtNum(p.cost), fmtNum(a.cost)],
-        ["Schedule risk", Math.round(p.scheduleRisk), Math.round(a.scheduleRisk)]
-      ]);
-      $("finalNotes").innerHTML = final.explanation.map(note => `<li>${escapeHtml(note)}</li>`).join("");
-      table($("decisionAuditTable"), ["Day", "Decision", "Player", "ECHO", "Result"], (final.decisionAudit || []).map(row => [
-        row.day,
-        escapeHtml(row.card),
-        escapeHtml(row.playerChoice),
-        escapeHtml(row.echoChoice),
-        badge(row.matched ? "Matched" : "Different", row.matched ? "good" : "warn")
-      ]));
+      const review = final.review || {};
+
+      const headline = $("finalReviewHeadline");
+      if (headline) {
+        headline.textContent = review.headline || "";
+      }
+
+      $("finalTable").innerHTML = `
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Your Schedule</th>
+            <th>ECHO Benchmark</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Deadline met</td>
+            <td>${p.deadlineMet ? "Yes" : "No"}</td>
+            <td>${a.deadlineMet ? "Yes" : "No"}</td>
+          </tr>
+          <tr>
+            <td>Completion</td>
+            <td>${escapeHtml(p.completion)}</td>
+            <td>${escapeHtml(a.completion)}</td>
+          </tr>
+          <tr>
+            <td>Jobs complete</td>
+            <td>${p.piecesCompleted}</td>
+            <td>${a.piecesCompleted}</td>
+          </tr>
+          <tr>
+            <td>Subjobs late</td>
+            <td>${p.jobsLate}</td>
+            <td>${a.jobsLate}</td>
+          </tr>
+          <tr>
+            <td>Cost</td>
+            <td>${fmtNum(p.cost)}</td>
+            <td>${fmtNum(a.cost)}</td>
+          </tr>
+          <tr>
+            <td>Risk</td>
+            <td>${Math.round(p.risk)}/100</td>
+            <td>${Math.round(a.risk)}/100</td>
+          </tr>
+          <tr>
+            <td>Utilization</td>
+            <td>${Math.round(p.utilization * 100)}%</td>
+            <td>${Math.round(a.utilization * 100)}%</td>
+          </tr>
+        </tbody>
+      `;
+
+      $("finalNotes").innerHTML = (review.reasons || final.explanation || [])
+        .map(note => `<li>${escapeHtml(note)}</li>`)
+        .join("") || "<li>No final review notes recorded.</li>";
+
+      $("decisionAuditTable").innerHTML = `
+        <thead>
+          <tr>
+            <th>Day</th>
+            <th>Decision</th>
+            <th>Your choice</th>
+            <th>ECHO choice</th>
+            <th>Matched</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(final.decisionAudit || []).map(row => `
+            <tr>
+              <td>${row.day}</td>
+              <td>${escapeHtml(row.card)}</td>
+              <td>${escapeHtml(row.playerChoice || "-")}</td>
+              <td>${escapeHtml(row.echoChoice || "-")}</td>
+              <td>${row.aligned ? "Yes" : "No"}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      `;
     }
 
     function table(el, headers, rows) {

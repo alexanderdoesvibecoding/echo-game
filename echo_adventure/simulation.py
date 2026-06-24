@@ -14,7 +14,7 @@ from .models import MetricSnapshot, Scenario, SimulationState
 from .schedulers.base import Scheduler
 
 
-JOB_REWORK_PROBABILITY = 0.24
+JOB_REWORK_PROBABILITY = 0.10
 MAX_COMPLETION_REWORK_PER_JOB = 1
 
 
