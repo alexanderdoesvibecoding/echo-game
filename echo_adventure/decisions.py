@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import random
 
 from .config import GameConfig
@@ -15,9 +16,10 @@ def generate_decision_cards(state: SimulationState, day: int, config: GameConfig
     """Generate the day's required decision cards from visible operating risk."""
     if config is None:
         config = GameConfig()
-    update_state_metrics(state)
+        update_state_metrics(state)
     cards: list[DecisionCard] = []
-    target_count = random.randint(config.min_decisions_per_day, config.max_decisions_per_day)
+    rng = _decision_rng(state, day, config)
+    target_count = rng.randint(config.min_decisions_per_day, config.max_decisions_per_day)
     # Visible disruptions get first claim on limited player attention, then the
     # generator fills remaining slots with operational pressure cards.
     for event in _visible_events(state):
@@ -47,6 +49,28 @@ def generate_decision_cards(state: SimulationState, day: int, config: GameConfig
     while len(cards) < target_count:
         cards.append(_fallback_strategic_card(state, len(cards) + 1, day))
     return cards
+
+
+def _decision_rng(state: SimulationState, day: int, config: GameConfig) -> random.Random:
+    """Return a deterministic RNG for daily decision-card generation.
+
+    The seed includes only replay-stable inputs, so the same scenario state and
+    day always produce the same daily card count. It intentionally does not use
+    the module-level random generator, which can be advanced by unrelated code.
+    """
+    seed_material = ":".join(
+        str(part)
+        for part in (
+            state.seed,
+            state.scenario_id,
+            day,
+            state.current_shift,
+            config.min_decisions_per_day,
+            config.max_decisions_per_day,
+        )
+    )
+    seed_int = int.from_bytes(hashlib.sha256(seed_material.encode("utf-8")).digest()[:16], "big")
+    return random.Random(seed_int)
 
 
 def apply_choice(state: SimulationState, card: DecisionCard, choice: DecisionChoice) -> str:

@@ -312,6 +312,31 @@ class SimulationState:
             if job_id in shop.queued_job_ids:
                 shop.queued_job_ids = [queued_id for queued_id in shop.queued_job_ids if queued_id != job_id]
 
+    def clear_job_from_current_workcenters(self, job_id: str, except_workcenter_id: str | None = None) -> bool:
+        """Remove a job from active workcenter slots outside the given target.
+
+        Disrupted workcenters keep their disrupted status/reason. The job is
+        being moved, not repairing the old workcenter.
+        """
+        cleared = False
+        disrupted_statuses = {
+            WorkCenterStatus.DOWN,
+            WorkCenterStatus.BLOCKED,
+            WorkCenterStatus.WEATHER_IMPACTED,
+        }
+
+        for old_wc in self.workcenters.values():
+            if old_wc.id == except_workcenter_id or old_wc.current_job_id != job_id:
+                continue
+
+            old_wc.current_job_id = None
+            cleared = True
+
+            if old_wc.status not in disrupted_statuses:
+                old_wc.status = WorkCenterStatus.AVAILABLE
+
+        return cleared
+
     def assign_job(self, job_id: str, workcenter_id: str, front: bool = False) -> bool:
         """Assign or reassign a job to a workcenter queue.
 
@@ -324,19 +349,20 @@ class SimulationState:
         if job.required_capability not in wc.capabilities:
             return False
         old_assignment = job.assigned_workcenter_id
-        if job.status == JobStatus.RUNNING and old_assignment != workcenter_id:
-            # Moving active work is allowed, but it pauses the old station and
-            # adds one shift to represent teardown/restart disruption.
-            for old_wc in self.workcenters.values():
-                if old_wc.current_job_id == job_id:
-                    old_wc.current_job_id = None
-                    old_wc.status = WorkCenterStatus.AVAILABLE
-                    break
+        moving_to_new_workcenter = old_assignment != workcenter_id
+
+        self.clear_job_from_current_workcenters(job_id, except_workcenter_id=workcenter_id)
+
+        if job.status in {JobStatus.RUNNING, JobStatus.PAUSED} and moving_to_new_workcenter:
+            # Moving active/paused work is allowed, but it removes the job from
+            # the old station and adds one shift to represent teardown/restart
+            # disruption. If the old station is down/blocked/weather impacted,
+            # its disruption state remains in place.
             job.status = JobStatus.QUEUED
             job.remaining_duration_shifts += 1
             self.reschedule_count += 1
             self.cost += 14
-            self.daily_notes.append(f"{job.id} was moved while running; one shift of disruption was added.")
+            self.daily_notes.append(f"{job.id} was moved while active; one shift of disruption was added.")
         if old_assignment and old_assignment != workcenter_id:
             self.reschedule_count += 1
             self.cost += 8

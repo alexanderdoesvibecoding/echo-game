@@ -295,9 +295,23 @@ def resolve_event(state: SimulationState, event: Event) -> None:
     for wc_id in event.effects.get("workcenter_ids", []):
         if wc_id not in state.workcenters:
             continue
+
         wc = state.workcenters[wc_id]
+
+        overlapping_event = _active_workcenter_event_for(state, wc_id)
+        if overlapping_event:
+            wc.status = _workcenter_status_for_event(overlapping_event)
+            wc.downtime_remaining = max(0, overlapping_event.end_shift - state.current_shift)
+            wc.blocked_reason = f"{overlapping_event.id}: {overlapping_event.type.value}"
+
+            if wc.current_job_id and wc.current_job_id in state.jobs:
+                state.jobs[wc.current_job_id].status = JobStatus.PAUSED
+
+            continue
+
         wc.downtime_remaining = 0
         wc.blocked_reason = None
+
         if wc.current_job_id:
             job = state.jobs[wc.current_job_id]
             job.status = JobStatus.RUNNING
@@ -307,6 +321,33 @@ def resolve_event(state: SimulationState, event: Event) -> None:
 
     _schedule_cascading_events(state, event)
     state.daily_notes.append(f"Resolved: {event.description}")
+
+
+def _active_workcenter_event_for(state: SimulationState, wc_id: str) -> Event | None:
+    """Return another active event that still disrupts the workcenter."""
+    candidates = [
+        active_event
+        for active_event in state.event_timeline
+        if active_event.started
+        and not active_event.resolved
+        and wc_id in active_event.effects.get("workcenter_ids", [])
+    ]
+
+    if not candidates:
+        return None
+
+    return max(candidates, key=lambda active_event: (active_event.end_shift, active_event.start_shift, active_event.id))
+
+
+def _workcenter_status_for_event(event: Event) -> WorkCenterStatus:
+    """Return the workcenter status produced by a workcenter-disruption event."""
+    if event.type in {EventType.MACHINE_DOWN, EventType.TOOLING_DAMAGE}:
+        return WorkCenterStatus.DOWN
+
+    if event.type == EventType.WEATHER:
+        return WorkCenterStatus.WEATHER_IMPACTED
+
+    return WorkCenterStatus.BLOCKED
 
 
 def _block_target_jobs(state: SimulationState, event: Event, reason: str) -> None:
