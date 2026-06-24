@@ -115,17 +115,6 @@ INDEX_HTML = r"""<!doctype html>
       border-color: #3a4352;
     }
 
-    html[data-theme="dark"] .tabbar button {
-      background: #1a202a;
-      color: #a5b0b8;
-    }
-
-    html[data-theme="dark"] .tabbar button.active {
-      background: #2a3543;
-      border-bottom-color: #2a3543;
-      color: #5dd9e0;
-    }
-
     html[data-theme="dark"] .decision {
       background: #1a202a;
       border-color: #3a4352;
@@ -171,27 +160,6 @@ INDEX_HTML = r"""<!doctype html>
       background: #252d38;
       border-color: #3a4352;
       color: #f0f3f5;
-    }
-
-    html[data-theme="dark"] .shift-lane,
-    html[data-theme="dark"] .calendar-job {
-      background: #252d38;
-      border-color: #3a4352;
-    }
-
-    html[data-theme="dark"] .shift-lane-head {
-      background: #1a202a;
-      border-color: #3a4352;
-    }
-
-    html[data-theme="dark"] .calendar-meta,
-    html[data-theme="dark"] .calendar-empty {
-      color: #a5b0b8;
-    }
-
-    html[data-theme="dark"] .calendar-empty {
-      background: #1a202a;
-      border-color: #3a4352;
     }
 
     html[data-theme="dark"] .settings-panel {
@@ -345,7 +313,7 @@ INDEX_HTML = r"""<!doctype html>
     .grid { display: grid; gap: 16px; }
     .metrics {
       display: grid;
-      grid-template-columns: repeat(6, minmax(120px, 1fr));
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
       gap: 10px;
       padding: 14px;
     }
@@ -377,51 +345,6 @@ INDEX_HTML = r"""<!doctype html>
     .bar.good { background: var(--green); }
     .bar.info { background: var(--teal); }
     .bar.muted { background: var(--line); }
-    #piecesTable th:nth-child(2),
-    #piecesTable td:nth-child(2) {
-      width: 108px;
-    }
-    #piecesTable th:nth-child(3),
-    #piecesTable td:nth-child(3) {
-      width: 128px;
-    }
-    #piecesTable td:nth-child(2) .badge {
-      width: 92px;
-      justify-content: center;
-      white-space: nowrap;
-    }
-    #piecesTable .progress {
-      width: 100px;
-      max-width: 100%;
-    }
-
-    .tabbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      padding: 10px 14px 0;
-    }
-    .tabbar button {
-      height: 32px;
-      border-radius: 6px 6px 0 0;
-      background: #f0f3ef;
-      display: inline-flex;
-      align-items: center;
-    }
-    .tabbar button.active {
-      background: #fff;
-      border-bottom-color: #fff;
-      color: var(--teal-dark);
-    }
-    .view { display: none; padding: 14px; }
-    .view.active { display: block; }
-    .view-controls {
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
 
     table {
       width: 100%;
@@ -444,80 +367,6 @@ INDEX_HTML = r"""<!doctype html>
     }
     tr:last-child td { border-bottom: none; }
     .table-wrap { max-height: 520px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
-
-    .daily-calendar {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 12px;
-    }
-    .shift-lane {
-      min-width: 0;
-      overflow: hidden;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fbfcf9;
-    }
-    .shift-lane-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: start;
-      gap: 10px;
-      padding: 10px 11px;
-      border-bottom: 1px solid var(--line);
-      background: #fff;
-    }
-    .shift-jobs {
-      display: grid;
-      gap: 8px;
-      max-height: 520px;
-      overflow: auto;
-      padding: 10px;
-    }
-    .calendar-job {
-      min-width: 0;
-      padding: 9px;
-      border: 1px solid var(--line);
-      border-left: 4px solid var(--teal);
-      border-radius: 8px;
-      background: #fff;
-    }
-    .calendar-job.warn { border-left-color: var(--amber); }
-    .calendar-job.danger { border-left-color: var(--red); }
-    .calendar-job.info { border-left-color: var(--teal); }
-    .calendar-job-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: start;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .calendar-tags {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      gap: 4px;
-    }
-    .calendar-meta {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 4px 8px;
-      margin-top: 8px;
-      color: var(--muted);
-      font-size: 12px;
-    }
-    .calendar-meta span {
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-    .calendar-empty {
-      padding: 14px;
-      border: 1px dashed var(--line);
-      border-radius: 8px;
-      background: #fff;
-      color: var(--muted);
-      text-align: center;
-      font-weight: 650;
-    }
 
     .badge {
       display: inline-flex;
@@ -571,6 +420,21 @@ INDEX_HTML = r"""<!doctype html>
     }
     .choice.selected { border-color: var(--green); background: #eef8f0; }
     .choice small { display: block; color: var(--muted); margin-top: 3px; }
+    .inline-decisions {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+    }
+    .inline-decisions .decision {
+      max-width: 820px;
+    }
+    .inline-decision-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+      padding: 2px 10px 10px;
+    }
     .mode-choices {
       display: grid;
       gap: 8px;
@@ -608,6 +472,50 @@ INDEX_HTML = r"""<!doctype html>
       padding: 12px;
       background: #fff;
     }
+    .completion-chart {
+      display: grid;
+      gap: 10px;
+    }
+    .chart-frame {
+      width: 100%;
+      overflow: hidden;
+    }
+    .chart-frame svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .chart-axis,
+    .chart-grid {
+      stroke: var(--line);
+      stroke-width: 1;
+    }
+    .chart-label {
+      fill: var(--muted);
+      font-size: 12px;
+    }
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .chart-key {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .chart-swatch {
+      width: 18px;
+      height: 3px;
+      border-radius: 999px;
+      background: currentColor;
+    }
+    .chart-player { color: var(--teal); }
+    .chart-echo { color: var(--violet); }
     .notes {
       margin: 0;
       padding-left: 18px;
@@ -728,12 +636,6 @@ INDEX_HTML = r"""<!doctype html>
       z-index: 100000;
       box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
     }
-    .tabbar .info-icon:hover::after {
-      width: min(280px, 70vw);
-      white-space: normal;
-      line-height: 1.3;
-      text-align: left;
-    }
   </style>
 </head>
 <body>
@@ -767,6 +669,21 @@ INDEX_HTML = r"""<!doctype html>
 
   <main>
     <div class="grid">
+      <section id="finalSection" class="hidden">
+        <div class="section-head">
+          <div>
+            <h2>Final Operational Comparison</h2>
+            <div class="subtle">The silent benchmark is revealed only after the run ends.</div>
+          </div>
+        </div>
+        <div class="split">
+          <div class="reveal-panel"><h3>Subjobs Complete Over Time</h3><div id="finalCompletionChart"></div></div>
+          <div class="reveal-panel"><h3>Metric Comparison</h3><table id="finalTable"></table></div>
+          <div class="reveal-panel"><h3>Outcome Drivers</h3><ul class="notes" id="finalNotes"></ul></div>
+          <div class="reveal-panel"><h3>Decision Audit</h3><table id="decisionAuditTable"></table></div>
+        </div>
+      </section>
+
       <section>
         <div class="section-head">
           <div>
@@ -777,29 +694,14 @@ INDEX_HTML = r"""<!doctype html>
         <div class="metrics" id="metrics"></div>
       </section>
 
-      <section>
+      <section id="dailyDecisionSection">
         <div class="section-head">
-          <h2>Operating Board</h2>
-        </div>
-        <div class="tabbar">
-          <button data-tab="shops" class="active">Shops<span class="info-icon" data-tooltip="Shows queue pressure, blocked work, workstation utilization, idle time, shop risk, and active disruptions by shop.">i</span></button>
-          <button data-tab="calendar">Daily Calendar<span class="info-icon" data-tooltip="Shows the subjobs planned across today's three work shifts from current workcenter queues.">i</span></button>
-          <button data-tab="pieces">Jobs<span class="info-icon" data-tooltip="Shows each job's completion progress, blocked subjob count, critical-path exposure, final subjob due date, and risk.">i</span></button>
-          <button data-tab="workcenters">Workcenters<span class="info-icon" data-tooltip="Shows the selected shop's machines or stations, current subjob, queue depth, next subjob, capability, and downtime.">i</span></button>
-          <button data-tab="critical">Critical Path<span class="info-icon" data-tooltip="Shows subjobs most likely to control the final completion date, including slack, blockers, downstream impact, and risk.">i</span></button>
-          <button data-tab="risks">Risk Register<span class="info-icon" data-tooltip="Shows active disruptions, warnings, and blocked subjobs that need schedule response or mitigation.">i</span></button>
-        </div>
-        <div id="shops" class="view active"><div class="table-wrap"><table id="shopsTable"></table></div></div>
-        <div id="calendar" class="view"><div id="dailyCalendar" class="daily-calendar"></div></div>
-        <div id="pieces" class="view"><div class="table-wrap"><table id="piecesTable"></table></div></div>
-        <div id="workcenters" class="view">
-          <div class="view-controls">
-            <select id="shopSelect" aria-label="Select shop"></select>
+          <div>
+            <h2>Daily Decisions</h2>
+            <div class="subtle" id="inlineDecisionSubtitle"></div>
           </div>
-          <div class="table-wrap"><table id="workcentersTable"></table></div>
         </div>
-        <div id="critical" class="view"><div class="table-wrap"><table id="criticalTable"></table></div></div>
-        <div id="risks" class="view"><div class="table-wrap"><table id="risksTable"></table></div></div>
+        <div class="inline-decisions" id="inlineDecisionBody"></div>
       </section>
 
       <section id="summarySection" class="hidden">
@@ -810,19 +712,6 @@ INDEX_HTML = r"""<!doctype html>
         </div>
       </section>
 
-      <section id="finalSection" class="hidden">
-        <div class="section-head">
-          <div>
-            <h2>Final Operational Comparison</h2>
-            <div class="subtle">The silent benchmark is revealed only after the run ends.</div>
-          </div>
-        </div>
-        <div class="split">
-          <div class="reveal-panel"><h3>Metric Comparison</h3><table id="finalTable"></table></div>
-          <div class="reveal-panel"><h3>Outcome Drivers</h3><ul class="notes" id="finalNotes"></ul></div>
-          <div class="reveal-panel"><h3>Decision Audit</h3><table id="decisionAuditTable"></table></div>
-        </div>
-      </section>
     </div>
 
   </main>
@@ -831,11 +720,10 @@ INDEX_HTML = r"""<!doctype html>
     <div class="modal">
       <h1 id="welcomeModalTitle">Welcome</h1>
       <div class="welcome-copy">
-        <p>You are managing a manufacturing schedule under disruption. Each day, inspect the operating board, read the active risks, and choose how the yard should respond.</p>
-        <p>Your goal is to complete every job before <span id="welcomeDeadline">the deadline</span> while balancing cost, reschedules, workstation utilization, and schedule risk.</p>
+        <p>You are managing a manufacturing schedule under disruption. Each day, answer the daily decision prompts and choose how the yard should respond.</p>
+        <p>Your goal is to complete every job before <span id="welcomeDeadline">the deadline</span> while balancing cost, reschedules, and schedule risk.</p>
         <ul>
-          <li>Review shops, workcenters, jobs, the critical path, and the risk register.</li>
-          <li>Answer the daily decision cards to resequence, reroute, expedite, or protect critical work.</li>
+          <li>Use daily decisions to resequence, reroute, expedite, or protect critical work.</li>
           <li>End the day to see the consequences of your choices and move the schedule forward.</li>
         </ul>
       </div>
@@ -892,7 +780,6 @@ INDEX_HTML = r"""<!doctype html>
 
   <script>
     let state = null;
-    let activeTab = "shops";
     // Client-side modal state is intentionally local. The server remains the
     // source of truth for the run, decisions, and day advancement rules.
     let welcomeModalVisible = false;
@@ -902,7 +789,6 @@ INDEX_HTML = r"""<!doctype html>
     let selectedRunMode = "normal";
     let finalModalDismissed = false;
     let dismissedDecisionKey = null;
-    let suppressNextDecisionPrompt = false;
 
     const $ = (id) => document.getElementById(id);
     const fmtPct = (value) => `${Math.round((value || 0) * 100)}%`;
@@ -985,7 +871,7 @@ INDEX_HTML = r"""<!doctype html>
         });
         pendingChoice = null;
         dismissedDecisionKey = null;
-        decisionModalVisible = true;
+        decisionModalVisible = false;
         showError("");
         render();
       } catch (error) {
@@ -1010,8 +896,8 @@ INDEX_HTML = r"""<!doctype html>
         if (nextState.finalReveal) {
           state = nextState;
           pendingAdvanceState = null;
-          finalModalVisible = true;
-          finalModalDismissed = false;
+          finalModalVisible = false;
+          finalModalDismissed = true;
           modalVisible = false;
         } else {
           modalVisible = true;
@@ -1032,7 +918,6 @@ INDEX_HTML = r"""<!doctype html>
       state = pendingAdvanceState;
       pendingAdvanceState = null;
       modalVisible = false;
-      suppressNextDecisionPrompt = true;
       render();
     }
 
@@ -1071,9 +956,8 @@ INDEX_HTML = r"""<!doctype html>
       $("projectedText").textContent = `Projected completion: ${state.overview.projectedCompletion}`;
 
       renderMetrics();
-      renderShopOptions();
-      renderTables();
       renderDecisions();
+      renderInlineDecisions();
       renderSummary();
       renderSummaryModal();
       renderFinal();
@@ -1083,8 +967,6 @@ INDEX_HTML = r"""<!doctype html>
       renderSettingsMenu();
       maybeAutoOpenDecisionModal();
       renderDecisionModal();
-      // Auto-open final modal if run finished.
-      if (state.finalReveal && !finalModalVisible && !finalModalDismissed) finalModalVisible = true;
       renderFinalModal();
     }
 
@@ -1110,32 +992,14 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function maybeAutoOpenDecisionModal() {
-      // Decisions should be "in your face" when they need attention, but not
-      // fight with other modals or reopen immediately after the user dismisses.
-      if (!state || state.gameOver || welcomeModalVisible || finalModalVisible || modalVisible || pieceModalVisible) {
-        return;
-      }
-      const hasOpenDecision = state.decisions.some(card => !card.selectedChoice);
-      if (!hasOpenDecision) {
-        suppressNextDecisionPrompt = false;
-        return;
-      }
-      if (hasOpenDecision && suppressNextDecisionPrompt) {
-        dismissedDecisionKey = decisionPromptKey();
-        suppressNextDecisionPrompt = false;
-        decisionModalVisible = false;
-        return;
-      }
-      if (hasOpenDecision && dismissedDecisionKey !== decisionPromptKey()) {
-        decisionModalVisible = true;
-      }
+      // Daily decisions are rendered inline in the main page.
+      return;
     }
 
     function openDecisionModal() {
       if (!state || state.gameOver) return;
-      dismissedDecisionKey = null;
-      decisionModalVisible = true;
-      renderDecisionModal();
+      decisionModalVisible = false;
+      document.getElementById("dailyDecisionSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     function dismissDecisionModal() {
@@ -1149,6 +1013,12 @@ INDEX_HTML = r"""<!doctype html>
       choose(cardId, pendingChoice);
     }
 
+    function selectPendingChoice(choiceId) {
+      pendingChoice = choiceId;
+      renderInlineDecisions();
+      renderDecisionModal();
+    }
+
     function renderWelcomeModal() {
       const overlay = document.getElementById("welcomeModalOverlay");
       if (!overlay) return;
@@ -1157,7 +1027,6 @@ INDEX_HTML = r"""<!doctype html>
 
     function closeWelcomeModal() {
       welcomeModalVisible = false;
-      suppressNextDecisionPrompt = true;
       renderWelcomeModal();
       maybeAutoOpenDecisionModal();
       renderDecisionModal();
@@ -1307,13 +1176,14 @@ INDEX_HTML = r"""<!doctype html>
             <tr><td>Jobs complete</td><td>${p.piecesCompleted}</td><td>${a.piecesCompleted}</td></tr>
             <tr><td>Subjobs completed</td><td>${p.jobsCompleted}</td><td>${a.jobsCompleted}</td></tr>
             <tr><td>Subjobs late</td><td>${p.jobsLate}</td><td>${a.jobsLate}</td></tr>
-            <tr><td>Workstation Utilization</td><td>${fmtPct(p.utilization)}</td><td>${fmtPct(a.utilization)}</td></tr>
             <tr><td>Idle time</td><td>${p.idleTime}</td><td>${a.idleTime}</td></tr>
             <tr><td>Reschedules</td><td>${p.reschedules}</td><td>${a.reschedules}</td></tr>
             <tr><td>Cost</td><td>${fmtNum(p.cost)}</td><td>${fmtNum(a.cost)}</td></tr>
             <tr><td>Schedule risk</td><td>${Math.round(p.scheduleRisk)}</td><td>${Math.round(a.scheduleRisk)}</td></tr>
           </tbody>
         </table>
+        <h3>Subjobs Complete Over Time</h3>
+        ${renderCompletionChart(final.completionHistory)}
       `;
       body.scrollTop = 0;
       notes.innerHTML = (review.reasons || final.explanation || [])
@@ -1334,6 +1204,69 @@ INDEX_HTML = r"""<!doctype html>
           <thead><tr><th>Day</th><th>Player</th><th>ECHO</th><th>Result</th></tr></thead>
           <tbody>${auditRows || `<tr><td colspan="4">No decisions recorded</td></tr>`}</tbody>
         </table>
+      `;
+    }
+
+    function renderCompletionChart(history) {
+      const days = Array.isArray(history?.days) ? history.days : [];
+      const player = Array.isArray(history?.player) ? history.player : [];
+      const echo = Array.isArray(history?.automated) ? history.automated : [];
+      const count = Math.min(days.length, player.length, echo.length);
+      if (!count) return `<div class="subtle">No completion history recorded.</div>`;
+
+      const width = 640;
+      const height = 260;
+      const pad = { left: 44, right: 18, top: 18, bottom: 36 };
+      const maxCompleted = Math.max(1, Number(history?.total) || 0, ...player, ...echo);
+      const maxIndex = Math.max(1, count - 1);
+      const plotWidth = width - pad.left - pad.right;
+      const plotHeight = height - pad.top - pad.bottom;
+      const point = (value, index) => {
+        const x = pad.left + (index / maxIndex) * plotWidth;
+        const y = pad.top + (1 - Math.max(0, Math.min(maxCompleted, value)) / maxCompleted) * plotHeight;
+        return [x, y];
+      };
+      const pathFor = (series) => series.slice(0, count).map((value, index) => {
+        const [x, y] = point(Number(value) || 0, index);
+        return `${index ? "L" : "M"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+      }).join(" ");
+      const yTicks = [...new Set([0, Math.round(maxCompleted / 2), maxCompleted])];
+      const xTicks = [...new Set([0, Math.floor(maxIndex / 2), maxIndex])];
+      const yGrid = yTicks.map(value => {
+        const [, y] = point(value, 0);
+        return `
+          <line class="chart-grid" x1="${pad.left}" y1="${y.toFixed(1)}" x2="${(width - pad.right).toFixed(1)}" y2="${y.toFixed(1)}"></line>
+          <text class="chart-label" x="${pad.left - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">${value}</text>
+        `;
+      }).join("");
+      const xLabels = xTicks.map(index => {
+        const [x] = point(0, index);
+        const day = days[index] ?? index;
+        const label = day === 0 ? "Start" : `Day ${day}`;
+        return `<text class="chart-label" x="${x.toFixed(1)}" y="${height - 10}" text-anchor="middle">${escapeHtml(label)}</text>`;
+      }).join("");
+      const [playerX, playerY] = point(Number(player[count - 1]) || 0, count - 1);
+      const [echoX, echoY] = point(Number(echo[count - 1]) || 0, count - 1);
+
+      return `
+        <div class="completion-chart">
+          <div class="chart-legend">
+            <span class="chart-key chart-player"><span class="chart-swatch"></span>Your schedule</span>
+            <span class="chart-key chart-echo"><span class="chart-swatch"></span>ECHO benchmark</span>
+          </div>
+          <div class="chart-frame">
+            <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Line chart comparing cumulative subjobs completed by player and ECHO">
+              ${yGrid}
+              <line class="chart-axis" x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}"></line>
+              <line class="chart-axis" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${height - pad.bottom}"></line>
+              ${xLabels}
+              <path d="${pathFor(player)}" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path d="${pathFor(echo)}" fill="none" stroke="var(--violet)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+              <circle cx="${playerX.toFixed(1)}" cy="${playerY.toFixed(1)}" r="4" fill="var(--teal)"></circle>
+              <circle cx="${echoX.toFixed(1)}" cy="${echoY.toFixed(1)}" r="4" fill="var(--violet)"></circle>
+            </svg>
+          </div>
+        </div>
       `;
     }
 
@@ -1404,7 +1337,6 @@ INDEX_HTML = r"""<!doctype html>
         ["Jobs Complete", `${snap.piecesCompleted}/${state.pieces.length}`, snap.piecesCompleted / state.pieces.length, "good", "How many top-level jobs are complete."],
         ["Subjobs Complete", fmtNum(snap.jobsCompleted), snap.jobsCompleted / Math.max(1, snap.jobsCompleted + snap.jobsRemaining), "good", "Total subjobs finished out of all required work."],
         ["Subjobs Late", fmtNum(snap.jobsLate), Math.min(1, snap.jobsLate / 20), snap.jobsLate > 0 ? "warn" : "good", "Number of subjobs that have missed their target completion date."],
-        ["Workstation Utilization", fmtPct(snap.utilization), snap.utilization, "info", "How busy your workstations are (0% = idle, 100% = fully busy)."],
         ["Cost", fmtNum(snap.cost), Math.min(1, snap.cost / 28000), "warn", "Total additional costs from rescheduling, expediting, and resolving issues."],
         ["Schedule Risk", `${Math.round(snap.scheduleRisk)}/100`, snap.scheduleRisk / 100, snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good", "Overall probability of missing the deadline (0 = safe, 100 = critical)."]
       ];
@@ -1415,127 +1347,6 @@ INDEX_HTML = r"""<!doctype html>
           <div class="progress"><div class="bar ${tone}" style="width:${Math.max(0, Math.min(1, pct)) * 100}%"></div></div>
         </div>
       `).join("");
-    }
-
-    function renderShopOptions() {
-      const select = $("shopSelect");
-      const current = select.value || state.shops[0]?.id;
-      // Preserve the selected shop across refreshes unless a new run no longer
-      // contains that shop id.
-      select.innerHTML = state.shops.map(shop => `<option value="${shop.id}">${shop.name}</option>`).join("");
-      select.value = state.shops.some(shop => shop.id === current) ? current : state.shops[0]?.id;
-    }
-
-    function renderTables() {
-      // Tables are rebuilt from the latest state payload. This is simple and
-      // adequate for the small local dashboard; no client-side cache is needed.
-      table($("shopsTable"), ["Shop", "Active", "Queued", "Blocked", "Complete", "Util.", "Idle", "Risk", "Risk Job", "Event"], state.shops.map(shop => [
-        shop.name,
-        shop.active,
-        shop.queued,
-        shop.blocked,
-        shop.completed,
-        fmtPct(shop.utilization),
-        shop.idle,
-        badge(Math.round(shop.risk), shop.risk > 70 ? "danger" : shop.risk > 40 ? "warn" : "info"),
-        shop.highestRiskPiece,
-        shop.event || "-"
-      ]));
-
-      table($("piecesTable"), ["Job", "Status", "Progress", "Subjobs", "Blocked", "Critical", "Due Date", "Risk"], state.pieces.sort((a, b) => {
-        const numA = parseInt(a.id.replace(/\D/g, '')) || 0;
-        const numB = parseInt(b.id.replace(/\D/g, '')) || 0;
-        return numA - numB;
-      }).map(piece => [
-        `<button class="link-button" onclick="openPieceModal('${piece.id}')">${escapeHtml(piece.displayId || piece.id)}</button>`,
-        badge(pieceStatusLabel(piece.status), pieceStatusTone(piece.status)),
-        progressCell(piece.progress, piece.status),
-        `${piece.completed}/${piece.total}`,
-        piece.blocked,
-        piece.critical ? "Yes" : "",
-        piece.dueDate,
-        Math.round(piece.risk)
-      ]));
-
-      const shopId = $("shopSelect").value || state.shops[0]?.id;
-      table($("workcentersTable"), ["Workcenter", "Status", "Current", "Remain", "Queue", "Next", "Capability", "Down"], (state.workcenters[shopId] || []).map(wc => [
-        wc.id,
-        badge(wc.status, wc.status === "Busy" ? "info" : wc.status === "Idle" || wc.status === "Available" ? "good" : "danger"),
-        jobLabel(wc.current, wc.currentRework),
-        wc.remaining,
-        wc.queue,
-        jobLabel(wc.next, wc.nextRework),
-        wc.capability,
-        wc.down
-      ]));
-
-      table($("criticalTable"), ["Subjob", "Shop", "WC", "Remain", "Slack", "Block", "Impact", "Risk"], state.criticalPath.map(job => [
-        jobLabel(job.id, job.rework),
-        job.shop,
-        job.workcenter,
-        job.remaining,
-        badge(job.slack, job.slack < 0 ? "danger" : job.slack < 8 ? "warn" : "info"),
-        job.block,
-        job.impact,
-        Math.round(job.risk)
-      ]));
-
-      table($("risksTable"), ["Status", "ID", "Risk", "Affected", "Severity", "Shifts", "Source", "Response"], state.risks.map(risk => [
-        badge(risk.status, risk.status === "Active" || risk.status === "Blocked" ? "danger" : "warn"),
-        jobLabel(risk.id, risk.rework),
-        risk.type,
-        risk.affected,
-        risk.severity,
-        risk.shifts,
-        risk.source || "-",
-        risk.response
-      ]));
-
-      renderDailyCalendar();
-    }
-
-    function renderDailyCalendar() {
-      const target = $("dailyCalendar");
-      if (!target) return;
-      const calendar = state.dailyCalendar || { label: "Day", shifts: [] };
-      target.innerHTML = (calendar.shifts || []).map(shift => `
-        <div class="shift-lane">
-          <div class="shift-lane-head">
-            <div>
-              <h3>${escapeHtml(shift.dayLabel || shift.label)}</h3>
-              <div class="subtle">${escapeHtml(calendar.label || "")}</div>
-            </div>
-            <span class="badge info">${(shift.jobs || []).length} subjobs</span>
-          </div>
-          <div class="shift-jobs">
-            ${(shift.jobs || []).length ? shift.jobs.map(renderCalendarJob).join("") : `<div class="calendar-empty">No scheduled subjobs</div>`}
-          </div>
-        </div>
-      `).join("");
-    }
-
-    function renderCalendarJob(job) {
-      const tone = job.late ? "danger" : job.critical ? "warn" : job.status === "Running" ? "info" : "";
-      const statusTone = job.late ? "danger" : job.status === "Running" ? "info" : "good";
-      return `
-        <article class="calendar-job ${tone}">
-          <div class="calendar-job-top">
-            <strong>${jobLabel(job.id, job.rework)}</strong>
-            <div class="calendar-tags">
-              ${badge(job.late ? "Late" : job.status, statusTone)}
-              ${job.critical ? badge("Critical", "warn") : ""}
-            </div>
-          </div>
-          <div class="calendar-meta">
-            <span>${escapeHtml(job.piece)}</span>
-            <span>${escapeHtml(job.shop)}</span>
-            <span>${escapeHtml(job.workcenter)}</span>
-            <span>${escapeHtml(job.capability)}</span>
-            <span>Remain ${escapeHtml(job.remaining)}</span>
-            <span>Due ${escapeHtml(job.due)}</span>
-          </div>
-        </article>
-      `;
     }
 
     function renderDecisions() {
@@ -1561,6 +1372,69 @@ INDEX_HTML = r"""<!doctype html>
       decisionBtn.disabled = false;
       decisionBtn.textContent = openCount ? `Daily Decisions (${openCount})` : "Daily Decisions";
       advanceBtn.disabled = !readyToAdvance();
+    }
+
+    function renderInlineDecisions() {
+      const subtitle = $("inlineDecisionSubtitle");
+      const body = $("inlineDecisionBody");
+      if (!subtitle || !body) return;
+
+      if (!state || state.gameOver) {
+        subtitle.textContent = "Run complete";
+        body.innerHTML = `
+          <div class="reveal-panel">
+            <h3>Daily decisions are complete.</h3>
+            <div class="subtle">Review the final operational comparison at the top of the page.</div>
+          </div>
+        `;
+        return;
+      }
+
+      const progressState = decisionProgress();
+      subtitle.textContent = `${progressState.completed}/${progressState.total} daily questions complete`;
+      const nextCard = state.decisions.find(card => !card.selectedChoice);
+
+      if (nextCard) {
+        if (!nextCard.choices.some(choice => choice.id === pendingChoice)) {
+          pendingChoice = null;
+        }
+        body.innerHTML = `
+          <div class="decision">
+            <div class="decision-head">
+              <div class="decision-title">
+                <div>
+                  <h2>${escapeHtml(nextCard.title)}</h2>
+                  <div class="subtle">${escapeHtml(nextCard.type)} | ${escapeHtml(decisionUrgencyLabel(nextCard.severity))}</div>
+                </div>
+                <span class="badge warn">Open</span>
+              </div>
+              <p>${escapeHtml(nextCard.description)}</p>
+            </div>
+            ${nextCard.choices.map(choice => `
+              <button class="choice ${pendingChoice === choice.id ? "selected" : ""}" onclick="selectPendingChoice('${choice.id}')">
+                <strong>${escapeHtml(choice.label)}</strong>
+                <small>${escapeHtml(choice.description)}</small>
+              </button>
+            `).join("")}
+            <div class="inline-decision-actions">
+              <button ${!pendingChoice ? "disabled" : ""} class="primary" onclick="submitDecision('${nextCard.id}')">Submit</button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      const choices = (state.appliedChoices || []).map(note => `<li>${escapeHtml(note)}</li>`).join("");
+      body.innerHTML = `
+        <div class="reveal-panel">
+          <h3>All choices made for today.</h3>
+          <div class="subtle">End the day to process the schedule and reveal the daily consequences.</div>
+          ${choices ? `<ul class="notes">${choices}</ul>` : ""}
+          <div class="inline-decision-actions">
+            <button class="primary" onclick="prepareAdvanceDay()">End Day</button>
+          </div>
+        </div>
+      `;
     }
 
     function renderDecisionModal() {
@@ -1647,7 +1521,7 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function renderFinal() {
-      const final = state.final;
+      const final = state.finalReveal;
       if (!final) {
         $("finalSection").classList.add("hidden");
         return;
@@ -1659,10 +1533,7 @@ INDEX_HTML = r"""<!doctype html>
       const a = final.automated;
       const review = final.review || {};
 
-      const headline = $("finalReviewHeadline");
-      if (headline) {
-        headline.textContent = review.headline || "";
-      }
+      $("finalCompletionChart").innerHTML = renderCompletionChart(final.completionHistory);
 
       $("finalTable").innerHTML = `
         <thead>
@@ -1680,13 +1551,18 @@ INDEX_HTML = r"""<!doctype html>
           </tr>
           <tr>
             <td>Completion</td>
-            <td>${escapeHtml(p.completion)}</td>
-            <td>${escapeHtml(a.completion)}</td>
+            <td>${escapeHtml(p.completion || "Not complete")}</td>
+            <td>${escapeHtml(a.completion || "Not complete")}</td>
           </tr>
           <tr>
             <td>Jobs complete</td>
             <td>${p.piecesCompleted}</td>
             <td>${a.piecesCompleted}</td>
+          </tr>
+          <tr>
+            <td>Subjobs completed</td>
+            <td>${p.jobsCompleted}</td>
+            <td>${a.jobsCompleted}</td>
           </tr>
           <tr>
             <td>Subjobs late</td>
@@ -1700,13 +1576,8 @@ INDEX_HTML = r"""<!doctype html>
           </tr>
           <tr>
             <td>Risk</td>
-            <td>${Math.round(p.risk)}/100</td>
-            <td>${Math.round(a.risk)}/100</td>
-          </tr>
-          <tr>
-            <td>Utilization</td>
-            <td>${Math.round(p.utilization * 100)}%</td>
-            <td>${Math.round(a.utilization * 100)}%</td>
+            <td>${Math.round(p.scheduleRisk)}/100</td>
+            <td>${Math.round(a.scheduleRisk)}/100</td>
           </tr>
         </tbody>
       `;
@@ -1786,17 +1657,6 @@ INDEX_HTML = r"""<!doctype html>
       return String(value).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[ch]));
     }
 
-    // Tab selection only changes visibility; all tab tables are refreshed from
-    // the latest payload whenever renderTables runs.
-    document.querySelectorAll(".tabbar button").forEach(button => {
-      button.addEventListener("click", () => {
-        activeTab = button.dataset.tab;
-        document.querySelectorAll(".tabbar button").forEach(item => item.classList.toggle("active", item.dataset.tab === activeTab));
-        document.querySelectorAll(".view").forEach(view => view.classList.toggle("active", view.id === activeTab));
-      });
-    });
-
-    $("shopSelect").addEventListener("change", renderTables);
     $("settingsMenuBtn").addEventListener("click", toggleSettingsMenu);
     $("openNewRunModalBtn").addEventListener("click", openNewRunModal);
     $("decisionBtn").addEventListener("click", openDecisionModal);

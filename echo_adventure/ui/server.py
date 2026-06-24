@@ -279,7 +279,6 @@ class GameSession:
                 "queued": len(shop.queued_job_ids),
                 "blocked": len(shop.blocked_job_ids),
                 "completed": len(shop.completed_job_ids),
-                "utilization": round(shop.utilization, 3),
                 "idle": shop.idle_time,
                 "risk": round(shop.risk_score, 1),
                 "highestRiskPiece": _highest_risk_piece(self.player_state, shop.id),
@@ -575,7 +574,6 @@ class GameSession:
             "jobsLate": snapshot.jobs_late,
             "reschedules": snapshot.reschedules,
             "cost": round(snapshot.cost, 1),
-            "utilization": round(snapshot.utilization, 3),
             "idleTime": snapshot.idle_time,
             "risk": round(snapshot.schedule_risk, 1),
             "projectedCompletion": day_shift(snapshot.projected_completion_shift, self.config.shifts_per_day),
@@ -610,9 +608,54 @@ class GameSession:
             "player": _snapshot_payload(player_snapshot, self.config.shifts_per_day, self.player_state),
             "automated": _snapshot_payload(automated_snapshot, self.config.shifts_per_day, self.automated_state),
             "decisionAudit": self._decision_audit_payload(),
+            "completionHistory": self._completion_history_payload(player_snapshot, automated_snapshot),
             "review": review,
             "explanation": review["reasons"],
         }
+
+    def _completion_history_payload(
+        self,
+        player_snapshot: MetricSnapshot,
+        automated_snapshot: MetricSnapshot,
+    ) -> dict[str, Any]:
+        """Return daily cumulative subjob completion counts for the final chart."""
+        total_days = max(1, self.config.total_days)
+        days = list(range(total_days + 1))
+        total_jobs = max(len(self.player_state.jobs), len(self.automated_state.jobs))
+
+        return {
+            "days": days,
+            "total": total_jobs,
+            "player": self._completion_series(self.player_state, player_snapshot, total_days, total_jobs),
+            "automated": self._completion_series(self.automated_state, automated_snapshot, total_days, total_jobs),
+        }
+
+    def _completion_series(
+        self,
+        state: SimulationState,
+        final_snapshot: MetricSnapshot,
+        total_days: int,
+        total_jobs: int,
+    ) -> list[int]:
+        """Build a carry-forward daily series from metric snapshots."""
+        completions_by_day: dict[int, int] = {0: 0}
+        for snapshot in state.metric_history:
+            day = max(0, min(total_days, snapshot.day))
+            completions_by_day[day] = max(completions_by_day.get(day, 0), snapshot.jobs_completed)
+
+        final_day = max(0, min(total_days, final_snapshot.day))
+        completions_by_day[final_day] = max(completions_by_day.get(final_day, 0), final_snapshot.jobs_completed)
+
+        if state.final_item_completed and state.completion_shift:
+            completion_day = max(1, min(total_days, ((state.completion_shift - 1) // state.shifts_per_day) + 1))
+            completions_by_day[completion_day] = max(completions_by_day.get(completion_day, 0), total_jobs)
+
+        current = 0
+        series: list[int] = []
+        for day in range(total_days + 1):
+            current = max(current, completions_by_day.get(day, current))
+            series.append(min(total_jobs, current))
+        return series
     
     def _final_review_payload(
         self,
@@ -917,7 +960,6 @@ def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: Simu
         "jobsCompleted": snapshot.jobs_completed,
         "jobsRemaining": snapshot.jobs_remaining,
         "jobsLate": snapshot.jobs_late,
-        "utilization": round(snapshot.utilization, 3),
         "idleTime": snapshot.idle_time,
         "reschedules": snapshot.reschedules,
         "cost": round(snapshot.cost, 1),
