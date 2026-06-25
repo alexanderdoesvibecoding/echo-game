@@ -535,6 +535,7 @@ class GameSession:
             "completedToday": len(self.last_result.completed_job_ids),
             "jobsRemaining": snapshot.jobs_remaining,
             "piecesCompleted": snapshot.pieces_completed,
+            "jobsBehindSchedule": snapshot.jobs_behind_schedule,
             "jobsLate": snapshot.jobs_late,
             "reschedules": snapshot.reschedules,
             "idleTime": snapshot.idle_time,
@@ -847,7 +848,7 @@ class GameRequestHandler(BaseHTTPRequestHandler):
                 if mode not in {"normal", "demo"}:
                     raise ValueError("Choose either normal or demo mode.")
                 type(self).session = GameSession(
-                    seed=None,
+                    seed=_parse_optional_seed(data.get("seed")),
                     demo=mode == "demo",
                     mode=mode,
                 )
@@ -939,6 +940,7 @@ def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: Simu
         "piecesCompleted": snapshot.pieces_completed,
         "jobsCompleted": snapshot.jobs_completed,
         "jobsRemaining": snapshot.jobs_remaining,
+        "jobsBehindSchedule": snapshot.jobs_behind_schedule,
         "jobsLate": snapshot.jobs_late,
         "idleTime": snapshot.idle_time,
         "reschedules": snapshot.reschedules,
@@ -949,6 +951,16 @@ def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: Simu
         "deadlineMet": snapshot.deadline_met,
         "completion": day_shift(completion_shift, shifts_per_day) if completion_shift else None,
     }
+
+
+def _parse_optional_seed(value: Any) -> int | None:
+    """Return an integer seed from a JSON value, or None for a random run."""
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Seed must be an integer.") from exc
 
 
 def _card_payload(card: DecisionCard, selected_choice: str | None) -> dict[str, Any]:

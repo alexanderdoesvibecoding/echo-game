@@ -29,6 +29,9 @@ GAME_PRESETS: dict[str, dict[str, object]] = {
         "max_base_events": 7,
         "min_extra_quality_rework_events": 0,
         "max_extra_quality_rework_events": 1,
+        "completion_rework_probability": 0.10,
+        "min_completion_rework_shifts": 1,
+        "max_completion_rework_shifts": 3,
     },
     "demo": {
         # Days
@@ -37,7 +40,7 @@ GAME_PRESETS: dict[str, dict[str, object]] = {
         "piece_count": 3,
         # Subjobs per job
         "min_jobs_per_piece": 3,
-        "max_jobs_per_piece": 5,
+        "max_jobs_per_piece": 3,
         # Shops
         "shop_count": 9,
         # Work centers per shop
@@ -46,13 +49,16 @@ GAME_PRESETS: dict[str, dict[str, object]] = {
         # Demo pacing knobs
         "min_decisions_per_day": 2,
         "max_decisions_per_day": 3,
-        "max_job_duration_shifts": 3,
+        "max_job_duration_shifts": 2,
         "setup_time_choices": (0,),
         "transport_delay_probability": 0.0,
         "min_base_events": 0,
         "max_base_events": 0,
         "min_extra_quality_rework_events": 0,
         "max_extra_quality_rework_events": 0,
+        "completion_rework_probability": 0.0,
+        "min_completion_rework_shifts": 0,
+        "max_completion_rework_shifts": 0,
     },
 }
 
@@ -79,6 +85,9 @@ class GameConfig:
     max_base_events: int = 15
     min_extra_quality_rework_events: int = 1
     max_extra_quality_rework_events: int = 5
+    completion_rework_probability: float = 0.10
+    min_completion_rework_shifts: int = 1
+    max_completion_rework_shifts: int = 3
     seed: int | None = None
     use_color: bool = True
     debug: bool = False
@@ -100,8 +109,9 @@ class GameConfig:
         values = GAME_PRESETS.get(preset)
         if values is None:
             raise ValueError(f"Unknown game preset: {preset}")
-        _validate_preset_values(preset, values)
-        return cls(seed=seed, use_color=use_color, debug=debug, **values)
+        config = cls(seed=seed, use_color=use_color, debug=debug, **values)
+        _validate_config(preset, config)
+        return config
 
     @classmethod
     def demo(cls, seed: int | None = None, use_color: bool = True, debug: bool = False) -> "GameConfig":
@@ -116,25 +126,66 @@ def resolve_seed(seed: int | None) -> int:
     return random.SystemRandom().randint(100_000, 999_999_999)
 
 
-def _validate_preset_values(preset: str, values: dict[str, object]) -> None:
+def _validate_config(preset: str, config: GameConfig) -> None:
     """Fail fast when an edited preset has an impossible size range."""
     positive_fields = [
         "total_days",
+        "shifts_per_day",
         "piece_count",
         "shop_count",
+        "min_decisions_per_day",
+        "max_decisions_per_day",
+        "min_job_duration_shifts",
+        "max_job_duration_shifts",
         "min_jobs_per_piece",
         "max_jobs_per_piece",
         "min_workcenters_per_shop",
         "max_workcenters_per_shop",
     ]
     for field in positive_fields:
-        if int(values[field]) < 1:
+        if int(getattr(config, field)) < 1:
             raise ValueError(f"{preset} preset {field} must be at least 1.")
+
+    non_negative_fields = [
+        "min_base_events",
+        "max_base_events",
+        "min_extra_quality_rework_events",
+        "max_extra_quality_rework_events",
+        "min_completion_rework_shifts",
+        "max_completion_rework_shifts",
+    ]
+    for field in non_negative_fields:
+        if int(getattr(config, field)) < 0:
+            raise ValueError(f"{preset} preset {field} cannot be negative.")
 
     ordered_ranges = [
         ("min_jobs_per_piece", "max_jobs_per_piece", "subjobs per job"),
         ("min_workcenters_per_shop", "max_workcenters_per_shop", "work centers per shop"),
+        ("min_decisions_per_day", "max_decisions_per_day", "decisions per day"),
+        ("min_job_duration_shifts", "max_job_duration_shifts", "job duration"),
+        ("min_base_events", "max_base_events", "base events"),
+        (
+            "min_extra_quality_rework_events",
+            "max_extra_quality_rework_events",
+            "extra quality rework events",
+        ),
+        ("min_completion_rework_shifts", "max_completion_rework_shifts", "completion rework"),
     ]
     for minimum, maximum, label in ordered_ranges:
-        if int(values[minimum]) > int(values[maximum]):
+        if int(getattr(config, minimum)) > int(getattr(config, maximum)):
             raise ValueError(f"{preset} preset minimum {label} cannot exceed maximum {label}.")
+
+    for field in ("transport_delay_probability", "completion_rework_probability"):
+        probability = float(getattr(config, field))
+        if probability < 0.0 or probability > 1.0:
+            raise ValueError(f"{preset} preset {field} must be between 0.0 and 1.0.")
+
+    if not config.setup_time_choices:
+        raise ValueError(f"{preset} preset setup_time_choices cannot be empty.")
+    if any(choice < 0 for choice in config.setup_time_choices):
+        raise ValueError(f"{preset} preset setup_time_choices cannot contain negative values.")
+
+    if config.completion_rework_probability > 0 and config.max_completion_rework_shifts < 1:
+        raise ValueError(
+            f"{preset} preset completion rework shifts must be positive when completion rework is enabled."
+        )

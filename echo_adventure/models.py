@@ -209,6 +209,7 @@ class MetricSnapshot:
     pieces_completed: int
     jobs_completed: int
     jobs_remaining: int
+    jobs_behind_schedule: int
     jobs_late: int
     utilization: float
     idle_time: int

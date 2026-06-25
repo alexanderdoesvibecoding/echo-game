@@ -27,6 +27,11 @@ def calculate_snapshot(state: SimulationState) -> MetricSnapshot:
     risk = calculate_schedule_risk(state, projected)
     jobs_completed = len(state.completed_jobs)
     total_jobs = len(state.jobs)
+    jobs_behind_schedule = sum(
+        1
+        for job in state.jobs.values()
+        if not job.is_complete and state.current_shift > job.due_shift
+    )
     jobs_late = sum(
         1
         for job in state.jobs.values()
@@ -44,6 +49,7 @@ def calculate_snapshot(state: SimulationState) -> MetricSnapshot:
         pieces_completed=pieces_completed,
         jobs_completed=jobs_completed,
         jobs_remaining=max(0, total_jobs - jobs_completed),
+        jobs_behind_schedule=jobs_behind_schedule,
         jobs_late=jobs_late,
         utilization=utilization,
         idle_time=state.idle_time,

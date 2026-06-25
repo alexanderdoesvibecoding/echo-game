@@ -42,7 +42,7 @@ python -m echo_adventure --port 8766
 
 Use a seed when comparing changes. The same seed should generate the same scenario and event timeline unless scenario-generation logic changes.
 
-The demo mode is a five-day run with five jobs, shorter subjob chains, no random disruptions, and two or three decisions per day. It is intended to be finishable in five minutes or less.
+The demo mode is a five-day teaching run with three top-level jobs, three subjobs per job, shorter subjob durations, no random disruptions, no completion-time inspection rework, and two or three decisions per day. It is intended to be finishable in five minutes or less.
 
 With a fixed seed:
 
@@ -110,11 +110,13 @@ Subjobs carry priority, due shift, risk score, candidate workcenters, and depend
 
 ### Rework
 
-Rework is intentionally common. It can happen through:
+Rework is intentionally common in normal mode. It can happen through:
 
 - Quality rework events.
 - Rework spillover events.
 - Completion-time inspection rework.
+
+Demo mode disables random event rework and completion-time inspection rework so that the short run is a scheduling tutorial rather than a hidden-defect survival challenge.
 
 The UI marks subjobs that have had rework with a small red dot next to the subjob id.
 
@@ -184,6 +186,22 @@ echo_adventure/
     view.py              Browser HTML, CSS, and JavaScript template
 ```
 
+## Presets and Balance
+
+Game balance is controlled in `echo_adventure/config.py` through named presets. The current presets are:
+
+- `normal`: 15 days, 10 top-level jobs, 3-5 subjobs per job, random disruptions, cascades, and completion-time rework.
+- `demo`: 5 days, 3 top-level jobs, exactly 3 subjobs per job, shorter durations, no random disruptions, and no completion-time rework.
+
+Completion-time inspection rework is controlled by `completion_rework_probability`, `min_completion_rework_shifts`, and `max_completion_rework_shifts`. Keep these explicit in presets instead of reintroducing hard-coded probabilities in scenario generation.
+
+Demo mode should be finishable by ECHO across sampled seeds. If ECHO cannot finish a demo seed, a human player is unlikely to have a fair path either. Good tuning options are:
+
+- Reduce demo subjob chain length or duration before adding more deadline days.
+- Keep hidden defects disabled in demo; teach visible decisions first.
+- Preserve challenge with decision pressure and queue tradeoffs, not surprise rework.
+- Add known failing seeds to `test_echo_wins_demo_sampled_seeds` before tuning.
+
 ## Browser API
 
 The UI server exposes a tiny local JSON API:
@@ -214,10 +232,13 @@ Starts a new session.
 Request:
 
 ```json
-{ "seed": "12345" }
+{
+  "mode": "demo",
+  "seed": "12345"
+}
 ```
 
-The seed may be empty to use a random seed.
+The mode can be `normal` or `demo`. The seed may be empty or omitted to use a random seed.
 
 ### `POST /api/choice`
 
@@ -227,7 +248,7 @@ Request:
 
 ```json
 {
-  "cardId": "DAY-01-ROOT-01",
+  "cardId": "DAY-01-Q01",
   "choiceId": "2"
 }
 ```
@@ -242,6 +263,30 @@ Run a compile check after edits:
 
 ```bash
 python -m py_compile echo_adventure/*.py echo_adventure/**/*.py
+```
+
+Run the tests:
+
+```bash
+python -m pytest
+```
+
+The tests live under `echo_adventure/tests/`. Keep them visible to git; balance regressions are easy to miss if local test files are ignored.
+
+Useful balance check while tuning demo mode:
+
+```bash
+python - <<'PY'
+from echo_adventure.config import GameConfig
+from echo_adventure.tests.test_echo_wins import _run_echo
+
+misses = []
+for seed in range(1, 101):
+    snapshot = _run_echo(GameConfig.for_preset("demo", seed=seed))
+    if not snapshot.deadline_met:
+        misses.append(seed)
+print(misses)
+PY
 ```
 
 Run the UI with a stable seed:

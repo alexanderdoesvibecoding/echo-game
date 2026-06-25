@@ -104,9 +104,14 @@ def _assign_planned_completion_rework(
     jobs: dict[str, Job],
 ) -> None:
     """Preassign completion rework so player and ECHO share the same defects."""
+    if config.completion_rework_probability <= 0.0:
+        return
     for job in jobs.values():
-        if rng.random() < 0.10:
-            job.planned_completion_rework_shifts = rng.randint(1, 3)
+        if rng.random() < config.completion_rework_probability:
+            job.planned_completion_rework_shifts = rng.randint(
+                config.min_completion_rework_shifts,
+                config.max_completion_rework_shifts,
+            )
 
 
 def validate_scenario(scenario: Scenario, config: GameConfig) -> None:

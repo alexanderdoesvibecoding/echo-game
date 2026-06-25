@@ -313,7 +313,7 @@ INDEX_HTML = r"""<!doctype html>
     .grid { display: grid; gap: 16px; }
     .metrics {
       display: grid;
-      grid-template-columns: repeat(4, minmax(120px, 1fr));
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
       gap: 10px;
       padding: 14px;
     }
@@ -1455,6 +1455,7 @@ INDEX_HTML = r"""<!doctype html>
             <tr><td>Subjobs completed today</td><td>${summary.completedToday}</td></tr>
             <tr><td>Subjobs remaining</td><td>${summary.jobsRemaining}</td></tr>
             <tr><td>Jobs complete</td><td>${summary.piecesCompleted}/${payload.pieces.length}</td></tr>
+            <tr><td>Subjobs behind schedule</td><td>${summary.jobsBehindSchedule}</td></tr>
             <tr><td>Subjobs late</td><td>${summary.jobsLate}</td></tr>
             <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
             <tr><td>Projected completion</td><td>${summary.projectedCompletion}</td></tr>
@@ -1493,6 +1494,7 @@ INDEX_HTML = r"""<!doctype html>
             <tr><td>Completion</td><td>${p.completion || "Not complete"}</td><td>${a.completion || "Not complete"}</td></tr>
             <tr><td>Jobs complete</td><td>${p.piecesCompleted}</td><td>${a.piecesCompleted}</td></tr>
             <tr><td>Subjobs completed</td><td>${p.jobsCompleted}</td><td>${a.jobsCompleted}</td></tr>
+            <tr><td>Subjobs behind schedule</td><td>${p.jobsBehindSchedule}</td><td>${a.jobsBehindSchedule}</td></tr>
             <tr><td>Subjobs late</td><td>${p.jobsLate}</td><td>${a.jobsLate}</td></tr>
             <tr><td>Idle time</td><td>${p.idleTime}</td><td>${a.idleTime}</td></tr>
             <tr><td>Reschedules</td><td>${p.reschedules}</td><td>${a.reschedules}</td></tr>
@@ -1651,16 +1653,17 @@ INDEX_HTML = r"""<!doctype html>
     function renderMetrics() {
       const snap = state.snapshot;
       const metrics = [
-        ["Jobs Complete", `${snap.piecesCompleted}/${state.pieces.length}`, snap.piecesCompleted / state.pieces.length, "good", "How many top-level jobs are complete."],
-        ["Subjobs Complete", fmtNum(snap.jobsCompleted), snap.jobsCompleted / Math.max(1, snap.jobsCompleted + snap.jobsRemaining), "good", "Total subjobs finished out of all required work."],
-        ["Subjobs Late", fmtNum(snap.jobsLate), Math.min(1, snap.jobsLate / 20), snap.jobsLate > 0 ? "warn" : "good", "Number of subjobs that have missed their target completion date."],
-        ["Schedule Risk", `${Math.round(snap.scheduleRisk)}/100`, snap.scheduleRisk / 100, snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good", "Overall probability of missing the deadline (0 = safe, 100 = critical)."]
+        ["Jobs Complete", `${snap.piecesCompleted}/${state.pieces.length}`, snap.piecesCompleted / state.pieces.length, "good", "How many top-level jobs are complete.", true],
+        ["Subjobs Complete", fmtNum(snap.jobsCompleted), snap.jobsCompleted / Math.max(1, snap.jobsCompleted + snap.jobsRemaining), "good", "Total subjobs finished out of all required work.", true],
+        ["Subjobs Behind Schedule", fmtNum(snap.jobsBehindSchedule), 0, snap.jobsBehindSchedule > 0 ? "warn" : "good", "Incomplete subjobs whose target completion date has already passed.", false],
+        ["Subjobs Late", fmtNum(snap.jobsLate), 0, snap.jobsLate > 0 ? "warn" : "good", "Completed subjobs that finished after their target completion date.", false],
+        ["Schedule Risk", `${Math.round(snap.scheduleRisk)}/100`, snap.scheduleRisk / 100, snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good", "Overall probability of missing the deadline (0 = safe, 100 = critical).", true]
       ];
-      $("metrics").innerHTML = metrics.map(([label, value, pct, tone, tooltip]) => `
+      $("metrics").innerHTML = metrics.map(([label, value, pct, tone, tooltip, showBar]) => `
         <div class="metric">
           <span class="subtle">${label}<span class="info-icon" data-tooltip="${escapeHtml(tooltip)}">i</span></span>
           <strong>${value}</strong>
-          <div class="progress"><div class="bar ${tone}" style="width:${Math.max(0, Math.min(1, pct)) * 100}%"></div></div>
+          ${showBar ? `<div class="progress"><div class="bar ${tone}" style="width:${Math.max(0, Math.min(1, pct)) * 100}%"></div></div>` : ""}
         </div>
       `).join("");
     }
@@ -1819,6 +1822,7 @@ INDEX_HTML = r"""<!doctype html>
             <tr><td>Subjobs completed today</td><td>${summary.completedToday}</td></tr>
             <tr><td>Subjobs remaining</td><td>${summary.jobsRemaining}</td></tr>
             <tr><td>Jobs complete</td><td>${summary.piecesCompleted}/${state.pieces.length}</td></tr>
+            <tr><td>Subjobs behind schedule</td><td>${summary.jobsBehindSchedule}</td></tr>
             <tr><td>Subjobs late</td><td>${summary.jobsLate}</td></tr>
             <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
             <tr><td>Projected completion</td><td>${summary.projectedCompletion}</td></tr>
@@ -1874,6 +1878,11 @@ INDEX_HTML = r"""<!doctype html>
             <td>Subjobs completed</td>
             <td>${p.jobsCompleted}</td>
             <td>${a.jobsCompleted}</td>
+          </tr>
+          <tr>
+            <td>Subjobs behind schedule</td>
+            <td>${p.jobsBehindSchedule}</td>
+            <td>${a.jobsBehindSchedule}</td>
           </tr>
           <tr>
             <td>Subjobs late</td>

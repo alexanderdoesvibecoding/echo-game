@@ -567,6 +567,12 @@ def _capability_label(capability: str) -> str:
     return capability.replace("_", " ")
 
 
+def _piece_label(piece_id: str) -> str:
+    """Return the decision-card label for a top-level job."""
+    suffix = piece_id.split("-")[-1] if piece_id else ""
+    return f"Job {suffix}" if suffix else "Job"
+
+
 def _job_state_phrase(state: SimulationState, job: Job) -> str:
     """Summarize a job state without exposing hidden scoring values."""
     if job.is_blocked:
@@ -921,8 +927,7 @@ def _queue_congestion_card(state: SimulationState, shop: Shop, ordinal: int, day
 
 def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int) -> DecisionCard:
     """Build a card for a subjob that threatens final completion timing."""
-    piece = state.pieces.get(job.piece_id)
-    piece_name = piece.name if piece else "Project work"
+    piece_name = _piece_label(job.piece_id)
     return DecisionCard(
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
@@ -970,8 +975,7 @@ def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int
 
 def _handoff_card(state: SimulationState, job: Job, ordinal: int, day: int) -> DecisionCard:
     """Build a card around a cross-shop dependency handoff."""
-    piece = state.pieces.get(job.piece_id)
-    piece_name = piece.name.split(" - ", 1)[0] if piece else job.piece_id
+    piece_name = _piece_label(job.piece_id)
     predecessor_names = [
         state.shops[state.jobs[dep_id].shop_id].name
         for dep_id in job.dependency_ids
@@ -1068,8 +1072,7 @@ def _alternate_card(state: SimulationState, job: Job, ordinal: int, day: int) ->
 
 def _quality_triage_card(state: SimulationState, job: Job, ordinal: int, day: int) -> DecisionCard:
     """Build a card for preventive quality or rework containment."""
-    piece = state.pieces.get(job.piece_id)
-    piece_name = piece.name if piece else job.piece_id
+    piece_name = _piece_label(job.piece_id)
     return DecisionCard(
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
@@ -1443,9 +1446,8 @@ def _add_unexpected_job(state: SimulationState, event_id: str | None, prioritize
     if not event:
         return "No new job request was available to add."
     piece_id = insert_unexpected_job(state, event, prioritize=prioritize)
-    piece = state.pieces[piece_id]
     mode = "prioritized" if prioritize else "added to the back of the queue"
-    return f"{piece.name} was {mode}; the submarine build now has {len(state.pieces)} top-level jobs."
+    return f"{_piece_label(piece_id)} was {mode}; the submarine build now has {len(state.pieces)} top-level jobs."
 
 
 def _apply_forward_decision_effect(
@@ -1708,7 +1710,7 @@ def _target_name(state: SimulationState, target_type: TargetType, target_id: str
     if target_type == TargetType.WORKCENTER and target_id in state.workcenters:
         return state.workcenters[target_id].name
     if target_type == TargetType.PIECE and target_id in state.pieces:
-        return state.pieces[target_id].name
+        return _piece_label(target_id)
     return target_id
 
 
