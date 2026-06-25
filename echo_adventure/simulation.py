@@ -116,13 +116,11 @@ def complete_job(state: SimulationState, job_id: str) -> None:
 
 def _maybe_require_completion_rework(state: SimulationState, job) -> bool:
     """Deterministically decide whether a finished job needs final rework."""
-    if state.echo_benchmark:
-        return False
     if job.rework_count >= MAX_COMPLETION_REWORK_PER_JOB:
         return False
-    # Use a seeded local RNG so the same scenario and shift history produce the
-    # same inspection outcome without touching module/global randomness.
-    roll = Random(f"{state.seed}:{job.id}:{state.current_shift}:{job.rework_count}")
+    # Use a seeded local RNG so the same scenario/job produce the same
+    # inspection outcome without touching module/global randomness.
+    roll = Random(f"{state.seed}:{job.id}:completion-rework:{job.rework_count}")
     if roll.random() >= JOB_REWORK_PROBABILITY:
         return False
 
@@ -187,8 +185,6 @@ def _start_available_jobs(state: SimulationState) -> None:
                 if wc.id != job.candidate_workcenter_ids[0]:
                     adjusted += 1
                     state.cost += 5
-                if state.echo_benchmark:
-                    adjusted = max(1, math.floor(adjusted * 0.72))
                 job.remaining_duration_shifts = max(1, adjusted)
                 job.started_once = True
             job.status = JobStatus.RUNNING

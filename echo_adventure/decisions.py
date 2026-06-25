@@ -43,10 +43,34 @@ def generate_decision_graph(
         root.parent_choice_id = None
         cards[root.id] = root
         roots_by_day[day] = [root.id]
-        _attach_next_question_cards(root, cards, day=day, question_number=2, total_questions=len(day_cards))
+        _attach_next_question_cards(
+            root,
+            cards,
+            day=day,
+            question_number=2,
+            total_questions=len(day_cards),
+            question_templates=day_cards[1:],
+        )
     for card in cards.values():
         card.echo_choice_id = select_echo_choice(card, cards).id
     return cards, roots_by_day, counts_by_day
+
+
+def generate_decision_cards(
+    state: SimulationState,
+    day: int,
+    config: GameConfig | None = None,
+) -> list[DecisionCard]:
+    """Return the deterministic daily card templates for one day.
+
+    This helper is intentionally smaller than the branching graph builder: it
+    exposes the player-facing card pool used for that day without attaching the
+    answer-specific next-card tree.
+    """
+    if config is None:
+        config = GameConfig()
+    _prime_graph_state_for_day(state, day, config)
+    return _generate_root_decision_cards(state, day, config)
 
 
 def active_decision_cards(
@@ -160,38 +184,109 @@ def _generate_root_decision_cards(state: SimulationState, day: int, config: Game
     if config is None:
         config = GameConfig()
         update_state_metrics(state)
-    cards: list[DecisionCard] = []
     rng = _decision_rng(state, day, config)
     target_count = rng.randint(config.min_decisions_per_day, config.max_decisions_per_day)
-    # Visible disruptions get first claim on limited player attention, then the
-    # generator fills remaining slots with operational pressure cards.
-    for event in _visible_events(state):
-        if len(cards) == target_count:
+    selected: list[DecisionCard] = []
+    candidate_pool: list[DecisionCard] = []
+
+    # Keep the most urgent visible disruption in front of the player, then let
+    # the rest compete with operational tradeoffs so later questions vary.
+    visible_events = _visible_events(state)
+    if visible_events:
+        selected.append(_event_card(state, visible_events[0], 1, day))
+        for event in visible_events[1:]:
+            candidate_pool.append(_event_card(state, event, len(candidate_pool) + 1, day))
+
+    candidate_pool.extend(_operational_decision_candidates(state, day, len(candidate_pool) + 1))
+    candidate_pool = [card for card in candidate_pool if not _duplicates_any_card(selected, card)]
+    candidate_pool.sort(key=lambda card: (rng.random() - card.severity * 0.14, card.type.value, card.title))
+
+    for card in candidate_pool:
+        if len(selected) >= target_count:
             break
-        cards.append(_event_card(state, event, len(cards) + 1, day))
-        if len(cards) == 2:
-            break
-    if len(cards) < target_count:
-        bottleneck = _top_bottleneck(state)
-        if bottleneck:
-            cards.append(_bottleneck_card(state, bottleneck, len(cards) + 1, day))
-    if len(cards) < target_count:
-        critical = _top_critical_job(state)
-        if critical:
-            cards.append(_critical_path_card(state, critical, len(cards) + 1, day))
-    if len(cards) < target_count:
-        alternate = _alternate_routing_job(state)
-        if alternate:
-            cards.append(_alternate_card(state, alternate, len(cards) + 1, day))
-    if len(cards) < target_count and _has_idle_opportunity(state):
-        cards.append(_idle_card(state, len(cards) + 1, day))
-    if len(cards) < target_count and not state.all_pieces_ready():
-        cards.append(_completion_readiness_card(state, len(cards) + 1, day))
-    if not cards:
-        cards.append(_strategic_card(state, len(cards) + 1, day))
-    while len(cards) < target_count:
-        cards.append(_fallback_strategic_card(state, len(cards) + 1, day))
+        if _duplicates_any_card(selected, card):
+            continue
+        selected.append(card)
+
+    if not selected:
+        selected.append(_strategic_card(state, 1, day))
+    while len(selected) < target_count:
+        selected.append(_fallback_strategic_card(state, len(selected) + 1, day))
+    return _renumber_decision_cards(selected, day)
+
+
+def _operational_decision_candidates(state: SimulationState, day: int, start_ordinal: int = 1) -> list[DecisionCard]:
+    """Build the broader daily candidate pool before seeded selection."""
+    cards: list[DecisionCard] = []
+
+    def add(card: DecisionCard | None) -> None:
+        if card:
+            cards.append(card)
+
+    for shop in state.get_bottleneck_shops(3):
+        pressure = len(shop.queued_job_ids) + len(shop.blocked_job_ids) * 2
+        if pressure >= 2:
+            add(_bottleneck_card(state, shop, start_ordinal + len(cards), day))
+        if len(shop.queued_job_ids) >= 3:
+            add(_queue_congestion_card(state, shop, start_ordinal + len(cards), day))
+
+    for job in state.get_critical_path_jobs()[:3]:
+        add(_critical_path_card(state, job, start_ordinal + len(cards), day))
+
+    for job in _alternate_routing_jobs(state)[:3]:
+        add(_alternate_card(state, job, start_ordinal + len(cards), day))
+
+    handoff = _handoff_risk_job(state)
+    if handoff:
+        add(_handoff_card(state, handoff, start_ordinal + len(cards), day))
+
+    quality = _quality_triage_job(state)
+    if quality:
+        add(_quality_triage_card(state, quality, start_ordinal + len(cards), day))
+
+    if _has_idle_opportunity(state):
+        add(_idle_card(state, start_ordinal + len(cards), day))
+    if not state.all_pieces_ready():
+        add(_completion_readiness_card(state, start_ordinal + len(cards), day))
+
+    add(_strategic_card(state, start_ordinal + len(cards), day))
     return cards
+
+
+def _duplicates_any_card(cards: list[DecisionCard], candidate: DecisionCard) -> bool:
+    """Return whether a candidate repeats the same player-facing pressure."""
+    candidate_targets = tuple(target for target in candidate.target_ids if not str(target).startswith("EVT-"))
+    candidate_target_set = set(candidate_targets)
+    candidate_key = (candidate.type, candidate_targets[:2], candidate.title)
+    for card in cards:
+        targets = tuple(target for target in card.target_ids if not str(target).startswith("EVT-"))
+        if candidate_target_set and candidate_target_set & set(targets):
+            return True
+        if (card.type, targets[:2], card.title) == candidate_key:
+            return True
+    return False
+
+
+def _renumber_decision_cards(cards: list[DecisionCard], day: int) -> list[DecisionCard]:
+    """Normalize template IDs after the seeded variety pass chooses an order."""
+    renumbered: list[DecisionCard] = []
+    for ordinal, card in enumerate(cards, start=1):
+        renumbered.append(
+            DecisionCard(
+                id=f"DAY-{day:02d}-DEC-{ordinal}",
+                day=card.day,
+                type=card.type,
+                title=card.title,
+                description=card.description,
+                target_ids=list(card.target_ids),
+                severity=card.severity,
+                choices=_clone_choices(card.choices),
+                echo_choice_id=card.echo_choice_id,
+                parent_card_id=card.parent_card_id,
+                parent_choice_id=card.parent_choice_id,
+            )
+        )
+    return renumbered
 
 
 def _decision_rng(state: SimulationState, day: int, config: GameConfig) -> random.Random:
@@ -307,16 +402,19 @@ def _attach_next_question_cards(
     day: int,
     question_number: int,
     total_questions: int,
+    question_templates: list[DecisionCard],
 ) -> None:
     """Create answer-specific next questions under a parent card."""
     if question_number > total_questions:
         return
+    template_index = question_number - 2
+    template = question_templates[template_index] if template_index < len(question_templates) else None
     for choice in parent.choices:
         child_id = f"DAY-{day:02d}-Q{question_number:02d}-{parent.id.split('-', 2)[-1]}-C{choice.id}"
-        child = _next_question_card(parent, choice, child_id, question_number)
+        child = _next_question_card(parent, choice, child_id, question_number, template)
         choice.next_card_id = child.id
         cards[child.id] = child
-        _attach_next_question_cards(child, cards, day, question_number + 1, total_questions)
+        _attach_next_question_cards(child, cards, day, question_number + 1, total_questions, question_templates)
 
 
 def _next_question_card(
@@ -324,8 +422,26 @@ def _next_question_card(
     parent_choice: DecisionChoice,
     card_id: str,
     question_number: int,
+    template: DecisionCard | None = None,
 ) -> DecisionCard:
     """Build the next daily decision selected by a previous answer."""
+    if template:
+        return DecisionCard(
+            id=card_id,
+            day=parent.day,
+            type=template.type,
+            title=f"Decision {question_number}: {template.title}",
+            description=(
+                f"After choosing {parent_choice.label.lower()} on the prior tradeoff, "
+                f"the next scheduling issue is: {template.description}"
+            ),
+            target_ids=list(template.target_ids),
+            severity=template.severity,
+            choices=_clone_choices(template.choices),
+            parent_card_id=parent.id,
+            parent_choice_id=parent_choice.id,
+        )
+
     recommended = _recommended_effect_for_card(parent)
     event_id = parent_choice.immediate_effects.get("event_id") or next(
         (target_id for target_id in parent.target_ids if isinstance(target_id, str) and target_id.startswith("EVT-")),
@@ -349,6 +465,22 @@ def _next_question_card(
         parent_card_id=parent.id,
         parent_choice_id=parent_choice.id,
     )
+
+
+def _clone_choices(choices: list[DecisionChoice]) -> list[DecisionChoice]:
+    """Copy choice templates without carrying branch links between cards."""
+    return [
+        DecisionChoice(
+            id=choice.id,
+            label=choice.label,
+            description=choice.description,
+            immediate_effects=dict(choice.immediate_effects),
+            risk_effect=choice.risk_effect,
+            cost_effect=choice.cost_effect,
+            reschedule_effect=choice.reschedule_effect,
+        )
+        for choice in choices
+    ]
 
 
 def _next_question_choices(
@@ -768,6 +900,65 @@ def _bottleneck_card(state: SimulationState, shop: Shop, ordinal: int, day: int)
     )
 
 
+def _queue_congestion_card(state: SimulationState, shop: Shop, ordinal: int, day: int) -> DecisionCard:
+    """Build a card for a shop queue that needs a dispatching rule."""
+    queued_jobs = [state.jobs[job_id] for job_id in shop.queued_job_ids if job_id in state.jobs]
+    critical_count = sum(1 for job in queued_jobs if job.critical_path)
+    description = (
+        f"{shop.name} has several subjobs waiting for the same capability family. "
+        "The next dispatching rule can either thin the queue, protect the riskiest work, or preserve shop stability."
+    )
+    if critical_count:
+        description += f" {critical_count} queued subjob(s) are on or near the critical path."
+    return DecisionCard(
+        id=f"DAY-{day:02d}-DEC-{ordinal}",
+        day=day,
+        type=DecisionType.QUEUE_CONGESTION,
+        title=f"Queue congestion in {shop.name}",
+        description=description,
+        target_ids=[shop.id],
+        severity=min(5, 2 + len(queued_jobs) // 3 + critical_count),
+        choices=[
+            DecisionChoice(
+                id="1",
+                label="Dispatch by due date",
+                description="Resequence the shop queue around the nearest due dates so late starts do not pile up.",
+                immediate_effects={"type": "resequence"},
+                risk_effect=-4,
+                cost_effect=5,
+                reschedule_effect=1,
+            ),
+            DecisionChoice(
+                id="2",
+                label="Split overloaded queue",
+                description="Move eligible work to alternate capacity and accept the added coordination cost.",
+                immediate_effects={"type": "split_capacity"},
+                risk_effect=-6,
+                cost_effect=18,
+                reschedule_effect=2,
+            ),
+            DecisionChoice(
+                id="3",
+                label="Defer slack-rich jobs",
+                description="Lower priority on jobs with schedule room so constrained capacity stays focused on urgent dependencies.",
+                immediate_effects={"type": "defer"},
+                risk_effect=-2,
+                cost_effect=4,
+                reschedule_effect=1,
+            ),
+            DecisionChoice(
+                id="4",
+                label="Keep shop sequence",
+                description="Avoid another queue change and let the current dispatch order run, accepting continued congestion risk.",
+                immediate_effects={"type": "wait"},
+                risk_effect=3,
+                cost_effect=0,
+                reschedule_effect=0,
+            ),
+        ],
+    )
+
+
 def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int) -> DecisionCard:
     """Build a card for a subjob that threatens final completion timing."""
     piece = state.pieces.get(job.piece_id)
@@ -821,6 +1012,69 @@ def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int
     )
 
 
+def _handoff_card(state: SimulationState, job: Job, ordinal: int, day: int) -> DecisionCard:
+    """Build a card around a cross-shop dependency handoff."""
+    piece = state.pieces.get(job.piece_id)
+    piece_name = piece.name.split(" - ", 1)[0] if piece else job.piece_id
+    predecessor_names = [
+        state.shops[state.jobs[dep_id].shop_id].name
+        for dep_id in job.dependency_ids
+        if dep_id in state.jobs and state.jobs[dep_id].shop_id in state.shops
+    ]
+    source = predecessor_names[0] if predecessor_names else "an upstream shop"
+    destination = state.shops[job.shop_id].name if job.shop_id in state.shops else "the receiving shop"
+    return DecisionCard(
+        id=f"DAY-{day:02d}-DEC-{ordinal}",
+        day=day,
+        type=DecisionType.PRIORITY_CHANGE,
+        title=f"Handoff risk into {destination}",
+        description=(
+            f"{piece_name} needs a clean handoff from {source} into {destination}. "
+            f"{_job_context(state, job)} A small sequencing miss here can leave the receiving shop waiting or force a late expedite."
+        ),
+        target_ids=[job.id],
+        severity=4 if job.critical_path or job.risk_score >= 55 else 3,
+        choices=[
+            DecisionChoice(
+                id="1",
+                label="Pull predecessor work forward",
+                description="Advance ready feeder work so the receiving shop has a cleaner start window.",
+                immediate_effects={"type": "pull_forward"},
+                risk_effect=-4,
+                cost_effect=10,
+                reschedule_effect=1,
+            ),
+            DecisionChoice(
+                id="2",
+                label="Protect receiving shop",
+                description="Raise priority on this handoff and the downstream dependency it unlocks.",
+                immediate_effects={"type": "protect_critical"},
+                risk_effect=-6,
+                cost_effect=12,
+                reschedule_effect=1,
+            ),
+            DecisionChoice(
+                id="3",
+                label="Resequence handoff lane",
+                description="Adjust queue order around the handoff while leaving active work in place.",
+                immediate_effects={"type": "resequence"},
+                risk_effect=-3,
+                cost_effect=5,
+                reschedule_effect=1,
+            ),
+            DecisionChoice(
+                id="4",
+                label="Let shops coordinate",
+                description="Keep the handoff informal and avoid schedule churn, accepting the risk of waiting time.",
+                immediate_effects={"type": "wait"},
+                risk_effect=3,
+                cost_effect=0,
+                reschedule_effect=0,
+            ),
+        ],
+    )
+
+
 def _alternate_card(state: SimulationState, job: Job, ordinal: int, day: int) -> DecisionCard:
     """Build a card when a risky subjob has viable alternate routing."""
     return DecisionCard(
@@ -858,6 +1112,62 @@ def _alternate_card(state: SimulationState, job: Job, ordinal: int, day: int) ->
                 risk_effect=-4,
                 cost_effect=8,
                 reschedule_effect=1,
+            ),
+        ],
+    )
+
+
+def _quality_triage_card(state: SimulationState, job: Job, ordinal: int, day: int) -> DecisionCard:
+    """Build a card for preventive quality or rework containment."""
+    piece = state.pieces.get(job.piece_id)
+    piece_name = piece.name if piece else job.piece_id
+    return DecisionCard(
+        id=f"DAY-{day:02d}-DEC-{ordinal}",
+        day=day,
+        type=DecisionType.QUALITY_REWORK,
+        title=f"Quality containment choice for {job.id}",
+        description=(
+            f"{piece_name} has {_capability_label(job.required_capability)} work with little room for a rework loop. "
+            f"{_job_context(state, job)} Choose how much inspection and queue disruption to accept before defects can spill into later work."
+        ),
+        target_ids=[job.id],
+        severity=4 if job.critical_path or job.risk_score >= 55 else 3,
+        choices=[
+            DecisionChoice(
+                id="1",
+                label="Add containment check",
+                description="Protect the dependency by adding attention now, reducing the chance that rework spills into downstream starts.",
+                immediate_effects={"type": "protect_critical"},
+                risk_effect=-6,
+                cost_effect=16,
+                reschedule_effect=1,
+            ),
+            DecisionChoice(
+                id="2",
+                label="Reroute for clean capacity",
+                description="Move the work to a capable station with less pressure so quality checks do not fight the main queue.",
+                immediate_effects={"type": "reroute"},
+                risk_effect=-5,
+                cost_effect=20,
+                reschedule_effect=1,
+            ),
+            DecisionChoice(
+                id="3",
+                label="Defer suspect starts",
+                description="Lower priority on less urgent starts that could consume inspection attention before this job clears.",
+                immediate_effects={"type": "defer"},
+                risk_effect=-2,
+                cost_effect=5,
+                reschedule_effect=1,
+            ),
+            DecisionChoice(
+                id="4",
+                label="Wait for formal rework",
+                description="Avoid adding checks until a defect is confirmed, accepting that later rework could be more disruptive.",
+                immediate_effects={"type": "wait"},
+                risk_effect=4,
+                cost_effect=0,
+                reschedule_effect=0,
             ),
         ],
     )
@@ -1514,6 +1824,12 @@ def _top_critical_job(state: SimulationState) -> Job | None:
 
 def _alternate_routing_job(state: SimulationState) -> Job | None:
     """Find a risky job with a usable alternate workcenter."""
+    jobs = _alternate_routing_jobs(state)
+    return jobs[0] if jobs else None
+
+
+def _alternate_routing_jobs(state: SimulationState) -> list[Job]:
+    """Find risky jobs with usable alternate workcenters."""
     candidates = [
         job
         for job in state.jobs.values()
@@ -1522,7 +1838,62 @@ def _alternate_routing_job(state: SimulationState) -> Job | None:
         and (job.critical_path or job.risk_score > 40)
         and _best_alternate_workcenter(state, job) is not None
     ]
-    return sorted(candidates, key=lambda job: (job.critical_path, job.risk_score), reverse=True)[0] if candidates else None
+    return sorted(candidates, key=lambda job: (job.critical_path, job.risk_score, job.priority), reverse=True)
+
+
+def _handoff_risk_job(state: SimulationState) -> Job | None:
+    """Find a dependency handoff where shops differ and timing is tight."""
+    candidates: list[Job] = []
+    for job in state.jobs.values():
+        if job.is_complete or not job.dependency_ids:
+            continue
+        upstream_shops = {
+            state.jobs[dep_id].shop_id
+            for dep_id in job.dependency_ids
+            if dep_id in state.jobs and state.jobs[dep_id].shop_id != job.shop_id
+        }
+        if not upstream_shops:
+            continue
+        slack = job.due_shift - state.current_shift - job.remaining_duration_shifts
+        if job.critical_path or slack <= 8 or job.risk_score >= 35:
+            candidates.append(job)
+    if not candidates:
+        return None
+    return sorted(
+        candidates,
+        key=lambda job: (job.critical_path, job.risk_score, -job.due_shift, job.priority),
+        reverse=True,
+    )[0]
+
+
+def _quality_triage_job(state: SimulationState) -> Job | None:
+    """Find work where preventive quality attention could change the day."""
+    quality_capabilities = {
+        "inspection",
+        "metrology",
+        "certification",
+        "alignment",
+        "calibration",
+        "finishing",
+    }
+    candidates = [
+        job
+        for job in state.jobs.values()
+        if not job.is_complete
+        and (
+            job.rework_count > 0
+            or job.status == JobStatus.REWORK_REQUIRED
+            or job.required_capability in quality_capabilities
+            or job.risk_score >= 45
+        )
+    ]
+    if not candidates:
+        return None
+    return sorted(
+        candidates,
+        key=lambda job: (job.rework_count, job.status == JobStatus.REWORK_REQUIRED, job.critical_path, job.risk_score),
+        reverse=True,
+    )[0]
 
 
 def _has_idle_opportunity(state: SimulationState) -> bool:

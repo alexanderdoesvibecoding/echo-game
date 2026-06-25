@@ -58,7 +58,6 @@ class GameSession:
         self.scenario = generate_scenario(self.config)
         self.player_state = initialize_state(self.scenario, self.config.shifts_per_day)
         self.automated_state = initialize_state(self.scenario, self.config.shifts_per_day)
-        self.automated_state.echo_benchmark = True
         # Manual scheduler reflects player-driven priorities; automated is the
         # hidden ECHO benchmark revealed at the end.
         self.manual_scheduler = ManualScheduler()
@@ -197,7 +196,6 @@ class GameSession:
             self.automated_state.daily_notes.clear()
             self._apply_echo_decisions_for_current_day()
             advance_day(self.automated_state, self.automated_scheduler)
-        self._guarantee_automated_success()
 
     def _apply_echo_decisions_for_current_day(self) -> None:
         """Let ECHO answer the hidden benchmark decisions for its current day."""
@@ -216,40 +214,6 @@ class GameSession:
                 apply_choice(self.automated_state, card, choice, actor="ECHO", echo_choice=choice)
                 selected[card.id] = choice.id
         self.echo_completed_days.add(day)
-
-    def _guarantee_automated_success(self) -> None:
-        """Force the benchmark to satisfy ECHO's promise if simulation luck resists."""
-        target_shift = max(
-            1,
-            min(
-                self.automated_state.current_shift or self.automated_state.deadline_shift,
-                self.automated_state.deadline_shift - self.automated_state.shifts_per_day,
-            ),
-        )
-        if (
-            self.automated_state.final_item_completed
-            and self.automated_state.completion_shift is not None
-            and self.automated_state.completion_shift <= target_shift
-        ):
-            return
-        for job in self.automated_state.jobs.values():
-            job.status = JobStatus.COMPLETE
-            job.remaining_duration_shifts = 0
-            job.block_reason = None
-            job.completed_shift = min(job.completed_shift or target_shift, target_shift)
-            self.automated_state.completed_jobs.add(job.id)
-            self.automated_state.blocked_jobs.discard(job.id)
-        for piece in self.automated_state.pieces.values():
-            piece.completed = True
-            piece.completed_job_count = piece.total_job_count
-        for wc in self.automated_state.workcenters.values():
-            wc.current_job_id = None
-            wc.queue = []
-            if wc.status not in {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}:
-                wc.status = WorkCenterStatus.AVAILABLE
-        self.automated_state.final_item_completed = True
-        self.automated_state.completion_shift = target_shift
-        update_state_metrics(self.automated_state)
 
     def _overview(self, snapshot: MetricSnapshot) -> dict[str, Any]:
         """Build the compact header/overview payload for the dashboard."""

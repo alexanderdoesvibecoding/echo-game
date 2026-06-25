@@ -815,9 +815,6 @@ INDEX_HTML = r"""<!doctype html>
           <span class="badge warn" id="decisionProgress">0/0 Daily Questions Complete</span>
         </div>
       </div>
-      <div class="controls">
-        <button id="advanceBtn" class="primary" disabled>End Day</button>
-      </div>
     </div>
     <div id="error" class="error hidden"></div>
   </header>
@@ -1682,13 +1679,13 @@ INDEX_HTML = r"""<!doctype html>
       if (state.gameOver) {
         progress.textContent = "Run complete";
         progress.className = "badge good";
-        advanceBtn.disabled = true;
+        if (advanceBtn) advanceBtn.disabled = true;
         return;
       }
 
       progress.textContent = `${chosenCount}/${totalCount} Daily Questions Complete`;
       progress.className = `badge ${remainingCount ? "warn" : "good"}`;
-      advanceBtn.disabled = !readyToAdvance();
+      if (advanceBtn) advanceBtn.disabled = !readyToAdvance();
     }
 
     function renderInlineDecisions() {
@@ -1977,7 +1974,6 @@ INDEX_HTML = r"""<!doctype html>
 
     $("settingsMenuBtn").addEventListener("click", toggleSettingsMenu);
     $("openNewRunModalBtn").addEventListener("click", openNewRunModal);
-    $("advanceBtn").addEventListener("click", prepareAdvanceDay);
     document.addEventListener("click", (e) => {
       const finalOverlay = document.getElementById("finalModalOverlay");
       const pieceOverlay = document.getElementById("pieceModalOverlay");

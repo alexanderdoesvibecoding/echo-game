@@ -271,7 +271,6 @@ class SimulationState:
     idle_disrupted_time: int = 0
     daily_notes: list[str] = field(default_factory=list)
     decision_history: list[DecisionRecord] = field(default_factory=list)
-    echo_benchmark: bool = False
 
     @property
     def current_day(self) -> int:
