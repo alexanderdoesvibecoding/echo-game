@@ -21,7 +21,7 @@ from ..decisions import (
 )
 from ..enums import JobStatus, TargetType, WorkCenterStatus
 from ..metrics import calculate_snapshot, day_shift, update_state_metrics
-from ..models import DecisionCard, DecisionChoice, DecisionProgress, Event, MetricSnapshot, SimulationState
+from ..models import DecisionCard, DecisionChoice, DecisionProgress, Event, MetricSnapshot, PuzzlePiece, SimulationState
 from ..scenario_generator import generate_scenario
 from ..schedulers.automated import AutomatedScheduler
 from ..schedulers.manual import ManualScheduler
@@ -578,7 +578,46 @@ class GameSession:
             "risk": round(snapshot.schedule_risk, 1),
             "projectedCompletion": day_shift(snapshot.projected_completion_shift, self.config.shifts_per_day),
             "pastDueJobs": self._past_due_jobs_payload(),
+            "puzzle": self._summary_puzzle_payload(),
             "notes": self.last_result.notes[-10:],
+        }
+
+    def _summary_puzzle_payload(self) -> dict[str, Any]:
+        """Return submarine puzzle tiles for the latest daily summary."""
+        if not self.last_result:
+            return {"day": self.player_state.current_day, "total": 0, "completed": 0, "completedToday": 0, "tiles": []}
+
+        start_shift = self.last_result.start_snapshot.shift
+        end_shift = self.last_result.end_snapshot.shift
+        tiles = []
+
+        for piece in sorted(self.player_state.pieces.values(), key=lambda item: item.id):
+            completion_shift = _piece_completion_shift(self.player_state, piece)
+            due_shift = _piece_due_shift(self.player_state, piece)
+            completed = completion_shift is not None
+            late = bool(completed and completion_shift > due_shift)
+            newly_completed = bool(completed and start_shift < completion_shift <= end_shift)
+
+            tiles.append(
+                {
+                    "id": piece.id,
+                    "label": _piece_display_id(piece.id),
+                    "name": piece.name,
+                    "completed": completed,
+                    "newlyCompleted": newly_completed,
+                    "late": late,
+                    "tone": "late" if late else "on-time" if completed else "pending",
+                    "due": day_shift(due_shift, self.config.shifts_per_day),
+                    "completedAt": day_shift(completion_shift, self.config.shifts_per_day) if completion_shift else None,
+                }
+            )
+
+        return {
+            "day": self.last_result.end_snapshot.day,
+            "total": len(tiles),
+            "completed": sum(1 for tile in tiles if tile["completed"]),
+            "completedToday": sum(1 for tile in tiles if tile["newlyCompleted"]),
+            "tiles": tiles,
         }
 
     # def _final_payload(self) -> dict[str, Any]:
@@ -1129,3 +1168,24 @@ def _job_was_late(state: SimulationState, job) -> bool:
     if job.is_complete:
         return job.completed_shift is not None and job.completed_shift > job.due_shift
     return job.due_shift < state.current_shift
+
+
+def _piece_due_shift(state: SimulationState, piece: PuzzlePiece) -> int:
+    """Return the top-level job due shift used for puzzle on-time coloring."""
+    due_shifts = [
+        state.jobs[job_id].due_shift
+        for job_id in piece.job_ids
+        if job_id in state.jobs
+    ]
+    return max(due_shifts, default=state.deadline_shift)
+
+
+def _piece_completion_shift(state: SimulationState, piece: PuzzlePiece) -> int | None:
+    """Return the shift when all subjobs for a top-level job were complete."""
+    completion_shifts = []
+    for job_id in piece.job_ids:
+        job = state.jobs.get(job_id)
+        if not job or not job.is_complete or job.completed_shift is None:
+            return None
+        completion_shifts.append(job.completed_shift)
+    return max(completion_shifts, default=None)

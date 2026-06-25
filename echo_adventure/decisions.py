@@ -7,7 +7,7 @@ import random
 
 from .config import GameConfig
 from .enums import DecisionType, EventType, JobStatus, TargetType, WorkCenterStatus
-from .events import schedule_follow_on_event
+from .events import insert_unexpected_job, schedule_follow_on_event
 from .metrics import update_state_metrics
 from .models import (
     DecisionCard,
@@ -136,7 +136,9 @@ def _choice_path_score(choice: DecisionChoice, graph: dict[str, DecisionCard] | 
         "reroute": 3,
         "split_capacity": 4,
         "pull_forward": 5,
+        "prioritize_new_job": 5,
         "resequence": 6,
+        "backlog_new_job": 8,
         "preempt": 7,
         "defer": 8,
         "wait": 9,
@@ -250,6 +252,10 @@ def apply_choice(
         note = _pull_forward_unaffected(state, card)
     elif effect_type == "echo_recommendation":
         note = _use_echo_recommendation(state, card)
+    elif effect_type == "prioritize_new_job":
+        note = _add_unexpected_job(state, effects.get("event_id"), prioritize=True)
+    elif effect_type == "backlog_new_job":
+        note = _add_unexpected_job(state, effects.get("event_id"), prioritize=False)
     else:
         note = "Recorded the scheduling preference for today."
     # Choices affect both the current board and the future event chain. The
@@ -410,6 +416,8 @@ def _recommended_effect_for_card(card: DecisionCard) -> str:
         return "pull_forward"
     if card.type == DecisionType.ECHO_RECOMMENDATION:
         return "echo_recommendation"
+    if card.type == DecisionType.UNEXPECTED_JOB:
+        return "prioritize_new_job"
     return "protect_critical"
 
 
@@ -422,6 +430,8 @@ def _effect_label(effect_type: str) -> str:
         "reroute": "alternate routing",
         "split_capacity": "split capacity",
         "pull_forward": "pull-forward work",
+        "prioritize_new_job": "prioritize the new job",
+        "backlog_new_job": "backlog the new job",
         "resequence": "resequence queues",
         "preempt": "preemption",
         "defer": "deferred work",
@@ -433,7 +443,15 @@ def _visible_events(state: SimulationState) -> list[Event]:
     """Return active/warned events ordered by urgency for card generation."""
     ids = list(dict.fromkeys(state.active_events + state.known_warnings))
     events = [event for event in state.event_timeline if event.id in ids and not event.resolved]
-    return sorted(events, key=lambda event: (0 if event.id in state.active_events else 1, -event.severity, event.start_shift))
+    return sorted(
+        events,
+        key=lambda event: (
+            0 if event.type == EventType.UNEXPECTED_JOB else 1,
+            0 if event.id in state.active_events else 1,
+            -event.severity,
+            event.start_shift,
+        ),
+    )
 
 
 def _capability_label(capability: str) -> str:
@@ -498,6 +516,12 @@ def _job_context(state: SimulationState, job: Job) -> str:
 
 def _event_context(state: SimulationState, event: Event, status: str) -> str:
     """Describe why an event matters for the current operating board."""
+    if event.type == EventType.UNEXPECTED_JOB:
+        timing = "active now" if status == "active" else "visible as an advance warning"
+        return (
+            f"This request is {timing}; accepting it adds another top-level job "
+            f"beyond the initial {len(state.pieces)} jobs."
+        )
     jobs = _jobs_for_event(state, event)
     timing = "active now" if status == "active" else "visible as an advance warning"
     if not jobs:
@@ -589,6 +613,39 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
                     immediate_effects={"type": "wait", "event_id": event.id},
                     risk_effect=2,
                     cost_effect=0,
+                    reschedule_effect=0,
+                ),
+            ],
+        )
+    if event.type == EventType.UNEXPECTED_JOB:
+        return DecisionCard(
+            id=f"DAY-{day:02d}-DEC-{ordinal}",
+            day=day,
+            type=dtype,
+            title="Unexpected job request",
+            description=(
+                f"A new customer job arrived outside the initial {len(state.pieces)} jobs. "
+                "Do you want to prioritize it now or add it to the back of the queue?"
+            ),
+            target_ids=[event.target_id, event.id],
+            severity=event.severity,
+            choices=[
+                DecisionChoice(
+                    id="1",
+                    label="Prioritize the new job",
+                    description="Add the new job to the submarine build and push its first subjob toward the front of a capable queue.",
+                    immediate_effects={"type": "prioritize_new_job", "event_id": event.id},
+                    risk_effect=-4,
+                    cost_effect=28,
+                    reschedule_effect=1,
+                ),
+                DecisionChoice(
+                    id="2",
+                    label="Add it to the back",
+                    description="Accept the new job but give it low priority so the original schedule stays protected for now.",
+                    immediate_effects={"type": "backlog_new_job", "event_id": event.id},
+                    risk_effect=4,
+                    cost_effect=8,
                     reschedule_effect=0,
                 ),
             ],
@@ -1138,6 +1195,17 @@ def _use_echo_recommendation(state: SimulationState, card: DecisionCard) -> str:
     return f"ECHO recommendation worked: {protected_note} {pulled_note} Accelerated {accelerated} critical subjob(s)."
 
 
+def _add_unexpected_job(state: SimulationState, event_id: str | None, prioritize: bool) -> str:
+    """Add the event's new top-level job with the selected priority mode."""
+    event = _event_by_id(state, event_id)
+    if not event:
+        return "No new job request was available to add."
+    piece_id = insert_unexpected_job(state, event, prioritize=prioritize)
+    piece = state.pieces[piece_id]
+    mode = "prioritized" if prioritize else "added to the back of the queue"
+    return f"{piece.name} was {mode}; the submarine build now has {len(state.pieces)} top-level jobs."
+
+
 def _apply_forward_decision_effect(
     state: SimulationState,
     card: DecisionCard,
@@ -1155,6 +1223,8 @@ def _apply_forward_decision_effect(
         "resequence": 1,
         "split_capacity": 1,
         "pull_forward": 1,
+        "prioritize_new_job": 1,
+        "backlog_new_job": -1,
         "preempt": 1,
         "echo_recommendation": 2,
         "wait": -2,
@@ -1233,6 +1303,15 @@ def _schedule_decision_follow_on(
 
 def _decision_follow_on_target(state: SimulationState, source_event: Event) -> tuple[EventType, TargetType, str]:
     """Choose the plausible event type/target for a decision-driven cascade."""
+    if source_event.type == EventType.UNEXPECTED_JOB:
+        piece_id = source_event.effects.get("unexpected_piece_id")
+        if piece_id in state.pieces:
+            return EventType.PRIORITY_CHANGE, TargetType.PIECE, piece_id
+        shop = max(
+            state.shops.values(),
+            key=lambda item: (len(item.queued_job_ids) + len(item.blocked_job_ids), item.risk_score),
+        )
+        return EventType.LOGISTICS_BACKLOG, TargetType.SHOP, shop.id
     if source_event.type == EventType.ECHO_RECOMMENDATION:
         shop = max(
             state.shops.values(),
@@ -1333,6 +1412,9 @@ def _jobs_for_card(state: SimulationState, card: DecisionCard) -> list[Job]:
 
 def _jobs_for_event(state: SimulationState, event: Event) -> list[Job]:
     """Expand an event target into concrete affected jobs."""
+    piece_id = event.effects.get("unexpected_piece_id")
+    if piece_id in state.pieces:
+        return [state.jobs[job_id] for job_id in state.pieces[piece_id].job_ids if job_id in state.jobs]
     if event.target_type == TargetType.JOB and event.target_id in state.jobs:
         return [state.jobs[event.target_id]]
     if event.target_type == TargetType.PIECE and event.target_id in state.pieces:
@@ -1408,6 +1490,7 @@ def _decision_type_for_event(event_type: EventType) -> DecisionType:
         EventType.REWORK_SPILLOVER: DecisionType.QUALITY_REWORK,
         EventType.CERTIFICATION_AUDIT: DecisionType.INSPECTION_DELAY,
         EventType.ENGINEERING_DATA_REVISION: DecisionType.ENGINEERING_HOLD,
+        EventType.UNEXPECTED_JOB: DecisionType.UNEXPECTED_JOB,
         EventType.ECHO_RECOMMENDATION: DecisionType.ECHO_RECOMMENDATION,
     }[event_type]
 

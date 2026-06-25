@@ -28,10 +28,19 @@ EVENT_SEQUENCE = [
     EventType.REWORK_SPILLOVER,
     EventType.CERTIFICATION_AUDIT,
     EventType.ENGINEERING_DATA_REVISION,
+    EventType.UNEXPECTED_JOB,
 ]
 
 MAX_EVENT_CHAIN_DEPTH = 2
 ECHO_RECOMMENDATION_PROBABILITY = 0.18
+UNEXPECTED_JOB_NAMES = [
+    "Surge",
+    "Harbor",
+    "Keystone",
+    "Meridian",
+    "Northstar",
+    "Outrider",
+]
 
 
 def generate_event_timeline(
@@ -79,6 +88,8 @@ def generate_event_timeline(
         latest_start = deadline - 5
         if event_type == EventType.ECHO_RECOMMENDATION:
             latest_start = max(6, deadline - 3)
+        elif event_type == EventType.UNEXPECTED_JOB:
+            latest_start = max(6, deadline - 6)
         elif event_type in {EventType.URGENT_JOB, EventType.QUALITY_REWORK}:
             latest_start = deadline - 11
         elif event_type in {EventType.ENGINEERING_HOLD, EventType.FACILITY_OUTAGE}:
@@ -87,10 +98,15 @@ def generate_event_timeline(
         severity = rng.randint(1, 5)
         duration = _duration_for(event_type, severity, rng)
         target_type, target_id = _target_for(event_type, rng, shops, workcenters, pieces, all_jobs)
-        has_warning = event_type in {EventType.WEATHER, EventType.DELAYED_MATERIAL} or rng.random() < 0.22
+        has_warning = event_type in {
+            EventType.WEATHER,
+            EventType.DELAYED_MATERIAL,
+            EventType.UNEXPECTED_JOB,
+        } or rng.random() < 0.22
         warning_shift = None
         if has_warning:
-            warning_shift = max(1, start_shift - rng.randint(2, 7))
+            lead_time = config.shifts_per_day if event_type == EventType.UNEXPECTED_JOB else rng.randint(2, 7)
+            warning_shift = max(1, start_shift - lead_time)
         event = Event(
             id=f"EVT-{index:04d}",
             type=event_type,
@@ -128,6 +144,7 @@ def _duration_for(event_type: EventType, severity: int, rng: Random) -> int:
         EventType.REWORK_SPILLOVER: (1, 3),
         EventType.CERTIFICATION_AUDIT: (2, 4),
         EventType.ENGINEERING_DATA_REVISION: (1, 3),
+        EventType.UNEXPECTED_JOB: (1, 1),
         EventType.ECHO_RECOMMENDATION: (1, 1),
     }[event_type]
     return min(8, rng.randint(*base) + max(0, severity - 3))
@@ -159,6 +176,8 @@ def _target_for(
         return TargetType.PIECE, rng.choice(list(pieces.keys()))
     if event_type == EventType.ECHO_RECOMMENDATION:
         return TargetType.CAPABILITY, "ECHO"
+    if event_type == EventType.UNEXPECTED_JOB:
+        return TargetType.CAPABILITY, "NEW_JOB"
     return TargetType.JOB, rng.choice(jobs).id
 
 
@@ -199,6 +218,8 @@ def _description_for(event_type: EventType, target_type: TargetType, target_id: 
         return f"Certification audit requests additional evidence for {target}."
     if event_type == EventType.ENGINEERING_DATA_REVISION:
         return f"Engineering data revision changes acceptance criteria for {target}."
+    if event_type == EventType.UNEXPECTED_JOB:
+        return "A new customer job arrived outside the initial job list."
     if event_type == EventType.ECHO_RECOMMENDATION:
         return "Someone is working on this app called ECHO; would you want to use its recommendation?"
     return f"Severity {severity} disruption affects {target_type.value} {target_id}."
@@ -261,6 +282,8 @@ def apply_event_start(state: SimulationState, event: Event) -> None:
         _apply_priority_change(state, event)
     elif event.type == EventType.URGENT_JOB:
         _insert_urgent_job(state, event)
+    elif event.type == EventType.UNEXPECTED_JOB:
+        insert_unexpected_job(state, event, prioritize=False)
     elif event.type == EventType.WEATHER:
         shop = state.shops[event.target_id]
         affected = _sample_ids(shop.workcenter_ids, max(2, len(shop.workcenter_ids) // 3))
@@ -489,6 +512,166 @@ def _insert_urgent_job(state: SimulationState, event: Event) -> None:
     state.cost += 25 * event.severity
 
 
+def insert_unexpected_job(state: SimulationState, event: Event, prioritize: bool) -> str:
+    """Insert or reprioritize a new top-level job caused by an unexpected request."""
+    piece_id = event.effects.get("unexpected_piece_id")
+    if piece_id in state.pieces:
+        effective_prioritize = prioritize or event.effects.get("priority_mode") == "prioritized"
+        _set_unexpected_job_priority(state, piece_id, effective_prioritize)
+        event.effects["priority_mode"] = "prioritized" if effective_prioritize else "backlog"
+        return piece_id
+
+    rng = Random(f"{state.seed}:{event.id}:unexpected-job")
+    piece_index = _next_piece_index(state)
+    piece_id = f"PIECE-{piece_index:02d}"
+    piece_name = UNEXPECTED_JOB_NAMES[(piece_index - 1) % len(UNEXPECTED_JOB_NAMES)]
+    job_count = min(4, max(2, 2 + event.severity // 2))
+    priority = 92 if prioritize else 32
+    piece_job_ids: list[str] = []
+    previous_job_id: str | None = None
+
+    shop_ids = list(state.shops.keys())
+    dominant_shop_id = rng.choice(shop_ids)
+    for job_index in range(1, job_count + 1):
+        shop_id = dominant_shop_id if rng.random() < 0.6 else rng.choice(shop_ids)
+        shop = state.shops[shop_id]
+        capability = rng.choice(shop.capabilities)
+        candidate_ids = _candidate_workcenters_for_state(state, capability, shop_id, rng)
+        duration = rng.randint(1, 2 if prioritize else 3)
+        job_id = f"JOB-{piece_index:02d}-{job_index:03d}"
+        dependency_ids = [previous_job_id] if previous_job_id else []
+        due_shift = _unexpected_due_shift(state, job_index, job_count, prioritize)
+
+        state.jobs[job_id] = Job(
+            id=job_id,
+            piece_id=piece_id,
+            shop_id=shop_id,
+            required_capability=capability,
+            candidate_workcenter_ids=candidate_ids,
+            assigned_workcenter_id=None,
+            base_duration_shifts=duration,
+            remaining_duration_shifts=duration,
+            setup_time_shifts=0,
+            transport_delay_shifts=0,
+            dependency_ids=dependency_ids,
+            status=JobStatus.NOT_READY,
+            priority=max(10, priority - job_index * 2),
+            due_shift=due_shift,
+            risk_score=float(18 + event.severity * 4),
+            cost_weight=1.2 if prioritize else 1.0,
+            original_duration_shifts=duration,
+        )
+        if previous_job_id and previous_job_id in state.jobs:
+            state.jobs[previous_job_id].dependent_job_ids.append(job_id)
+        previous_job_id = job_id
+        piece_job_ids.append(job_id)
+
+    state.pieces[piece_id] = PuzzlePiece(
+        id=piece_id,
+        name=f"Job {piece_index:02d} - {piece_name}",
+        job_ids=piece_job_ids,
+        total_job_count=len(piece_job_ids),
+    )
+    event.effects["unexpected_piece_id"] = piece_id
+    event.effects["inserted_job_ids"] = list(piece_job_ids)
+    event.effects["priority_mode"] = "prioritized" if prioritize else "backlog"
+
+    _set_unexpected_job_priority(state, piece_id, prioritize)
+    state.cost += 18 + event.severity * (8 if prioritize else 4)
+    state.daily_notes.append(
+        f"Added unexpected job {piece_id} to the submarine build "
+        f"({'prioritized' if prioritize else 'back of queue'})."
+    )
+    return piece_id
+
+
+def _set_unexpected_job_priority(state: SimulationState, piece_id: str, prioritize: bool) -> None:
+    """Apply queue priority for the unexpected top-level job."""
+    piece = state.pieces[piece_id]
+    for index, job_id in enumerate(piece.job_ids):
+        job = state.jobs[job_id]
+        if job.is_complete:
+            continue
+        if prioritize:
+            job.priority = max(job.priority, 94 - index * 3)
+            job.due_shift = max(state.current_shift + 1, min(job.due_shift, state.current_shift + 2 + index * 2))
+        else:
+            job.priority = min(job.priority, 38 + index * 2)
+
+    first_job = state.jobs[piece.job_ids[0]]
+    if first_job.status == JobStatus.COMPLETE:
+        return
+    first_job.status = JobStatus.READY if not first_job.dependency_ids else first_job.status
+    wc_id = _best_workcenter_for_job(state, first_job)
+    if wc_id:
+        state.assign_job(first_job.id, wc_id, front=prioritize)
+
+
+def _next_piece_index(state: SimulationState) -> int:
+    """Return the next top-level job index."""
+    max_index = 0
+    for piece_id in state.pieces:
+        suffix = piece_id.split("-")[-1]
+        if suffix.isdigit():
+            max_index = max(max_index, int(suffix))
+    return max_index + 1
+
+
+def _unexpected_due_shift(state: SimulationState, job_index: int, job_count: int, prioritize: bool) -> int:
+    """Pick due shifts for a runtime-added top-level job."""
+    remaining = max(1, state.deadline_shift - state.current_shift - 1)
+    if prioritize:
+        offset = min(remaining, 2 + job_index * 2)
+    else:
+        offset = max(job_index + 1, int((job_index / job_count) * remaining))
+    return max(state.current_shift + 1, min(state.deadline_shift - 1, state.current_shift + offset))
+
+
+def _candidate_workcenters_for_state(
+    state: SimulationState,
+    capability: str,
+    primary_shop_id: str,
+    rng: Random,
+) -> list[str]:
+    """Return capable workcenters for a runtime-created job."""
+    primary = [
+        wc.id
+        for wc in state.workcenters.values()
+        if wc.shop_id == primary_shop_id and capability in wc.capabilities
+    ]
+    alternates = [
+        wc.id
+        for wc in state.workcenters.values()
+        if wc.shop_id != primary_shop_id and capability in wc.capabilities
+    ]
+    rng.shuffle(primary)
+    rng.shuffle(alternates)
+    candidate_ids = primary[:3] + alternates[:3]
+    return candidate_ids or [wc.id for wc in state.workcenters.values() if capability in wc.capabilities]
+
+
+def _best_workcenter_for_job(state: SimulationState, job: Job) -> str | None:
+    """Return a capable queue target for a runtime-added job."""
+    candidates = [
+        state.workcenters[wc_id]
+        for wc_id in job.candidate_workcenter_ids
+        if wc_id in state.workcenters
+        and job.required_capability in state.workcenters[wc_id].capabilities
+        and state.workcenters[wc_id].status
+        not in {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}
+    ]
+    if not candidates:
+        return None
+    return min(
+        candidates,
+        key=lambda wc: (
+            len(wc.queue) + (1 if wc.current_job_id else 0),
+            0 if wc.shop_id == job.shop_id else 1,
+            wc.id,
+        ),
+    ).id
+
+
 def _create_follow_on_job(
     state: SimulationState,
     event: Event,
@@ -654,6 +837,9 @@ def _cascade_target(
     if event.type in {EventType.PRIORITY_CHANGE, EventType.URGENT_JOB}:
         piece_id = _piece_for_event(state, event)
         return EventType.ENGINEERING_DATA_REVISION, TargetType.PIECE, piece_id
+    if event.type == EventType.UNEXPECTED_JOB:
+        piece_id = _piece_for_event(state, event)
+        return EventType.PRIORITY_CHANGE, TargetType.PIECE, piece_id
     return EventType.LOGISTICS_BACKLOG, event.target_type, event.target_id
 
 
@@ -671,6 +857,8 @@ def _cascade_description(
 
 def _piece_for_event(state: SimulationState, event: Event) -> str:
     """Resolve the affected piece for event types that cascade at piece level."""
+    if event.effects.get("unexpected_piece_id") in state.pieces:
+        return event.effects["unexpected_piece_id"]
     if event.target_type == TargetType.PIECE and event.target_id in state.pieces:
         return event.target_id
     if event.target_type == TargetType.JOB and event.target_id in state.jobs:

@@ -516,6 +516,112 @@ INDEX_HTML = r"""<!doctype html>
     }
     .chart-player { color: var(--teal); }
     .chart-echo { color: var(--violet); }
+    .submarine-puzzle {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .puzzle-caption {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      color: var(--muted);
+    }
+    .puzzle-caption strong {
+      color: var(--ink);
+    }
+    .puzzle-stage {
+      width: 100%;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: linear-gradient(180deg, #eef5f5 0%, #f9fbf8 100%);
+    }
+    .puzzle-stage svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .submarine-outline {
+      fill: rgba(22, 124, 120, 0.08);
+      stroke: rgba(13, 85, 82, 0.3);
+      stroke-width: 2;
+    }
+    .submarine-detail {
+      fill: none;
+      stroke: rgba(13, 85, 82, 0.32);
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+    .puzzle-piece {
+      stroke: #f7faf7;
+      stroke-width: 1.2;
+      transition: opacity 180ms ease, filter 180ms ease;
+    }
+    .puzzle-piece.pending {
+      fill: rgba(255, 255, 255, 0.76);
+      stroke: rgba(102, 112, 109, 0.44);
+      stroke-dasharray: 5 4;
+    }
+    .puzzle-piece.on-time {
+      fill: var(--green);
+    }
+    .puzzle-piece.late {
+      fill: #d8a72f;
+    }
+    .puzzle-piece.added {
+      stroke: var(--ink);
+      stroke-width: 2.2;
+      filter: drop-shadow(0 4px 6px rgba(32, 37, 36, 0.22));
+    }
+    .puzzle-label {
+      font-weight: 800;
+      pointer-events: none;
+      text-anchor: middle;
+      dominant-baseline: middle;
+    }
+    .puzzle-legend,
+    .puzzle-added {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .legend-swatch {
+      width: 13px;
+      height: 13px;
+      border-radius: 3px;
+      border: 1px solid var(--line);
+      display: inline-block;
+    }
+    .legend-swatch.on-time { background: var(--green); }
+    .legend-swatch.late { background: #d8a72f; }
+    .legend-swatch.pending { background: rgba(255, 255, 255, 0.76); }
+    .puzzle-added .badge {
+      border-radius: 6px;
+    }
+    html[data-theme="dark"] .puzzle-stage {
+      background: linear-gradient(180deg, #16212a 0%, #111821 100%);
+    }
+    html[data-theme="dark"] .submarine-outline {
+      fill: rgba(22, 124, 120, 0.12);
+      stroke: rgba(93, 217, 224, 0.28);
+    }
+    html[data-theme="dark"] .submarine-detail {
+      stroke: rgba(93, 217, 224, 0.34);
+    }
+    html[data-theme="dark"] .puzzle-piece.pending {
+      fill: rgba(37, 45, 56, 0.78);
+      stroke: rgba(165, 176, 184, 0.42);
+    }
+    html[data-theme="dark"] .legend-swatch.pending {
+      background: rgba(37, 45, 56, 0.78);
+    }
     .notes {
       margin: 0;
       padding-left: 18px;
@@ -574,21 +680,71 @@ INDEX_HTML = r"""<!doctype html>
     .modal .modal-body { max-height: 60vh; overflow: auto; margin-bottom: 12px; }
     .modal .modal-footer { display:flex; justify-content:flex-end; gap:8px; }
     .modal h3 { margin-top: 0; }
+    .welcome-modal {
+      max-width: 760px;
+    }
     .welcome-copy {
       display: grid;
-      gap: 10px;
-      margin: 8px 0 4px;
+      gap: 14px;
+      margin: 10px 0 4px;
       color: var(--muted);
     }
     .welcome-copy p {
       margin: 0;
     }
-    .welcome-copy ul {
-      margin: 0;
-      padding-left: 20px;
+    .welcome-visual {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: linear-gradient(180deg, #edf6f5 0%, #f8fbf8 100%);
     }
-    .welcome-copy li {
-      margin: 6px 0;
+    .welcome-visual svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .welcome-blurb {
+      color: var(--ink);
+      font-size: 18px;
+      line-height: 1.45;
+      max-width: 620px;
+    }
+    .welcome-critical {
+      display: grid;
+      gap: 8px;
+    }
+    .welcome-critical-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .welcome-critical-list li {
+      min-height: 48px;
+      padding: 8px 9px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcf9;
+    }
+    .welcome-critical-list strong {
+      display: block;
+      color: var(--ink);
+      font-size: 13px;
+    }
+    .welcome-critical-list span {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    html[data-theme="dark"] .welcome-visual {
+      background: linear-gradient(180deg, #16212a 0%, #111821 100%);
+    }
+    html[data-theme="dark"] .welcome-critical-list li {
+      background: #252d38;
+      border-color: #3a4352;
     }
     .rework-flag {
       display: inline-block;
@@ -660,7 +816,6 @@ INDEX_HTML = r"""<!doctype html>
         </div>
       </div>
       <div class="controls">
-        <button id="decisionBtn">Daily Decisions</button>
         <button id="advanceBtn" class="primary" disabled>End Day</button>
       </div>
     </div>
@@ -717,15 +872,35 @@ INDEX_HTML = r"""<!doctype html>
   </main>
 
   <div id="welcomeModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="welcomeModalTitle">
-    <div class="modal">
+    <div class="modal welcome-modal">
       <h1 id="welcomeModalTitle">Welcome</h1>
       <div class="welcome-copy">
-        <p>You are managing a manufacturing schedule under disruption. Each day, answer the daily decision prompts and choose how the yard should respond.</p>
-        <p>Your goal is to complete every job before <span id="welcomeDeadline">the deadline</span> while balancing cost, reschedules, and schedule risk.</p>
-        <ul>
-          <li>Use daily decisions to resequence, reroute, expedite, or protect critical work.</li>
-          <li>End the day to see the consequences of your choices and move the schedule forward.</li>
-        </ul>
+        <div class="welcome-visual" aria-label="Submarine">
+          <svg viewBox="0 0 720 250" role="img" aria-label="Submarine underway">
+            <defs>
+              <linearGradient id="welcomeSubBody" x1="0" x2="1">
+                <stop offset="0" stop-color="#1c8c86"></stop>
+                <stop offset="1" stop-color="#0d5552"></stop>
+              </linearGradient>
+            </defs>
+            <path d="M 118 134 C 158 75 270 57 433 67 C 560 75 637 101 675 134 C 637 167 560 193 433 201 C 270 211 158 193 118 134 Z" fill="url(#welcomeSubBody)"></path>
+            <path d="M 121 134 L 55 88 L 75 134 L 55 180 Z" fill="#146b67"></path>
+            <path d="M 330 70 L 359 34 L 425 34 L 459 75 Z" fill="#146b67"></path>
+            <path d="M 455 67 C 520 73 595 93 647 121" fill="none" stroke="rgba(255,255,255,0.32)" stroke-width="6" stroke-linecap="round"></path>
+            <g fill="#dff6f4" stroke="#0b4542" stroke-width="5">
+              <circle cx="246" cy="134" r="15"></circle>
+              <circle cx="306" cy="134" r="15"></circle>
+              <circle cx="497" cy="134" r="15"></circle>
+              <circle cx="557" cy="134" r="15"></circle>
+            </g>
+            <path d="M 672 134 L 700 116 M 672 134 L 700 152 M 57 88 L 28 75 M 57 180 L 28 193" fill="none" stroke="#0d5552" stroke-width="8" stroke-linecap="round"></path>
+          </svg>
+        </div>
+        <p class="welcome-blurb" id="welcomeBlurb">Your job is to get these jobs done on time. Each decision you make can risk or reward other jobs.</p>
+        <div class="welcome-critical">
+          <h3>Critical Path Jobs</h3>
+          <ul class="welcome-critical-list" id="welcomeCriticalPath"></ul>
+        </div>
       </div>
       <div class="modal-footer">
         <button id="closeWelcomeBtn" class="primary" onclick="closeWelcomeModal()">Start</button>
@@ -952,7 +1127,6 @@ INDEX_HTML = r"""<!doctype html>
     function render() {
       if (!state) return;
       $("dayBadge").textContent = `Day ${state.day}`;
-      $("welcomeDeadline").textContent = state.deadlineLabel;
       $("projectedText").textContent = `Projected completion: ${state.overview.projectedCompletion}`;
 
       renderMetrics();
@@ -1022,7 +1196,28 @@ INDEX_HTML = r"""<!doctype html>
     function renderWelcomeModal() {
       const overlay = document.getElementById("welcomeModalOverlay");
       if (!overlay) return;
+      renderWelcomeContent();
       overlay.classList.toggle("active", welcomeModalVisible);
+    }
+
+    function renderWelcomeContent() {
+      const blurb = $("welcomeBlurb");
+      const list = $("welcomeCriticalPath");
+      if (!blurb || !list) return;
+
+      const jobCount = Array.isArray(state?.pieces) ? state.pieces.length : 0;
+      const jobText = jobCount ? `${jobCount} job${jobCount === 1 ? "" : "s"}` : "jobs";
+      blurb.textContent = `Your job is to get these ${jobText} done on time. Each decision you make can risk or reward other jobs.`;
+
+      const criticalRows = Array.isArray(state?.criticalPath) ? state.criticalPath : [];
+      list.innerHTML = criticalRows.length
+        ? criticalRows.map(job => `
+          <li>
+            <strong>${escapeHtml(job.id)} - ${escapeHtml(job.impact || "Job")}</strong>
+            <span>${escapeHtml(job.shop || "-")} - ${Number(job.remaining || 0)} shift${Number(job.remaining || 0) === 1 ? "" : "s"} left - slack ${escapeHtml(job.slack ?? "-")}</span>
+          </li>
+        `).join("")
+        : `<li><strong>No critical path jobs yet</strong><span>The first schedule pass is still loading.</span></li>`;
     }
 
     function closeWelcomeModal() {
@@ -1116,6 +1311,132 @@ INDEX_HTML = r"""<!doctype html>
       `;
     }
 
+    function puzzleGridFor(count) {
+      if (count <= 0) return { columns: 1, rows: 1 };
+      if (count <= 6) return { columns: count, rows: 1 };
+      if (count <= 12) return { columns: 4, rows: Math.ceil(count / 4) };
+      if (count <= 18) return { columns: 5, rows: Math.ceil(count / 5) };
+      const columns = Math.ceil(Math.sqrt(count * 1.7));
+      return { columns, rows: Math.ceil(count / columns) };
+    }
+
+    function jigsawPath(x, y, width, height, index, columns, total) {
+      const row = Math.floor(index / columns);
+      const col = index % columns;
+      const n = (value) => Number(value).toFixed(1);
+      const tab = Math.max(5, Math.min(width, height) * 0.16);
+      const topInterior = index - columns >= 0;
+      const rightInterior = col < columns - 1 && index + 1 < total;
+      const bottomInterior = index + columns < total;
+      const leftInterior = col > 0;
+      const topDir = (row + col) % 2 === 0 ? -1 : 1;
+      const rightDir = (row + col) % 2 === 0 ? 1 : -1;
+      const bottomDir = (row + col) % 2 === 0 ? 1 : -1;
+      const leftDir = (row + col) % 2 === 0 ? -1 : 1;
+
+      let d = `M ${n(x)} ${n(y)}`;
+      if (topInterior) {
+        d += ` H ${n(x + width * 0.38)} C ${n(x + width * 0.43)} ${n(y)} ${n(x + width * 0.42)} ${n(y + topDir * tab)} ${n(x + width * 0.5)} ${n(y + topDir * tab)} C ${n(x + width * 0.58)} ${n(y + topDir * tab)} ${n(x + width * 0.57)} ${n(y)} ${n(x + width * 0.62)} ${n(y)} H ${n(x + width)}`;
+      } else {
+        d += ` H ${n(x + width)}`;
+      }
+      if (rightInterior) {
+        d += ` V ${n(y + height * 0.38)} C ${n(x + width)} ${n(y + height * 0.43)} ${n(x + width + rightDir * tab)} ${n(y + height * 0.42)} ${n(x + width + rightDir * tab)} ${n(y + height * 0.5)} C ${n(x + width + rightDir * tab)} ${n(y + height * 0.58)} ${n(x + width)} ${n(y + height * 0.57)} ${n(x + width)} ${n(y + height * 0.62)} V ${n(y + height)}`;
+      } else {
+        d += ` V ${n(y + height)}`;
+      }
+      if (bottomInterior) {
+        d += ` H ${n(x + width * 0.62)} C ${n(x + width * 0.57)} ${n(y + height)} ${n(x + width * 0.58)} ${n(y + height + bottomDir * tab)} ${n(x + width * 0.5)} ${n(y + height + bottomDir * tab)} C ${n(x + width * 0.42)} ${n(y + height + bottomDir * tab)} ${n(x + width * 0.43)} ${n(y + height)} ${n(x + width * 0.38)} ${n(y + height)} H ${n(x)}`;
+      } else {
+        d += ` H ${n(x)}`;
+      }
+      if (leftInterior) {
+        d += ` V ${n(y + height * 0.62)} C ${n(x)} ${n(y + height * 0.57)} ${n(x + leftDir * tab)} ${n(y + height * 0.58)} ${n(x + leftDir * tab)} ${n(y + height * 0.5)} C ${n(x + leftDir * tab)} ${n(y + height * 0.42)} ${n(x)} ${n(y + height * 0.43)} ${n(x)} ${n(y + height * 0.38)} V ${n(y)}`;
+      } else {
+        d += ` V ${n(y)}`;
+      }
+      return `${d} Z`;
+    }
+
+    function renderSubmarinePuzzle(puzzle, instanceId) {
+      const tiles = Array.isArray(puzzle?.tiles) ? puzzle.tiles : [];
+      if (!tiles.length) return "";
+
+      const total = tiles.length;
+      const { columns, rows } = puzzleGridFor(total);
+      const width = 760;
+      const height = 290;
+      const gridX = 122;
+      const gridY = rows === 1 ? 118 : 86;
+      const gridWidth = 520;
+      const gridHeight = rows === 1 ? 82 : 126;
+      const cellWidth = gridWidth / columns;
+      const cellHeight = gridHeight / rows;
+      const labelSize = Math.max(9, Math.min(16, cellWidth * 0.2, cellHeight * 0.32));
+      const safeId = String(instanceId || "summary").replace(/[^a-zA-Z0-9_-]/g, "");
+      const clipId = `submarineClip-${safeId}`;
+      const bodyPath = "M 102 149 C 135 89 231 69 420 73 C 570 76 663 104 707 149 C 663 194 570 222 420 225 C 231 229 135 209 102 149 Z";
+      const tailPath = "M 104 149 L 51 105 L 64 149 L 51 193 Z";
+      const towerPath = "M 342 75 L 367 37 L 433 37 L 461 78 Z";
+      const portHoles = [250, 306, 500, 556].map(x => `<circle cx="${x}" cy="149" r="9"></circle>`).join("");
+      const tileMarkup = tiles.map((tile, index) => {
+        const col = index % columns;
+        const row = Math.floor(index / columns);
+        const x = gridX + col * cellWidth;
+        const y = gridY + row * cellHeight;
+        const centerX = x + cellWidth / 2;
+        const centerY = y + cellHeight / 2;
+        const tone = tile.tone === "late" ? "late" : tile.tone === "on-time" ? "on-time" : "pending";
+        const added = tile.newlyCompleted ? " added" : "";
+        const label = escapeHtml(tile.label || tile.id || "");
+        const status = tile.completed
+          ? `${tile.late ? "Late" : "On time"}; completed ${tile.completedAt || ""}`
+          : `Pending; due ${tile.due || ""}`;
+        return `
+          <path class="puzzle-piece ${tone}${added}" d="${jigsawPath(x, y, cellWidth, cellHeight, index, columns, total)}">
+            <title>${escapeHtml(`${tile.name || tile.id}: ${status}`)}</title>
+          </path>
+          <text class="puzzle-label" x="${centerX.toFixed(1)}" y="${centerY.toFixed(1)}" font-size="${labelSize.toFixed(1)}" fill="${tile.completed ? "#fff" : "var(--muted)"}">${label}</text>
+        `;
+      }).join("");
+      const addedToday = tiles.filter(tile => tile.newlyCompleted);
+      const addedMarkup = addedToday.length
+        ? addedToday.map(tile => `<span class="badge ${tile.late ? "warn" : "good"}">${escapeHtml(tile.label)}</span>`).join("")
+        : `<span class="subtle">No jobs were added today.</span>`;
+
+      return `
+        <div class="submarine-puzzle">
+          <div class="puzzle-caption">
+            <strong>Submarine Assembly</strong>
+            <span>${puzzle.completed}/${puzzle.total} jobs assembled; ${puzzle.completedToday} added today</span>
+          </div>
+          <div class="puzzle-stage">
+            <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Submarine jigsaw showing completed jobs">
+              <defs>
+                <clipPath id="${clipId}">
+                  <path d="${bodyPath}"></path>
+                  <path d="${tailPath}"></path>
+                  <path d="${towerPath}"></path>
+                </clipPath>
+              </defs>
+              <path class="submarine-outline" d="${tailPath}"></path>
+              <path class="submarine-outline" d="${bodyPath}"></path>
+              <path class="submarine-outline" d="${towerPath}"></path>
+              <g clip-path="url(#${clipId})">${tileMarkup}</g>
+              <g class="submarine-detail">${portHoles}</g>
+              <path class="submarine-detail" d="M 704 149 L 729 132 M 704 149 L 729 166 M 52 105 L 27 92 M 52 193 L 27 206"></path>
+            </svg>
+          </div>
+          <div class="puzzle-legend">
+            <span><span class="legend-swatch on-time"></span> On time</span>
+            <span><span class="legend-swatch late"></span> Late</span>
+            <span><span class="legend-swatch pending"></span> Not complete</span>
+          </div>
+          <div class="puzzle-added"><span>Added today:</span>${addedMarkup}</div>
+        </div>
+      `;
+    }
+
     function renderSummaryModal() {
       const payload = pendingAdvanceState || state;
       const summary = payload.lastSummary;
@@ -1131,11 +1452,12 @@ INDEX_HTML = r"""<!doctype html>
       // lets the player read consequences before committing that state locally.
       overlay.classList.add("active");
       body.innerHTML = `
+        ${renderSubmarinePuzzle(summary.puzzle, "summary-modal")}
         <table>
           <tbody>
             <tr><td>Subjobs completed today</td><td>${summary.completedToday}</td></tr>
             <tr><td>Subjobs remaining</td><td>${summary.jobsRemaining}</td></tr>
-            <tr><td>Jobs complete</td><td>${summary.piecesCompleted}/${state.pieces.length}</td></tr>
+            <tr><td>Jobs complete</td><td>${summary.piecesCompleted}/${payload.pieces.length}</td></tr>
             <tr><td>Subjobs late</td><td>${summary.jobsLate}</td></tr>
             <tr><td>Cost</td><td>${fmtNum(summary.cost)}</td></tr>
             <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
@@ -1354,23 +1676,18 @@ INDEX_HTML = r"""<!doctype html>
       const chosenCount = progressState.completed;
       const totalCount = progressState.total;
       const remainingCount = Math.max(0, totalCount - chosenCount);
-      const openCount = (progressState.openCardIds || []).length;
       const progress = $("decisionProgress");
-      const decisionBtn = $("decisionBtn");
       const advanceBtn = $("advanceBtn");
 
       if (state.gameOver) {
         progress.textContent = "Run complete";
         progress.className = "badge good";
-        decisionBtn.disabled = true;
         advanceBtn.disabled = true;
         return;
       }
 
       progress.textContent = `${chosenCount}/${totalCount} Daily Questions Complete`;
       progress.className = `badge ${remainingCount ? "warn" : "good"}`;
-      decisionBtn.disabled = false;
-      decisionBtn.textContent = openCount ? `Daily Decisions (${openCount})` : "Daily Decisions";
       advanceBtn.disabled = !readyToAdvance();
     }
 
@@ -1502,6 +1819,7 @@ INDEX_HTML = r"""<!doctype html>
       if (!summary) return;
       $("summaryMetrics").innerHTML = `
         <h3>Day Result</h3>
+        ${renderSubmarinePuzzle(summary.puzzle, "summary-panel")}
         <table>
           <tbody>
             <tr><td>Subjobs completed today</td><td>${summary.completedToday}</td></tr>
@@ -1659,7 +1977,6 @@ INDEX_HTML = r"""<!doctype html>
 
     $("settingsMenuBtn").addEventListener("click", toggleSettingsMenu);
     $("openNewRunModalBtn").addEventListener("click", openNewRunModal);
-    $("decisionBtn").addEventListener("click", openDecisionModal);
     $("advanceBtn").addEventListener("click", prepareAdvanceDay);
     document.addEventListener("click", (e) => {
       const finalOverlay = document.getElementById("finalModalOverlay");

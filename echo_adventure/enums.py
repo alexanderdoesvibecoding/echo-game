@@ -65,6 +65,7 @@ class EventType(str, Enum):
     REWORK_SPILLOVER = "Rework spillover"
     CERTIFICATION_AUDIT = "Certification audit"
     ENGINEERING_DATA_REVISION = "Engineering data revision"
+    UNEXPECTED_JOB = "Unexpected job request"
     ECHO_RECOMMENDATION = "ECHO recommendation"
 
 
@@ -96,4 +97,5 @@ class DecisionType(str, Enum):
     QUEUE_CONGESTION = "Queue congestion"
     COMPLETION_READINESS = "Completion readiness risk"
     STRATEGIC_PRIORITY = "Strategic prioritization"
+    UNEXPECTED_JOB = "Unexpected job request"
     ECHO_RECOMMENDATION = "ECHO recommendation"
