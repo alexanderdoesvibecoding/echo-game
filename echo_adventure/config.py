@@ -11,21 +11,30 @@ GAME_PRESETS: dict[str, dict[str, object]] = {
         # Days
         "total_days": 15,
         # Jobs
-        "piece_count": 15,
+        "piece_count": 10,
         # Subjobs per job
-        "min_jobs_per_piece": 5,
-        "max_jobs_per_piece": 10,
+        "min_jobs_per_piece": 3,
+        "max_jobs_per_piece": 5,
         # Shops
         "shop_count": 9,
         # Work centers per shop
         "min_workcenters_per_shop": 1,
         "max_workcenters_per_shop": 5,
+        # Stuff
+        "max_job_duration_shifts": 4,
+        "setup_time_choices": (0, 0, 0, 0, 1),
+        "transport_delay_probability": 0.15,
+        # Disruptions
+        "min_base_events": 4,
+        "max_base_events": 7,
+        "min_extra_quality_rework_events": 0,
+        "max_extra_quality_rework_events": 1,
     },
     "demo": {
         # Days
         "total_days": 5,
         # Jobs
-        "piece_count": 5,
+        "piece_count": 3,
         # Subjobs per job
         "min_jobs_per_piece": 3,
         "max_jobs_per_piece": 5,
@@ -37,13 +46,13 @@ GAME_PRESETS: dict[str, dict[str, object]] = {
         # Demo pacing knobs
         "min_decisions_per_day": 2,
         "max_decisions_per_day": 3,
-        "max_job_duration_shifts": 5,
+        "max_job_duration_shifts": 3,
         "setup_time_choices": (0,),
         "transport_delay_probability": 0.0,
         "min_base_events": 0,
         "max_base_events": 0,
         "min_extra_quality_rework_events": 0,
-        "max_extra_quality_rework_events": 1,
+        "max_extra_quality_rework_events": 0,
     },
 }
 

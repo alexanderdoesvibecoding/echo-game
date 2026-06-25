@@ -64,6 +64,7 @@ def generate_scenario(config: GameConfig) -> Scenario:
     rng = random.Random(seed)
     shops, workcenters = _generate_shops_and_workcenters(config, rng)
     pieces, jobs = _generate_pieces_and_jobs(config, rng, shops, workcenters)
+    _assign_planned_completion_rework(config, rng, jobs)
     dependencies = {job.id: list(job.dependency_ids) for job in jobs.values()}
     events = generate_event_timeline(rng, config, shops, workcenters, pieces, jobs)
     scenario = Scenario(
@@ -95,6 +96,17 @@ def generate_scenario(config: GameConfig) -> Scenario:
         scenario.daily_decision_counts,
     ) = generate_decision_graph(graph_state, config)
     return scenario
+
+
+def _assign_planned_completion_rework(
+    config: GameConfig,
+    rng: random.Random,
+    jobs: dict[str, Job],
+) -> None:
+    """Preassign completion rework so player and ECHO share the same defects."""
+    for job in jobs.values():
+        if rng.random() < 0.10:
+            job.planned_completion_rework_shifts = rng.randint(1, 3)
 
 
 def validate_scenario(scenario: Scenario, config: GameConfig) -> None:

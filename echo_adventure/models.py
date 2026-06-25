@@ -99,6 +99,9 @@ class Job:
     original_duration_shifts: int = 0
     rework_count: int = 0
 
+    planned_completion_rework_shifts: int = 0
+    completion_rework_consumed: bool=False
+
     @property
     def planned_duration(self) -> int:
         """Return the initial duration before workcenter efficiency is applied."""

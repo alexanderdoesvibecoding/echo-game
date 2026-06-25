@@ -14,8 +14,8 @@ from .models import MetricSnapshot, Scenario, SimulationState
 from .schedulers.base import Scheduler
 
 
-JOB_REWORK_PROBABILITY = 0.10
-MAX_COMPLETION_REWORK_PER_JOB = 1
+# JOB_REWORK_PROBABILITY = 0.05
+# MAX_COMPLETION_REWORK_PER_JOB = 1
 
 
 @dataclass
@@ -115,16 +115,15 @@ def complete_job(state: SimulationState, job_id: str) -> None:
 
 
 def _maybe_require_completion_rework(state: SimulationState, job) -> bool:
-    """Deterministically decide whether a finished job needs final rework."""
-    if job.rework_count >= MAX_COMPLETION_REWORK_PER_JOB:
-        return False
-    # Use a seeded local RNG so the same scenario/job produce the same
-    # inspection outcome without touching module/global randomness.
-    roll = Random(f"{state.seed}:{job.id}:completion-rework:{job.rework_count}")
-    if roll.random() >= JOB_REWORK_PROBABILITY:
+    """Apply preassigned completion rework, if this job has a scenario defect."""
+    if job.completion_rework_consumed:
         return False
 
-    extra_shifts = roll.randint(1, 3)
+    if job.planned_completion_rework_shifts <= 0:
+        return False
+
+    extra_shifts = job.planned_completion_rework_shifts
+    job.completion_rework_consumed = True
     job.rework_count += 1
     job.status = JobStatus.REWORK_REQUIRED
     job.completed_shift = None
@@ -132,15 +131,20 @@ def _maybe_require_completion_rework(state: SimulationState, job) -> bool:
     job.priority += 12
     job.risk_score = min(100.0, job.risk_score + 12 + extra_shifts * 3)
     job.queue_time = 0
+
     state.cost += 30 + extra_shifts * 12 * job.cost_weight
     state.reschedule_count += 1
     state.completed_jobs.discard(job.id)
     state.remove_job_from_queues(job.id)
+
     for wc in state.workcenters.values():
         if wc.current_job_id == job.id:
             wc.current_job_id = None
             wc.status = WorkCenterStatus.AVAILABLE
-    state.daily_notes.append(f"Quality rework flagged on {job.id}; added {extra_shifts} shift(s).")
+
+    state.daily_notes.append(
+        f"Quality rework flagged on {job.id}; added {extra_shifts} shift(s)."
+    )
     return True
 
 
