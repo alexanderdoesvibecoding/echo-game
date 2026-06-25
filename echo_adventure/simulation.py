@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import math
-from random import Random
 from dataclasses import dataclass
 
 from .enums import JobStatus, WorkCenterStatus
@@ -12,10 +11,6 @@ from .events import refresh_event_state
 from .metrics import calculate_snapshot, update_state_metrics
 from .models import MetricSnapshot, Scenario, SimulationState
 from .schedulers.base import Scheduler
-
-
-# JOB_REWORK_PROBABILITY = 0.05
-# MAX_COMPLETION_REWORK_PER_JOB = 1
 
 
 @dataclass

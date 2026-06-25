@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from ..models import Event, Job, SimulationState, WorkCenter
+from ..models import Event, Job, SimulationState
 
 
 class Scheduler(ABC):
@@ -19,15 +19,6 @@ class Scheduler(ABC):
     @abstractmethod
     def plan_shift(self, state: SimulationState) -> None:
         """Fill open workcenter slots and maintain queues before a shift advances."""
-
-
-def usable_workcenter(wc: WorkCenter) -> bool:
-    """Return whether a workcenter can be considered for scheduling."""
-    from ..enums import WorkCenterStatus
-
-    return wc.status in {WorkCenterStatus.AVAILABLE, WorkCenterStatus.IDLE, WorkCenterStatus.BUSY} or (
-        wc.status.value == "Busy" and wc.current_job_id is not None
-    )
 
 
 def downstream_count(state: SimulationState, job: Job) -> int:

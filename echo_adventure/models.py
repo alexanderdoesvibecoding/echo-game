@@ -280,13 +280,6 @@ class SimulationState:
         """Return the one-based day number, capped at the deadline day."""
         return min(((self.current_shift) // self.shifts_per_day) + 1, self.deadline_shift // self.shifts_per_day)
 
-    @property
-    def day_shift_label(self) -> str:
-        """Return a human-readable label for the current shift position."""
-        day = max(1, ((self.current_shift - 1) // self.shifts_per_day) + 1) if self.current_shift else 1
-        shift_in_day = ((self.current_shift - 1) % self.shifts_per_day) + 1 if self.current_shift else 1
-        return f"Day {day}, Shift {shift_in_day}"
-
     def is_dependency_complete(self, job_id: str) -> bool:
         """Return whether every predecessor for a job is in completed_jobs."""
         job = self.jobs[job_id]

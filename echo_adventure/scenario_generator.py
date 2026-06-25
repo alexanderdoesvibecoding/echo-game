@@ -158,8 +158,6 @@ def _generate_shops_and_workcenters(
         name, capabilities = SHOP_BLUEPRINTS[blueprint_index]
         display_name = name if blueprint_cycle == 0 else f"{name} Extension {blueprint_cycle + 1}"
         shop_id = f"SHOP-{index:02d}"
-        # min_count, max_count = shop_size_factors.get(index - 1, (3, 4))
-        # count = max(rng.randint(min_count, max_count), len(capabilities))
         configured_min = config.min_workcenters_per_shop
         configured_max = config.max_workcenters_per_shop
 

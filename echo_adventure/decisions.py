@@ -56,23 +56,6 @@ def generate_decision_graph(
     return cards, roots_by_day, counts_by_day
 
 
-def generate_decision_cards(
-    state: SimulationState,
-    day: int,
-    config: GameConfig | None = None,
-) -> list[DecisionCard]:
-    """Return the deterministic daily card templates for one day.
-
-    This helper is intentionally smaller than the branching graph builder: it
-    exposes the player-facing card pool used for that day without attaching the
-    answer-specific next-card tree.
-    """
-    if config is None:
-        config = GameConfig()
-    _prime_graph_state_for_day(state, day, config)
-    return _generate_root_decision_cards(state, day, config)
-
-
 def active_decision_cards(
     state: SimulationState,
     day: int,
@@ -1803,29 +1786,6 @@ def _decision_type_for_event(event_type: EventType) -> DecisionType:
         EventType.UNEXPECTED_JOB: DecisionType.UNEXPECTED_JOB,
         EventType.ECHO_RECOMMENDATION: DecisionType.ECHO_RECOMMENDATION,
     }[event_type]
-
-
-def _top_bottleneck(state: SimulationState) -> Shop | None:
-    """Return the most pressured shop if it is worth showing as a card."""
-    shops = state.get_bottleneck_shops(1)
-    if not shops:
-        return None
-    shop = shops[0]
-    if len(shop.queued_job_ids) + len(shop.blocked_job_ids) < 2:
-        return None
-    return shop
-
-
-def _top_critical_job(state: SimulationState) -> Job | None:
-    """Return the highest-priority critical-path job, if any."""
-    critical = state.get_critical_path_jobs()
-    return critical[0] if critical else None
-
-
-def _alternate_routing_job(state: SimulationState) -> Job | None:
-    """Find a risky job with a usable alternate workcenter."""
-    jobs = _alternate_routing_jobs(state)
-    return jobs[0] if jobs else None
 
 
 def _alternate_routing_jobs(state: SimulationState) -> list[Job]:

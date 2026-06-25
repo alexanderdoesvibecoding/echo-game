@@ -584,23 +584,6 @@ class GameSession:
             "tiles": tiles,
         }
 
-    # def _final_payload(self) -> dict[str, Any]:
-    #     """Return the final player-vs-ECHO comparison payload."""
-    #     player_snapshot = calculate_snapshot(self.player_state)
-    #     automated_snapshot = calculate_snapshot(self.automated_state)
-    #     return {
-    #         "player": _snapshot_payload(player_snapshot, self.config.shifts_per_day, self.player_state),
-    #         "automated": _snapshot_payload(automated_snapshot, self.config.shifts_per_day, self.automated_state),
-    #         "decisionAudit": self._decision_audit_payload(),
-    #         "explanation": [
-    #             "ECHO continuously reprioritized critical-path work instead of waiting for daily manual decisions.",
-    #             "It used alternate capable workcenters when queue pressure or downtime threatened slack.",
-    #             f"ECHO made {len(self.automated_state.decision_history)} benchmark decisions using the same daily prompts.",
-    #             "It reacted to warnings by pulling forward unaffected work and reducing bottleneck idle time.",
-    #             "It avoided unnecessary preemption while still resequencing around blocked subjobs quickly.",
-    #             "Those behaviors reduced cascading delay, cost pressure, and end-of-run schedule risk.",
-    #         ],
-    #     }
     def _final_payload(self) -> dict[str, Any]:
         """Return the final player-vs-ECHO comparison payload."""
         player_snapshot = calculate_snapshot(self.player_state)
