@@ -268,7 +268,6 @@ def _generate_pieces_and_jobs(
                 priority=rng.randint(35, 75),
                 due_shift=max(2, due_shift),
                 risk_score=float(rng.randint(8, 30)),
-                cost_weight=round(rng.uniform(0.8, 1.8), 2),
                 original_duration_shifts=duration,
             )
             jobs[job_id] = job

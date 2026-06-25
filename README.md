@@ -12,7 +12,6 @@ The goal is to complete all jobs before the deadline while balancing:
 
 - Schedule risk
 - Late subjobs
-- Cost
 - Reschedules
 - Workcenter utilization
 - Idle time
@@ -107,7 +106,7 @@ Jobs are the top-level deliverables the player must finish before the deadline. 
 - Complete
 - Rework required
 
-Subjobs carry priority, due shift, risk score, cost weight, candidate workcenters, and dependency links.
+Subjobs carry priority, due shift, risk score, candidate workcenters, and dependency links.
 
 ### Rework
 

@@ -404,7 +404,6 @@ def _block_jobs(state: SimulationState, event: Event, job_ids: Iterable[str], re
                 wc.current_job_id = None
                 wc.status = WorkCenterStatus.AVAILABLE
     event.effects.setdefault("blocked_job_ids", []).extend(affected)
-    state.cost += 12 * len(affected) * event.severity
 
 
 def _set_workcenters_down(
@@ -429,7 +428,6 @@ def _set_workcenters_down(
             job.status = JobStatus.PAUSED
             job.risk_score += event.severity * 2
     event.effects.setdefault("workcenter_ids", []).extend(affected)
-    state.cost += 20 * len(affected) * max(1, event.severity)
 
 
 def _apply_quality_rework(state: SimulationState, event: Event) -> None:
@@ -447,7 +445,6 @@ def _apply_quality_rework(state: SimulationState, event: Event) -> None:
             job.status = JobStatus.REWORK_REQUIRED if not job.block_reason else job.status
             job.risk_score += event.severity * 4
             event.effects.setdefault("rework_job_ids", []).append(job.id)
-        state.cost += 30 * event.severity * max(1, len(event.effects.get("rework_job_ids", [])))
         return
     if target_id not in state.jobs:
         return
@@ -469,7 +466,6 @@ def _apply_quality_rework(state: SimulationState, event: Event) -> None:
         job.remaining_duration_shifts += max(1, event.severity)
         job.status = JobStatus.REWORK_REQUIRED if not job.block_reason else job.status
         job.risk_score += event.severity * 4
-    state.cost += 35 * event.severity
 
 
 def _apply_priority_change(state: SimulationState, event: Event) -> None:
@@ -509,7 +505,6 @@ def _insert_urgent_job(state: SimulationState, event: Event) -> None:
         duration=1 + min(2, max(1, event.severity // 2)),
         priority=85 + event.severity,
     )
-    state.cost += 25 * event.severity
 
 
 def insert_unexpected_job(state: SimulationState, event: Event, prioritize: bool) -> str:
@@ -558,7 +553,6 @@ def insert_unexpected_job(state: SimulationState, event: Event, prioritize: bool
             priority=max(10, priority - job_index * 2),
             due_shift=due_shift,
             risk_score=float(18 + event.severity * 4),
-            cost_weight=1.2 if prioritize else 1.0,
             original_duration_shifts=duration,
         )
         if previous_job_id and previous_job_id in state.jobs:
@@ -577,7 +571,6 @@ def insert_unexpected_job(state: SimulationState, event: Event, prioritize: bool
     event.effects["priority_mode"] = "prioritized" if prioritize else "backlog"
 
     _set_unexpected_job_priority(state, piece_id, prioritize)
-    state.cost += 18 + event.severity * (8 if prioritize else 4)
     state.daily_notes.append(
         f"Added unexpected job {piece_id} to the submarine build "
         f"({'prioritized' if prioritize else 'back of queue'})."
@@ -704,7 +697,6 @@ def _create_follow_on_job(
         priority=priority,
         due_shift=min(state.deadline_shift - 1, state.current_shift + 5),
         risk_score=event.severity * 4,
-        cost_weight=1.4,
         original_duration_shifts=duration,
     )
     state.jobs[job.id] = job

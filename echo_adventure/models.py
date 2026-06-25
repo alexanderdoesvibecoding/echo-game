@@ -90,7 +90,6 @@ class Job:
     priority: int = 50
     due_shift: int = 90
     risk_score: float = 0.0
-    cost_weight: float = 1.0
     critical_path: bool = False
     block_reason: str | None = None
     started_once: bool = False
@@ -153,7 +152,6 @@ class DecisionChoice:
     description: str
     immediate_effects: dict[str, Any]
     risk_effect: int
-    cost_effect: int
     reschedule_effect: int
     next_card_id: str | None = None
 
@@ -215,7 +213,6 @@ class MetricSnapshot:
     utilization: float
     idle_time: int
     reschedules: int
-    cost: float
     schedule_risk: float
     projected_completion_shift: int
     final_item_completed: bool
@@ -263,7 +260,6 @@ class SimulationState:
     blocked_jobs: set[str] = field(default_factory=set)
     scheduled_jobs: set[str] = field(default_factory=set)
     reschedule_count: int = 0
-    cost: float = 0.0
     metric_history: list[MetricSnapshot] = field(default_factory=list)
     final_item_completed: bool = False
     completion_shift: int | None = None
@@ -375,7 +371,7 @@ class SimulationState:
         """Assign or reassign a job to a workcenter queue.
 
         Returns False when the target workcenter cannot perform the job's
-        required capability. Reassignments intentionally add cost/reschedule
+        required capability. Reassignments intentionally add reschedule
         pressure because queue churn is part of the game balance.
         """
         job = self.jobs[job_id]
@@ -395,11 +391,9 @@ class SimulationState:
             job.status = JobStatus.QUEUED
             job.remaining_duration_shifts += 1
             self.reschedule_count += 1
-            self.cost += 14
             self.daily_notes.append(f"{job.id} was moved while active; one shift of disruption was added.")
         if old_assignment and old_assignment != workcenter_id:
             self.reschedule_count += 1
-            self.cost += 8
         self.remove_job_from_queues(job_id)
         job.assigned_workcenter_id = workcenter_id
         if job.status not in {JobStatus.RUNNING, JobStatus.COMPLETE}:
@@ -427,6 +421,5 @@ class SimulationState:
         wc.status = WorkCenterStatus.AVAILABLE
         wc.queue.insert(0, current_id)
         self.reschedule_count += 1
-        self.cost += 14
         self.daily_notes.append(f"{current_id} was preempted on {wc.name}; one shift of disruption was added.")
         return self.assign_job(incoming_job_id, workcenter_id, front=True)

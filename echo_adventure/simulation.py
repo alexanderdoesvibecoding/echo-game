@@ -101,10 +101,6 @@ def complete_job(state: SimulationState, job_id: str) -> None:
         if wc.current_job_id == job_id:
             wc.current_job_id = None
             wc.status = WorkCenterStatus.AVAILABLE
-    if job.completed_shift > job.due_shift:
-        state.cost += 18 + (job.completed_shift - job.due_shift) * 3
-    else:
-        state.cost += max(1, 4 - (job.due_shift - job.completed_shift) * 0.02)
     state.daily_notes.append(f"Completed {job_id}.")
     _complete_project_if_ready(state)
 
@@ -127,7 +123,6 @@ def _maybe_require_completion_rework(state: SimulationState, job) -> bool:
     job.risk_score = min(100.0, job.risk_score + 12 + extra_shifts * 3)
     job.queue_time = 0
 
-    state.cost += 30 + extra_shifts * 12 * job.cost_weight
     state.reschedule_count += 1
     state.completed_jobs.discard(job.id)
     state.remove_job_from_queues(job.id)
@@ -183,7 +178,6 @@ def _start_available_jobs(state: SimulationState) -> None:
                 adjusted = max(1, math.ceil(planned / max(0.2, wc.efficiency)))
                 if wc.id != job.candidate_workcenter_ids[0]:
                     adjusted += 1
-                    state.cost += 5
                 job.remaining_duration_shifts = max(1, adjusted)
                 job.started_once = True
             job.status = JobStatus.RUNNING
@@ -209,7 +203,6 @@ def _process_workcenters(state: SimulationState) -> None:
                 state.idle_blocked_time += 1
                 continue
             state.busy_shift_count += 1
-            state.cost += 10 * job.cost_weight
             job.remaining_duration_shifts -= 1
             if job.remaining_duration_shifts <= 0:
                 complete_job(state, job.id)
@@ -222,7 +215,7 @@ def _process_workcenters(state: SimulationState) -> None:
 
 
 def _age_queues(state: SimulationState) -> None:
-    """Increment queue-time pressure and holding cost for queued jobs."""
+    """Increment queue-time pressure for queued jobs."""
     queued: set[str] = set()
     for wc in state.workcenters.values():
         for job_id in wc.queue:
@@ -230,7 +223,6 @@ def _age_queues(state: SimulationState) -> None:
                 queued.add(job_id)
     for job_id in queued:
         state.jobs[job_id].queue_time += 1
-        state.cost += 0.25 * state.jobs[job_id].cost_weight
 
 
 def _known_events(state: SimulationState):

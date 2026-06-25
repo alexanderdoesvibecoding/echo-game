@@ -537,7 +537,6 @@ class GameSession:
             "piecesCompleted": snapshot.pieces_completed,
             "jobsLate": snapshot.jobs_late,
             "reschedules": snapshot.reschedules,
-            "cost": round(snapshot.cost, 1),
             "idleTime": snapshot.idle_time,
             "risk": round(snapshot.schedule_risk, 1),
             "projectedCompletion": day_shift(snapshot.projected_completion_shift, self.config.shifts_per_day),
@@ -801,11 +800,6 @@ class GameSession:
         elif player_snapshot.schedule_risk < 45:
             reasons.append(f"Final schedule risk was controlled at {round(player_snapshot.schedule_risk)}/100.")
 
-        if player_snapshot.cost <= automated_snapshot.cost:
-            reasons.append("You met the deadline without spending more than ECHO's benchmark.")
-        elif player_snapshot.cost > automated_snapshot.cost:
-            reasons.append("You met the deadline, but used more cost than ECHO's benchmark.")
-
         return reasons or ["You won because all required jobs were completed before the deadline."]
 
     def _decision_audit_payload(self) -> list[dict[str, Any]]:
@@ -948,7 +942,6 @@ def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: Simu
         "jobsLate": snapshot.jobs_late,
         "idleTime": snapshot.idle_time,
         "reschedules": snapshot.reschedules,
-        "cost": round(snapshot.cost, 1),
         "scheduleRisk": round(snapshot.schedule_risk, 1),
         "projectedCompletionShift": snapshot.projected_completion_shift,
         "projectedCompletion": day_shift(snapshot.projected_completion_shift, shifts_per_day),
@@ -989,7 +982,6 @@ def _choice_payload(choice: DecisionChoice) -> dict[str, Any]:
         "label": choice.label,
         "description": choice.description,
         "riskEffect": choice.risk_effect,
-        "costEffect": choice.cost_effect,
         "rescheduleEffect": choice.reschedule_effect,
     }
 

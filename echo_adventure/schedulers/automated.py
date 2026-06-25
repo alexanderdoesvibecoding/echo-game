@@ -144,7 +144,6 @@ class AutomatedScheduler(Scheduler):
             score += 42
         score += max(0, 24 - slack) * 2.8
         score -= job.queue_time * 0.6
-        score -= job.cost_weight * 0.4
         if job.block_reason:
             score -= 100
         if wc:
@@ -152,7 +151,7 @@ class AutomatedScheduler(Scheduler):
         return score
 
     def _should_preempt(self, state: SimulationState, job: Job, wc: WorkCenter) -> bool:
-        """Return whether replacing current work is worth the disruption cost."""
+        """Return whether replacing current work is worth the disruption."""
         if not wc.current_job_id:
             return False
         if not (job.critical_path or job.priority >= 88):

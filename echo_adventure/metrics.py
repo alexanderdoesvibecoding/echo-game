@@ -48,7 +48,6 @@ def calculate_snapshot(state: SimulationState) -> MetricSnapshot:
         utilization=utilization,
         idle_time=state.idle_time,
         reschedules=state.reschedule_count,
-        cost=state.cost,
         schedule_risk=risk,
         projected_completion_shift=projected,
         final_item_completed=state.final_item_completed,

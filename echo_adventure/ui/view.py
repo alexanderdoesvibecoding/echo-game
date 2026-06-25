@@ -313,7 +313,7 @@ INDEX_HTML = r"""<!doctype html>
     .grid { display: grid; gap: 16px; }
     .metrics {
       display: grid;
-      grid-template-columns: repeat(5, minmax(120px, 1fr));
+      grid-template-columns: repeat(4, minmax(120px, 1fr));
       gap: 10px;
       padding: 14px;
     }
@@ -1456,7 +1456,6 @@ INDEX_HTML = r"""<!doctype html>
             <tr><td>Subjobs remaining</td><td>${summary.jobsRemaining}</td></tr>
             <tr><td>Jobs complete</td><td>${summary.piecesCompleted}/${payload.pieces.length}</td></tr>
             <tr><td>Subjobs late</td><td>${summary.jobsLate}</td></tr>
-            <tr><td>Cost</td><td>${fmtNum(summary.cost)}</td></tr>
             <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
             <tr><td>Projected completion</td><td>${summary.projectedCompletion}</td></tr>
           </tbody>
@@ -1497,7 +1496,6 @@ INDEX_HTML = r"""<!doctype html>
             <tr><td>Subjobs late</td><td>${p.jobsLate}</td><td>${a.jobsLate}</td></tr>
             <tr><td>Idle time</td><td>${p.idleTime}</td><td>${a.idleTime}</td></tr>
             <tr><td>Reschedules</td><td>${p.reschedules}</td><td>${a.reschedules}</td></tr>
-            <tr><td>Cost</td><td>${fmtNum(p.cost)}</td><td>${fmtNum(a.cost)}</td></tr>
             <tr><td>Schedule risk</td><td>${Math.round(p.scheduleRisk)}</td><td>${Math.round(a.scheduleRisk)}</td></tr>
           </tbody>
         </table>
@@ -1656,7 +1654,6 @@ INDEX_HTML = r"""<!doctype html>
         ["Jobs Complete", `${snap.piecesCompleted}/${state.pieces.length}`, snap.piecesCompleted / state.pieces.length, "good", "How many top-level jobs are complete."],
         ["Subjobs Complete", fmtNum(snap.jobsCompleted), snap.jobsCompleted / Math.max(1, snap.jobsCompleted + snap.jobsRemaining), "good", "Total subjobs finished out of all required work."],
         ["Subjobs Late", fmtNum(snap.jobsLate), Math.min(1, snap.jobsLate / 20), snap.jobsLate > 0 ? "warn" : "good", "Number of subjobs that have missed their target completion date."],
-        ["Cost", fmtNum(snap.cost), Math.min(1, snap.cost / 28000), "warn", "Total additional costs from rescheduling, expediting, and resolving issues."],
         ["Schedule Risk", `${Math.round(snap.scheduleRisk)}/100`, snap.scheduleRisk / 100, snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good", "Overall probability of missing the deadline (0 = safe, 100 = critical)."]
       ];
       $("metrics").innerHTML = metrics.map(([label, value, pct, tone, tooltip]) => `
@@ -1823,7 +1820,6 @@ INDEX_HTML = r"""<!doctype html>
             <tr><td>Subjobs remaining</td><td>${summary.jobsRemaining}</td></tr>
             <tr><td>Jobs complete</td><td>${summary.piecesCompleted}/${state.pieces.length}</td></tr>
             <tr><td>Subjobs late</td><td>${summary.jobsLate}</td></tr>
-            <tr><td>Cost</td><td>${fmtNum(summary.cost)}</td></tr>
             <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
             <tr><td>Projected completion</td><td>${summary.projectedCompletion}</td></tr>
           </tbody>
@@ -1883,11 +1879,6 @@ INDEX_HTML = r"""<!doctype html>
             <td>Subjobs late</td>
             <td>${p.jobsLate}</td>
             <td>${a.jobsLate}</td>
-          </tr>
-          <tr>
-            <td>Cost</td>
-            <td>${fmtNum(p.cost)}</td>
-            <td>${fmtNum(a.cost)}</td>
           </tr>
           <tr>
             <td>Risk</td>

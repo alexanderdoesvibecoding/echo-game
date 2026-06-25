@@ -154,7 +154,6 @@ def _choice_path_score(choice: DecisionChoice, graph: dict[str, DecisionCard] | 
         choice.risk_effect * 12
         + effect_rank.get(choice.immediate_effects.get("type", "note"), 20) * 3
         + choice.reschedule_effect * 4
-        + choice.cost_effect * 0.08
     )
     if not graph or not choice.next_card_id or choice.next_card_id not in graph:
         return immediate
@@ -306,7 +305,6 @@ def apply_choice(
         echo_choice = select_echo_choice(card)
     effects = choice.immediate_effects
     effect_type = effects.get("type", "note")
-    state.cost += max(0, choice.cost_effect)
     state.reschedule_count += max(0, choice.reschedule_effect)
     _apply_risk_delta(state, card, choice.risk_effect)
 
@@ -459,7 +457,6 @@ def _clone_choices(choices: list[DecisionChoice]) -> list[DecisionChoice]:
             description=choice.description,
             immediate_effects=dict(choice.immediate_effects),
             risk_effect=choice.risk_effect,
-            cost_effect=choice.cost_effect,
             reschedule_effect=choice.reschedule_effect,
         )
         for choice in choices
@@ -482,7 +479,6 @@ def _next_question_choices(
             description="Keep the response focused on the highest-leverage work and give it priority through the remaining shifts.",
             immediate_effects={"type": recommended_effect, **event_payload},
             risk_effect=-6 + risk_bonus,
-            cost_effect=10 + question_number * 4,
             reschedule_effect=1,
         ),
         DecisionChoice(
@@ -491,7 +487,6 @@ def _next_question_choices(
             description="Use the same response pattern on adjacent work so the related queue does not become tomorrow's constraint.",
             immediate_effects={"type": "pull_forward", **event_payload},
             risk_effect=-4 + risk_bonus,
-            cost_effect=14 + question_number * 5,
             reschedule_effect=2,
         ),
         DecisionChoice(
@@ -500,7 +495,6 @@ def _next_question_choices(
             description="Take the smallest possible action and preserve the current sequence unless the board gets worse.",
             immediate_effects={"type": "resequence", **event_payload},
             risk_effect=-1 + risk_bonus,
-            cost_effect=4,
             reschedule_effect=1,
         ),
         DecisionChoice(
@@ -509,7 +503,6 @@ def _next_question_choices(
             description="Stop adding interventions today and accept that unresolved pressure may affect later work.",
             immediate_effects={"type": "wait", **event_payload},
             risk_effect=3 + question_number,
-            cost_effect=0,
             reschedule_effect=0,
         ),
     ]
@@ -718,7 +711,6 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
                     description="Let ECHO propose a move that protects urgent work and pulls useful capacity forward; there is a chance the analysis produces no usable schedule change.",
                     immediate_effects={"type": "echo_recommendation", "event_id": event.id},
                     risk_effect=-8,
-                    cost_effect=10,
                     reschedule_effect=1,
                 ),
                 DecisionChoice(
@@ -727,7 +719,6 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
                     description="Keep today's manual plan intact and avoid analysis churn, accepting that the recommendation will not reduce future pressure.",
                     immediate_effects={"type": "wait", "event_id": event.id},
                     risk_effect=2,
-                    cost_effect=0,
                     reschedule_effect=0,
                 ),
             ],
@@ -751,7 +742,6 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
                     description="Add the new job to the submarine build and push its first subjob toward the front of a capable queue.",
                     immediate_effects={"type": "prioritize_new_job", "event_id": event.id},
                     risk_effect=-4,
-                    cost_effect=28,
                     reschedule_effect=1,
                 ),
                 DecisionChoice(
@@ -760,7 +750,6 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
                     description="Accept the new job but give it low priority so the original schedule stays protected for now.",
                     immediate_effects={"type": "backlog_new_job", "event_id": event.id},
                     risk_effect=4,
-                    cost_effect=8,
                     reschedule_effect=0,
                 ),
             ],
@@ -772,7 +761,6 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
             description="Change the order of ready and queued work around this issue while leaving active work in place; useful when a small queue change can keep dependent work moving.",
             immediate_effects={"type": "resequence", "event_id": event.id},
             risk_effect=-5,
-            cost_effect=4,
             reschedule_effect=1,
         ),
         DecisionChoice(
@@ -781,7 +769,6 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
             description="Commit extra recovery effort to shorten or soften the disruption; best when the target is already blocking important work.",
             immediate_effects={"type": "expedite_event", "event_id": event.id},
             risk_effect=-9,
-            cost_effect=35 + event.severity * 8,
             reschedule_effect=1,
         ),
         DecisionChoice(
@@ -790,7 +777,6 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
             description="Put critical dependencies ahead of routine queue work so downstream jobs are less likely to stall behind this disruption.",
             immediate_effects={"type": "protect_critical", "event_id": event.id},
             risk_effect=-7,
-            cost_effect=12,
             reschedule_effect=1,
         ),
     ]
@@ -811,7 +797,6 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
                 description="Move affected work to another capable workcenter if capacity exists; this can reduce exposure but adds setup and coordination churn.",
                 immediate_effects={"type": "reroute", "event_id": event.id},
                 risk_effect=-6,
-                cost_effect=18,
                 reschedule_effect=1,
             )
         )
@@ -823,7 +808,6 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
                 description="Keep the current plan stable and monitor the issue, accepting that downstream slack may tighten if the disruption lingers.",
                 immediate_effects={"type": "wait", "event_id": event.id},
                 risk_effect=5,
-                cost_effect=0,
                 reschedule_effect=0,
             )
         )
@@ -858,7 +842,6 @@ def _bottleneck_card(state: SimulationState, shop: Shop, ordinal: int, day: int)
                 description="Move eligible queued work into alternate capable capacity so this shop stops carrying the whole load; expect extra coordination.",
                 immediate_effects={"type": "split_capacity"},
                 risk_effect=-7,
-                cost_effect=16,
                 reschedule_effect=2,
             ),
             DecisionChoice(
@@ -867,7 +850,6 @@ def _bottleneck_card(state: SimulationState, shop: Shop, ordinal: int, day: int)
                 description="Advance the work most likely to control final delivery and let lower-risk jobs wait behind it.",
                 immediate_effects={"type": "protect_critical"},
                 risk_effect=-8,
-                cost_effect=10,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -876,7 +858,6 @@ def _bottleneck_card(state: SimulationState, shop: Shop, ordinal: int, day: int)
                 description="Make room by lowering priority on work with healthier slack, keeping the shop focused on urgent dependencies.",
                 immediate_effects={"type": "defer"},
                 risk_effect=-3,
-                cost_effect=4,
                 reschedule_effect=1,
             ),
         ],
@@ -908,16 +889,14 @@ def _queue_congestion_card(state: SimulationState, shop: Shop, ordinal: int, day
                 description="Resequence the shop queue around the nearest due dates so late starts do not pile up.",
                 immediate_effects={"type": "resequence"},
                 risk_effect=-4,
-                cost_effect=5,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="2",
                 label="Split overloaded queue",
-                description="Move eligible work to alternate capacity and accept the added coordination cost.",
+                description="Move eligible work to alternate capacity and accept the added coordination effort.",
                 immediate_effects={"type": "split_capacity"},
                 risk_effect=-6,
-                cost_effect=18,
                 reschedule_effect=2,
             ),
             DecisionChoice(
@@ -926,7 +905,6 @@ def _queue_congestion_card(state: SimulationState, shop: Shop, ordinal: int, day
                 description="Lower priority on jobs with schedule room so constrained capacity stays focused on urgent dependencies.",
                 immediate_effects={"type": "defer"},
                 risk_effect=-2,
-                cost_effect=4,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -935,7 +913,6 @@ def _queue_congestion_card(state: SimulationState, shop: Shop, ordinal: int, day
                 description="Avoid another queue change and let the current dispatch order run, accepting continued congestion risk.",
                 immediate_effects={"type": "wait"},
                 risk_effect=3,
-                cost_effect=0,
                 reschedule_effect=0,
             ),
         ],
@@ -961,7 +938,6 @@ def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int
                 description="Lift this dependency and the downstream work it unlocks ahead of routine starts.",
                 immediate_effects={"type": "protect_critical"},
                 risk_effect=-8,
-                cost_effect=12,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -970,7 +946,6 @@ def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int
                 description="Use another capable workcenter to buy schedule room, accepting extra setup and coordination.",
                 immediate_effects={"type": "reroute"},
                 risk_effect=-6,
-                cost_effect=20,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -979,7 +954,6 @@ def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int
                 description="Interrupt lower-priority work only if it is occupying the best capable workcenter for this dependency.",
                 immediate_effects={"type": "preempt"},
                 risk_effect=-7,
-                cost_effect=24,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -988,7 +962,6 @@ def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int
                 description="Preserve the current queue order and avoid immediate churn, accepting that this critical-path item may keep losing slack.",
                 immediate_effects={"type": "wait"},
                 risk_effect=4,
-                cost_effect=0,
                 reschedule_effect=0,
             ),
         ],
@@ -1024,7 +997,6 @@ def _handoff_card(state: SimulationState, job: Job, ordinal: int, day: int) -> D
                 description="Advance ready feeder work so the receiving shop has a cleaner start window.",
                 immediate_effects={"type": "pull_forward"},
                 risk_effect=-4,
-                cost_effect=10,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -1033,7 +1005,6 @@ def _handoff_card(state: SimulationState, job: Job, ordinal: int, day: int) -> D
                 description="Raise priority on this handoff and the downstream dependency it unlocks.",
                 immediate_effects={"type": "protect_critical"},
                 risk_effect=-6,
-                cost_effect=12,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -1042,7 +1013,6 @@ def _handoff_card(state: SimulationState, job: Job, ordinal: int, day: int) -> D
                 description="Adjust queue order around the handoff while leaving active work in place.",
                 immediate_effects={"type": "resequence"},
                 risk_effect=-3,
-                cost_effect=5,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -1051,7 +1021,6 @@ def _handoff_card(state: SimulationState, job: Job, ordinal: int, day: int) -> D
                 description="Keep the handoff informal and avoid schedule churn, accepting the risk of waiting time.",
                 immediate_effects={"type": "wait"},
                 risk_effect=3,
-                cost_effect=0,
                 reschedule_effect=0,
             ),
         ],
@@ -1075,7 +1044,6 @@ def _alternate_card(state: SimulationState, job: Job, ordinal: int, day: int) ->
                 description="Move the subjob to the best open alternate workcenter and give it a cleaner path through the shop floor.",
                 immediate_effects={"type": "reroute"},
                 risk_effect=-6,
-                cost_effect=18,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -1084,7 +1052,6 @@ def _alternate_card(state: SimulationState, job: Job, ordinal: int, day: int) ->
                 description="Preserve the current workcenter queue and avoid setup churn, accepting that the routing option may not stay helpful.",
                 immediate_effects={"type": "wait"},
                 risk_effect=3,
-                cost_effect=0,
                 reschedule_effect=0,
             ),
             DecisionChoice(
@@ -1093,7 +1060,6 @@ def _alternate_card(state: SimulationState, job: Job, ordinal: int, day: int) ->
                 description="Use the alternate capacity for related ready work so the capability family keeps flowing even if this subjob stays put.",
                 immediate_effects={"type": "pull_forward"},
                 risk_effect=-4,
-                cost_effect=8,
                 reschedule_effect=1,
             ),
         ],
@@ -1122,7 +1088,6 @@ def _quality_triage_card(state: SimulationState, job: Job, ordinal: int, day: in
                 description="Protect the dependency by adding attention now, reducing the chance that rework spills into downstream starts.",
                 immediate_effects={"type": "protect_critical"},
                 risk_effect=-6,
-                cost_effect=16,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -1131,7 +1096,6 @@ def _quality_triage_card(state: SimulationState, job: Job, ordinal: int, day: in
                 description="Move the work to a capable station with less pressure so quality checks do not fight the main queue.",
                 immediate_effects={"type": "reroute"},
                 risk_effect=-5,
-                cost_effect=20,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -1140,7 +1104,6 @@ def _quality_triage_card(state: SimulationState, job: Job, ordinal: int, day: in
                 description="Lower priority on less urgent starts that could consume inspection attention before this job clears.",
                 immediate_effects={"type": "defer"},
                 risk_effect=-2,
-                cost_effect=5,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -1149,7 +1112,6 @@ def _quality_triage_card(state: SimulationState, job: Job, ordinal: int, day: in
                 description="Avoid adding checks until a defect is confirmed, accepting that later rework could be more disruptive.",
                 immediate_effects={"type": "wait"},
                 risk_effect=4,
-                cost_effect=0,
                 reschedule_effect=0,
             ),
         ],
@@ -1173,7 +1135,6 @@ def _idle_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
                 description="Release ready subjobs into open capacity now so useful shop time does not sit unused.",
                 immediate_effects={"type": "pull_forward"},
                 risk_effect=-4,
-                cost_effect=6,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -1182,7 +1143,6 @@ def _idle_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
                 description="Use open capacity only where it helps critical dependencies or work that unlocks later starts.",
                 immediate_effects={"type": "protect_critical"},
                 risk_effect=-6,
-                cost_effect=10,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -1191,7 +1151,6 @@ def _idle_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
                 description="Hold capacity back for recovery work if active disruptions or warnings are likely to need a fast response.",
                 immediate_effects={"type": "wait"},
                 risk_effect=2,
-                cost_effect=0,
                 reschedule_effect=0,
             ),
         ],
@@ -1221,7 +1180,6 @@ def _completion_readiness_card(state: SimulationState, ordinal: int, day: int) -
                 description="Raise priority on subjobs that unlock the most remaining completion work.",
                 immediate_effects={"type": "protect_critical"},
                 risk_effect=-7,
-                cost_effect=12,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -1230,7 +1188,6 @@ def _completion_readiness_card(state: SimulationState, ordinal: int, day: int) -
                 description="Spend recovery effort on jobs that are closest to completion so finished deliverables start stacking up.",
                 immediate_effects={"type": "pull_forward"},
                 risk_effect=-5,
-                cost_effect=22,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -1239,7 +1196,6 @@ def _completion_readiness_card(state: SimulationState, ordinal: int, day: int) -
                 description="Avoid queue churn and keep recovery capacity available for late disruptions.",
                 immediate_effects={"type": "wait"},
                 risk_effect=3,
-                cost_effect=0,
                 reschedule_effect=0,
             ),
         ],
@@ -1265,7 +1221,6 @@ def _strategic_card(state: SimulationState, ordinal: int, day: int) -> DecisionC
                 description="Favor subjobs tied to the nearest target milestone so deadline pressure stays visible in every queue.",
                 immediate_effects={"type": "resequence"},
                 risk_effect=-3,
-                cost_effect=4,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -1274,16 +1229,14 @@ def _strategic_card(state: SimulationState, ordinal: int, day: int) -> DecisionC
                 description="Favor subjobs with tight slack and high downstream dependency value, even if less urgent work waits.",
                 immediate_effects={"type": "protect_critical"},
                 risk_effect=-5,
-                cost_effect=8,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="3",
                 label="Stabilize queues",
-                description="Let current workcenter queues run with minimal churn, preserving predictability at the cost of less intervention.",
+                description="Let current workcenter queues run with minimal churn, preserving predictability while reducing intervention.",
                 immediate_effects={"type": "wait"},
                 risk_effect=2,
-                cost_effect=0,
                 reschedule_effect=0,
             ),
         ],
@@ -1309,7 +1262,6 @@ def _fallback_strategic_card(state: SimulationState, ordinal: int, day: int) -> 
                 description="Shift attention toward urgent work and keep flow moving across shops before pressure concentrates.",
                 immediate_effects={"type": "resequence"},
                 risk_effect=-2,
-                cost_effect=3,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -1318,7 +1270,6 @@ def _fallback_strategic_card(state: SimulationState, ordinal: int, day: int) -> 
                 description="Choose the sequence that safeguards the nearest delivery and the dependencies that unlock it.",
                 immediate_effects={"type": "protect_critical"},
                 risk_effect=-4,
-                cost_effect=6,
                 reschedule_effect=1,
             ),
             DecisionChoice(
@@ -1327,7 +1278,6 @@ def _fallback_strategic_card(state: SimulationState, ordinal: int, day: int) -> 
                 description="Keep current queues intact and let shop teams execute without another scheduling change.",
                 immediate_effects={"type": "wait"},
                 risk_effect=2,
-                cost_effect=0,
                 reschedule_effect=0,
             ),
         ],
@@ -1380,7 +1330,7 @@ def _protect_critical(state: SimulationState) -> str:
 
 
 def _expedite_event(state: SimulationState, event_id: str | None) -> str:
-    """Spend cost to shorten and soften an active or warned event."""
+    """Shorten and soften an active or warned event."""
     event = _event_by_id(state, event_id)
     if not event:
         return "Expedite budget reserved for the highest active disruption."
@@ -1475,7 +1425,6 @@ def _use_echo_recommendation(state: SimulationState, card: DecisionCard) -> str:
     event_id = next((target_id for target_id in card.target_ids if _event_by_id(state, target_id)), card.id)
     roll = random.Random(f"{state.seed}:{event_id}:echo-recommendation")
     if roll.random() < 0.28:
-        state.cost += 12
         return "ECHO recommendation did not produce a usable move; the team lost some analysis time."
 
     protected_note = _protect_critical(state)
