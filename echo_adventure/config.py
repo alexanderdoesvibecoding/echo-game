@@ -13,8 +13,8 @@ GAME_PRESETS: dict[str, dict[str, object]] = {
         # Jobs
         "piece_count": 10,
         # Subjobs per job
-        "min_jobs_per_piece": 3,
-        "max_jobs_per_piece": 5,
+        "min_jobs_per_piece": 4,
+        "max_jobs_per_piece": 6,
         # Shops
         "shop_count": 9,
         # Work centers per shop
@@ -37,10 +37,10 @@ GAME_PRESETS: dict[str, dict[str, object]] = {
         # Days
         "total_days": 5,
         # Jobs
-        "piece_count": 3,
+        "piece_count": 4,
         # Subjobs per job
-        "min_jobs_per_piece": 3,
-        "max_jobs_per_piece": 3,
+        "min_jobs_per_piece": 4,
+        "max_jobs_per_piece": 5,
         # Shops
         "shop_count": 9,
         # Work centers per shop

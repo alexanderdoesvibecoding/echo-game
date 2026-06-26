@@ -190,8 +190,8 @@ echo_adventure/
 
 Game balance is controlled in `echo_adventure/config.py` through named presets. The current presets are:
 
-- `normal`: 15 days, 10 top-level jobs, 3-5 subjobs per job, random disruptions, cascades, and completion-time rework.
-- `demo`: 5 days, 3 top-level jobs, exactly 3 subjobs per job, shorter durations, no random disruptions, and no completion-time rework.
+- `normal`: 15 days, 10 top-level jobs, 4-6 subjobs per job, random disruptions, cascades, and completion-time rework.
+- `demo`: 5 days, 4 top-level jobs, 4-5 subjobs per job, shorter durations, no random disruptions, and no completion-time rework.
 
 Completion-time inspection rework is controlled by `completion_rework_probability`, `min_completion_rework_shifts`, and `max_completion_rework_shifts`. Keep these explicit in presets instead of reintroducing hard-coded probabilities in scenario generation.
 
