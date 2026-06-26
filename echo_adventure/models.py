@@ -226,6 +226,7 @@ class CampaignDecisionGraph:
     card_ids: list[str] = field(default_factory=list)
     cards_by_day: dict[int, list[str]] = field(default_factory=dict)
     roots_by_day: dict[int, list[str]] = field(default_factory=dict)
+    event_card_ids_by_day: dict[int, list[str]] = field(default_factory=dict)
     daily_decision_counts: dict[int, int] = field(default_factory=dict)
     max_campaign_nodes: int = 0
     max_active_cards_per_day: int = 0

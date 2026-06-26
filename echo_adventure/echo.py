@@ -151,10 +151,17 @@ def _live_operational_score(
     elif effect_type == "defer":
         score += 8.0 if any(job.critical_path for job in jobs) else -2.0
     elif effect_type == "protect_critical":
-        score -= 24.0 if any(job.critical_path for job in jobs) else 7.0
-        score -= min(22.0, sum(downstream_count(state, job) for job in jobs[:4]) * 2.0)
+        if card.type in {DecisionType.CRITICAL_PATH, DecisionType.COMPLETION_READINESS} and any(job.critical_path for job in jobs):
+            score -= 30.0
+            score -= min(18.0, sum(downstream_count(state, job) for job in jobs[:4]) * 1.8)
+        else:
+            score += 9.0
     elif effect_type == "reroute":
         score -= _reroute_value(state, jobs)
+        if card.type == DecisionType.CRITICAL_PATH and not (
+            event and event.id in state.active_events
+        ):
+            score += 10.0
     elif effect_type == "split_capacity":
         score -= _queue_pressure_value(state, card, jobs)
     elif effect_type == "pull_forward":
@@ -163,6 +170,8 @@ def _live_operational_score(
         score -= _event_expedite_value(state, event)
     elif effect_type == "preempt":
         score -= 18.0 if any(job.critical_path or job.priority >= 88 for job in jobs) else 0.0
+        if card.type == DecisionType.CRITICAL_PATH:
+            score -= 8.0
     elif effect_type == "echo_recommendation":
         score -= 16.0
     elif effect_type == "prioritize_new_job":
@@ -170,13 +179,13 @@ def _live_operational_score(
     elif effect_type == "backlog_new_job":
         score -= 5.0 if _late_stage(state) else 8.0
 
-    if card.type == DecisionType.COMPLETION_READINESS and effect_type in {"protect_critical", "pull_forward"}:
+    if card.type == DecisionType.COMPLETION_READINESS and effect_type in {"protect_critical", "pull_forward", "resequence"}:
         score -= 14.0
     if card.type == DecisionType.IDLE_WORKCENTER and effect_type == "wait":
         score += 12.0
-    if event and event.id in state.active_events and effect_type in {"expedite_event", "reroute", "protect_critical"}:
+    if event and event.id in state.active_events and effect_type in {"expedite_event", "reroute", "split_capacity"}:
         score -= 8.0
-    if event and event.id in state.known_warnings and effect_type in {"expedite_event", "reroute", "protect_critical"}:
+    if event and event.id in state.known_warnings and effect_type in {"expedite_event", "reroute", "resequence"}:
         score -= 5.0
 
     return score
@@ -202,8 +211,11 @@ def _jobs_for_card(state: SimulationState, card: DecisionCard) -> list[Job]:
                 jobs.extend(_jobs_for_event(state, event))
     if not jobs:
         jobs = state.get_critical_path_jobs()[:6] or state.get_ready_jobs()[:6]
+    live_jobs = list({job.id: job for job in jobs if not job.is_complete}.values())
+    if not live_jobs:
+        live_jobs = state.get_critical_path_jobs()[:6] or state.get_ready_jobs()[:6]
     return sorted(
-        list({job.id: job for job in jobs if not job.is_complete}.values()),
+        live_jobs,
         key=lambda job: (job.critical_path, job.risk_score, job.priority),
         reverse=True,
     )

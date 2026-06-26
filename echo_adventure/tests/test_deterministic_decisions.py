@@ -1,10 +1,13 @@
 import hashlib
+import copy
 import random
 import unittest
 
 from echo_adventure.config import GameConfig
-from echo_adventure.decisions import active_decision_cards, apply_choice
+from echo_adventure.decisions import active_decision_cards, apply_choice, generate_campaign_decision_graph
+from echo_adventure.enums import EventType, TargetType
 from echo_adventure.metrics import calculate_final_score
+from echo_adventure.models import Event, SimulationState
 from echo_adventure.scenario_generator import generate_scenario
 from echo_adventure.schedulers.manual import ManualScheduler
 from echo_adventure.simulation import advance_day
@@ -94,6 +97,44 @@ def run_demo_path(seed, chooser):
     return scenario, state, active_by_day, calculate_final_score(state)
 
 
+def scenario_with_day_five_event(seed=24680):
+    config = GameConfig.demo(seed=seed)
+    scenario = generate_scenario(config)
+    day_five_shift = (5 - 1) * config.shifts_per_day
+    scenario.event_timeline.append(
+        Event(
+            id="EVT-DAY5",
+            type=EventType.UNEXPECTED_JOB,
+            target_type=TargetType.CAPABILITY,
+            target_id="NEW_JOB",
+            start_shift=day_five_shift,
+            duration_shifts=config.shifts_per_day,
+            severity=4,
+            has_advance_warning=False,
+            warning_shift=None,
+            description="A new customer job arrived outside the initial job list.",
+        )
+    )
+    graph_state = SimulationState(
+        scenario_id=scenario.scenario_id,
+        seed=scenario.seed,
+        deadline_shift=scenario.deadline_shift,
+        shifts_per_day=config.shifts_per_day,
+        shops=copy.deepcopy(scenario.shops),
+        workcenters=copy.deepcopy(scenario.workcenters),
+        pieces=copy.deepcopy(scenario.pieces),
+        jobs=copy.deepcopy(scenario.jobs),
+        event_timeline=copy.deepcopy(scenario.event_timeline),
+    )
+    (
+        scenario.decision_cards,
+        scenario.campaign_decision_graph,
+        scenario.daily_decision_roots,
+        scenario.daily_decision_counts,
+    ) = generate_campaign_decision_graph(graph_state, config)
+    return scenario, config
+
+
 class DeterministicDecisionGenerationTests(unittest.TestCase):
     def test_campaign_graph_exists_at_scenario_creation(self):
         config = GameConfig.demo(seed=12345)
@@ -159,6 +200,37 @@ class DeterministicDecisionGenerationTests(unittest.TestCase):
         day5_b = run_with_first_choice(1)
 
         self.assertNotEqual(day5_a, day5_b)
+
+    def test_scheduled_event_cards_are_not_branch_cards(self):
+        scenario, config = scenario_with_day_five_event(seed=24680)
+
+        def run_with_first_choice(choice_index):
+            state = initialize_state(scenario, config.shifts_per_day)
+            first_card_id = active_decision_cards(state, 1, {})[0].id
+
+            def chooser(_state, card):
+                if _state.current_day == 1 and card.id == first_card_id:
+                    return card.choices[choice_index]
+                return card.choices[0]
+
+            advance_to_day(state, 5, chooser)
+            day5_cards = active_decision_cards(state, 5, {})
+            event_cards = {card.id for card in day5_cards if card.id.startswith("CMP-D05-EVENT-")}
+            branch_cards = {card.id for card in day5_cards if not card.id.startswith("CMP-D05-EVENT-")}
+            event_timeline = [
+                (event.id, event.start_shift, event.type)
+                for event in state.event_timeline
+                if event.id == "EVT-DAY5"
+            ]
+            return event_cards, branch_cards, event_timeline
+
+        events_a, branch_a, timeline_a = run_with_first_choice(0)
+        events_b, branch_b, timeline_b = run_with_first_choice(1)
+
+        self.assertEqual(events_a, {"CMP-D05-EVENT-EVT-DAY5"})
+        self.assertEqual(events_a, events_b)
+        self.assertEqual(timeline_a, timeline_b)
+        self.assertNotEqual(branch_a, branch_b)
 
     def test_same_seed_and_choices_are_deterministic(self):
         def chooser(_state, card):

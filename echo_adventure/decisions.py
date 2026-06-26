@@ -26,59 +26,59 @@ from .models import (
 _CAMPAIGN_ROUTE_THEMES: dict[str, tuple[str, str]] = {
     "supplier_risk_ignored": (
         "Supplier exposure",
-        "Earlier supplier risk was left open, so downstream material and logistics assumptions are less stable.",
+        "Earlier supplier risk is still open.",
     ),
     "supplier_risk_mitigated": (
         "Supplier buffer",
-        "Earlier supplier mitigation created options, but the team now has to decide where those buffers matter most.",
+        "Earlier supplier work bought some room.",
     ),
     "critical_path_protected": (
-        "Protected path",
-        "Earlier choices protected critical-path work, shifting today toward preserving that advantage.",
+        "Protected work",
+        "Earlier choices protected key work.",
     ),
     "crew_overloaded": (
         "Crew load",
-        "Earlier intervention added coordination load, and today's plan has to manage the capacity it consumed.",
+        "Earlier moves loaded the crew.",
     ),
     "echo_trusted": (
         "ECHO reliance",
-        "Earlier choices leaned on ECHO, opening a later automation-versus-judgment tradeoff.",
+        "Earlier choices leaned on ECHO.",
     ),
     "echo_overridden": (
         "Manual override",
-        "Earlier choices overrode ECHO, so the branch now tests whether the manual plan has enough evidence behind it.",
+        "Earlier choices overrode ECHO.",
     ),
     "quality_debt_created": (
         "Quality debt",
-        "Earlier choices deferred quality containment, and later work may inherit the rework exposure.",
+        "Earlier quality risk was left open.",
     ),
     "schedule_debt_created": (
         "Schedule debt",
-        "Earlier choices preserved stability at the cost of future schedule slack.",
+        "Earlier stability spent schedule room.",
     ),
     "cost_debt_created": (
         "Cost pressure",
-        "Earlier choices bought schedule protection with extra expediting, routing, or coordination cost.",
+        "Earlier recovery cost extra effort.",
     ),
     "risk_debt_created": (
         "Risk debt",
-        "Earlier choices accepted uncertainty, so today's branch tests how much exposure remains tolerable.",
+        "Earlier choices accepted risk.",
     ),
     "work_rerouted": (
         "Rerouted work",
-        "Earlier choices moved work across alternate capacity, creating a later routing and handoff consequence.",
+        "Earlier work moved to another route.",
     ),
     "flow_resequenced": (
         "Flow resequenced",
-        "Earlier choices changed queue order, so today's card follows the altered path through the shop.",
+        "Earlier choices changed queue order.",
     ),
     "wait_escalation": (
         "Escalated wait",
-        "Earlier choices waited for more information, letting a later escalation card enter the campaign route.",
+        "Earlier waiting raised pressure.",
     ),
     "priority_churn": (
         "Priority churn",
-        "Earlier choices changed priority rules, so this branch tests whether the churn helped or moved pressure.",
+        "Earlier choices changed priority rules.",
     ),
 }
 
@@ -119,7 +119,14 @@ def generate_campaign_decision_graph(
 
     for day in range(1, config.total_days + 1):
         _prime_graph_state_for_day(state, day, config)
-        day_templates[day] = _generate_root_decision_cards(state, day, config)
+        event_cards = _generate_scheduled_event_cards(state, day, config)
+        for event_card in event_cards:
+            if len(cards) >= config.max_campaign_decision_nodes:
+                break
+            cards[event_card.id] = event_card
+            graph.cards_by_day.setdefault(day, []).append(event_card.id)
+            graph.event_card_ids_by_day.setdefault(day, []).append(event_card.id)
+        day_templates[day] = _generate_root_decision_cards(state, day, config, include_events=False)
 
     day_one_templates = day_templates.get(1) or [_strategic_card(state, 1, 1)]
     root_count = max(1, min(config.min_decisions_per_day, config.max_active_decision_cards_per_day, len(day_one_templates)))
@@ -130,7 +137,7 @@ def generate_campaign_decision_graph(
             card_id=card_id,
             day=1,
             title_prefix="Campaign opening" if ordinal == 1 else "Opening branch",
-            description_prefix="Campaign branch affected by earlier decisions will appear on later days.",
+            description_prefix="This opening choice affects later days.",
             campaign_priority=ordinal,
         )
         cards[root.id] = root
@@ -178,6 +185,7 @@ def generate_campaign_decision_graph(
     graph.card_ids = sorted(cards)
     graph.cards_by_day = {day: ids for day, ids in sorted(graph.cards_by_day.items())}
     graph.roots_by_day = {day: ids for day, ids in sorted(graph.roots_by_day.items())}
+    graph.event_card_ids_by_day = {day: ids for day, ids in sorted(graph.event_card_ids_by_day.items())}
     graph.daily_decision_counts = {
         day: min(graph.max_active_cards_per_day, len(ids))
         for day, ids in graph.cards_by_day.items()
@@ -213,7 +221,8 @@ def active_campaign_decision_cards(
     """Select prebuilt campaign graph nodes for today's active branch."""
     graph = state.campaign_decision_graph
     effective_choices = {**state.campaign_selected_choices, **selected_choices}
-    unlocked = set(state.unlocked_decision_card_ids) | set(graph.root_card_ids)
+    scheduled_events = set(graph.event_card_ids_by_day.get(day, []))
+    unlocked = set(state.unlocked_decision_card_ids) | set(graph.root_card_ids) | scheduled_events
     candidate_ids = graph.cards_by_day.get(day) or [
         card_id for card_id, card in state.decision_cards.items() if card.day == day
     ]
@@ -273,6 +282,9 @@ def _campaign_card_available(
 
 def _campaign_active_sort_key(state: SimulationState, card: DecisionCard) -> tuple[int, int, int, str]:
     """Prefer earlier branch tags when too many route cards are unlocked."""
+    event_ids = set(state.campaign_decision_graph.event_card_ids_by_day.get(card.day, []))
+    if card.id in event_ids:
+        return (-1, card.campaign_priority, -card.severity, card.id)
     tag_order = min(
         (state.campaign_branch_tag_order.get(tag, 999) for tag in card.required_tags),
         default=999,
@@ -360,11 +372,11 @@ def _choice_path_score(
     effect_rank = {
         "echo_recommendation": 0,
         "expedite_event": 1,
-        "protect_critical": 2,
-        "reroute": 3,
-        "split_capacity": 4,
-        "pull_forward": 5,
-        "prioritize_new_job": 5,
+        "reroute": 2,
+        "split_capacity": 3,
+        "pull_forward": 4,
+        "protect_critical": 5,
+        "prioritize_new_job": 6,
         "resequence": 6,
         "backlog_new_job": 8,
         "preempt": 7,
@@ -394,7 +406,28 @@ def _choice_path_score(
     return immediate + min(child_scores) * 0.65
 
 
-def _generate_root_decision_cards(state: SimulationState, day: int, config: GameConfig | None = None) -> list[DecisionCard]:
+def _generate_scheduled_event_cards(
+    state: SimulationState,
+    day: int,
+    config: GameConfig,
+) -> list[DecisionCard]:
+    """Build day-fixed decisions from the event timeline, independent of branch."""
+    max_event_cards = max(1, min(2, config.max_active_decision_cards_per_day))
+    cards: list[DecisionCard] = []
+    for ordinal, event in enumerate(_visible_events(state)[:max_event_cards], start=1):
+        card = _event_card(state, event, ordinal, day)
+        card.id = f"CMP-D{day:02d}-EVENT-{event.id}"
+        card.campaign_priority = ordinal
+        cards.append(card)
+    return cards
+
+
+def _generate_root_decision_cards(
+    state: SimulationState,
+    day: int,
+    config: GameConfig | None = None,
+    include_events: bool = True,
+) -> list[DecisionCard]:
     """Generate root cards used as fixed daily decision threads."""
     if config is None:
         config = GameConfig()
@@ -406,7 +439,7 @@ def _generate_root_decision_cards(state: SimulationState, day: int, config: Game
 
     # Keep the most urgent visible disruption in front of the player, then let
     # the rest compete with operational tradeoffs so later questions vary.
-    visible_events = _visible_events(state)
+    visible_events = _visible_events(state) if include_events else []
     if visible_events:
         selected.append(_event_card(state, visible_events[0], 1, day))
         for event in visible_events[1:]:
@@ -529,7 +562,7 @@ def _campaign_clone_card(
         day=day,
         type=template.type,
         title=f"{title_prefix}: {template.title}",
-        description=f"{description_prefix} {template.description}",
+        description=f"{description_prefix} Now: {template.description}",
         target_ids=list(template.target_ids),
         severity=template.severity,
         choices=_clone_choices(template.choices),
@@ -633,8 +666,10 @@ def _decision_choice_score_delta(card: DecisionCard, choice: DecisionChoice, tag
     operational_value = (-choice.risk_effect * 0.28) - (choice.reschedule_effect * 0.18)
     if "cost_debt_created" in tags:
         operational_value -= 0.25
-    if "critical_path_protected" in tags or "supplier_risk_mitigated" in tags:
+    if "supplier_risk_mitigated" in tags:
         operational_value += 0.35
+    if "critical_path_protected" in tags:
+        operational_value += 0.12
     if "risk_debt_created" in tags or "schedule_debt_created" in tags:
         operational_value -= 0.2
     return round(operational_value + path_fraction, 3)
@@ -815,11 +850,8 @@ def _next_question_card(
             id=card_id,
             day=parent.day,
             type=template.type,
-            title=f"Decision {question_number}: {template.title}",
-            description=(
-                f"After choosing {parent_choice.label.lower()} on the prior tradeoff, "
-                f"the next scheduling issue is: {template.description}"
-            ),
+            title=f"Next: {template.title}",
+            description=f"You chose {parent_choice.label.lower()}. Now: {template.description}",
             target_ids=list(template.target_ids),
             severity=template.severity,
             choices=_clone_choices(template.choices),
@@ -832,11 +864,8 @@ def _next_question_card(
         (target_id for target_id in parent.target_ids if isinstance(target_id, str) and target_id.startswith("EVT-")),
         None,
     )
-    title = f"Decision {question_number}: {parent_choice.label}"
-    description = (
-        f"{parent_choice.label} changes how the team handles {parent.title.lower()}. "
-        "Choose the next scheduling response for today."
-    )
+    title = f"Next: {parent_choice.label}"
+    description = f"That move changes {parent.title.lower()}. Pick the next move."
     choices = _next_question_choices(recommended, event_id, question_number)
     return DecisionCard(
         id=card_id,
@@ -885,24 +914,24 @@ def _next_question_choices(
     return [
         DecisionChoice(
             id="1",
-            label=f"Commit to {recommended_label}",
-            description="Keep the response focused on the highest-leverage work and give it priority through the remaining shifts.",
+            label=f"Do {recommended_label}",
+            description="Commit to this move today.",
             immediate_effects={"type": recommended_effect, **event_payload},
-            risk_effect=-6 + risk_bonus,
+            risk_effect=-4 + risk_bonus,
             reschedule_effect=1,
         ),
         DecisionChoice(
             id="2",
-            label="Broaden the recovery move",
-            description="Use the same response pattern on adjacent work so the related queue does not become tomorrow's constraint.",
+            label="Broaden it",
+            description="Apply the move to nearby work too.",
             immediate_effects={"type": "pull_forward", **event_payload},
-            risk_effect=-4 + risk_bonus,
+            risk_effect=-3 + risk_bonus,
             reschedule_effect=2,
         ),
         DecisionChoice(
             id="3",
-            label="Limit churn",
-            description="Take the smallest possible action and preserve the current sequence unless the board gets worse.",
+            label="Keep it small",
+            description="Make the smallest queue change.",
             immediate_effects={"type": "resequence", **event_payload},
             risk_effect=-1 + risk_bonus,
             reschedule_effect=1,
@@ -910,7 +939,7 @@ def _next_question_choices(
         DecisionChoice(
             id="4",
             label="Stand down",
-            description="Stop adding interventions today and accept that unresolved pressure may affect later work.",
+            description="Stop changing the plan today.",
             immediate_effects={"type": "wait", **event_payload},
             risk_effect=3 + question_number,
             reschedule_effect=0,
@@ -936,24 +965,28 @@ def _recommended_effect_for_card(card: DecisionCard) -> str:
         return "echo_recommendation"
     if card.type == DecisionType.UNEXPECTED_JOB:
         return "prioritize_new_job"
-    return "protect_critical"
+    if card.type == DecisionType.CRITICAL_PATH:
+        return "protect_critical"
+    if card.type in {DecisionType.IDLE_WORKCENTER, DecisionType.COMPLETION_READINESS}:
+        return "pull_forward"
+    return "resequence"
 
 
 def _effect_label(effect_type: str) -> str:
     """Return short player-facing text for a decision effect."""
     return {
         "echo_recommendation": "ECHO's recommendation",
-        "expedite_event": "expedite recovery",
-        "protect_critical": "critical-path protection",
-        "reroute": "alternate routing",
-        "split_capacity": "split capacity",
-        "pull_forward": "pull-forward work",
-        "prioritize_new_job": "prioritize the new job",
-        "backlog_new_job": "backlog the new job",
-        "resequence": "resequence queues",
-        "preempt": "preemption",
-        "defer": "deferred work",
-        "wait": "waiting",
+        "expedite_event": "fix it now",
+        "protect_critical": "protect key work",
+        "reroute": "go around it",
+        "split_capacity": "split the load",
+        "pull_forward": "pull work forward",
+        "prioritize_new_job": "put the new job up front",
+        "backlog_new_job": "put the new job at the back",
+        "resequence": "change the queue",
+        "preempt": "bump lower work",
+        "defer": "push easy work back",
+        "wait": "hold steady",
     }.get(effect_type, "the response")
 
 
@@ -986,83 +1019,75 @@ def _piece_label(piece_id: str) -> str:
 def _job_state_phrase(state: SimulationState, job: Job) -> str:
     """Summarize a job state without exposing hidden scoring values."""
     if job.is_blocked:
-        return "blocked by an active constraint"
+        return "blocked"
     if job.status == JobStatus.RUNNING:
-        return "already running"
+        return "running"
     if job.status == JobStatus.QUEUED:
-        return "queued and waiting for a workcenter opening"
+        return "queued"
     if job.status == JobStatus.SCHEDULED:
-        return "scheduled but not yet started"
+        return "scheduled"
     if job.status == JobStatus.READY:
-        return "ready to release"
+        return "ready"
     if not state.is_dependency_complete(job.id):
-        return "waiting on predecessor work"
-    return "not yet committed to the active queue"
+        return "waiting on earlier work"
+    return "not queued"
 
 
 def _slack_phrase(state: SimulationState, job: Job) -> str:
     """Describe schedule slack qualitatively."""
     slack = job.due_shift - state.current_shift - job.remaining_duration_shifts
     if slack < 0:
-        return "its planning buffer is already gone"
+        return "no slack"
     if slack <= 2:
-        return "it has very little slack left"
+        return "thin slack"
     if slack <= 6:
-        return "its slack is tightening"
-    return "it still has some schedule room"
+        return "tightening slack"
+    return "some slack"
 
 
 def _assigned_location_phrase(state: SimulationState, job: Job) -> str:
     """Describe the current assignment or best-known routing context."""
     if job.assigned_workcenter_id and job.assigned_workcenter_id in state.workcenters:
         wc = state.workcenters[job.assigned_workcenter_id]
-        return f"currently tied to {wc.name}"
+        return f"at {wc.name}"
     shop = state.shops.get(job.shop_id)
     if shop:
-        return f"planned through {shop.name}"
-    return "not tied to a specific workcenter"
+        return f"in {shop.name}"
+    return "not assigned"
 
 
 def _job_context(state: SimulationState, job: Job) -> str:
     """Build a compact operational context sentence for a job."""
-    detail = [
-        (
-            f"The subjob is {_job_state_phrase(state, job)}; "
-            f"{_slack_phrase(state, job)}, and it is {_assigned_location_phrase(state, job)}."
-        )
-    ]
+    detail = [f"{job.id} is {_job_state_phrase(state, job)}: {_slack_phrase(state, job)}, {_assigned_location_phrase(state, job)}."]
     if job.critical_path:
-        detail.append("It is on the critical path, so delays here can hold dependent work in place.")
+        detail.append("Delay here can hold later work.")
     elif job.dependent_job_ids:
-        detail.append("It unlocks downstream work once completed.")
+        detail.append("It unlocks later work.")
     return " ".join(detail)
 
 
 def _event_context(state: SimulationState, event: Event, status: str) -> str:
     """Describe why an event matters for the current operating board."""
     if event.type == EventType.UNEXPECTED_JOB:
-        timing = "active now" if status == "active" else "visible as an advance warning"
-        return (
-            f"This request is {timing}; accepting it adds another top-level job "
-            f"beyond the initial {len(state.pieces)} jobs."
-        )
+        timing = "now" if status == "active" else "soon"
+        return f"New job is due {timing}; it adds work to the build."
     jobs = _jobs_for_event(state, event)
-    timing = "active now" if status == "active" else "visible as an advance warning"
+    timing = "now" if status == "active" else "soon"
     if not jobs:
-        return f"This issue is {timing}; the response you choose can change how much pressure reaches later days."
+        return f"This hits {timing}. Your response changes later pressure."
 
     has_critical = any(job.critical_path for job in jobs)
     has_blocked = any(job.is_blocked for job in jobs)
     has_ready = any(job.status in {JobStatus.READY, JobStatus.QUEUED, JobStatus.SCHEDULED} for job in jobs)
-    context: list[str] = [f"This issue is {timing}"]
+    context: list[str] = [f"This hits {timing}"]
     if has_critical:
-        context.append("touching critical-path work")
+        context.append("near key work")
     elif has_ready:
-        context.append("touching work that could otherwise move today")
+        context.append("near work that can move")
     else:
-        context.append("touching work that feeds later dependencies")
+        context.append("near later dependencies")
     if has_blocked:
-        context.append("with affected subjobs already blocked")
+        context.append("with blocked subjobs")
     return "; ".join(context) + "."
 
 
@@ -1071,19 +1096,19 @@ def _shop_pressure_description(state: SimulationState, shop: Shop) -> str:
     has_queued = bool(shop.queued_job_ids)
     has_blocked = bool(shop.blocked_job_ids)
     if has_queued and has_blocked:
-        opening = "Queued and blocked work are both building in this shop."
+        opening = "Queued and blocked work are building here."
     elif has_blocked:
-        opening = "Blocked work is making this shop a pacing constraint."
+        opening = "Blocked work is making this shop slow."
     elif has_queued:
-        opening = "Queue pressure is concentrating in this shop."
+        opening = "The queue is backing up here."
     else:
-        opening = "This shop is close to becoming the next pacing constraint."
+        opening = "This shop may become the next pinch point."
 
     critical_ids = {job.id for job in state.get_critical_path_jobs()}
     touches_critical = bool(critical_ids & (set(shop.queued_job_ids) | set(shop.blocked_job_ids)))
     if touches_critical:
-        return f"{opening} Critical-path work is mixed into the pressure, so the next priority rule matters."
-    return f"{opening} A targeted response can improve flow before downstream jobs lose more slack."
+        return f"{opening} Some key work is in the mix."
+    return f"{opening} Pick a simple rule for today."
 
 
 def _idle_capacity_description(state: SimulationState) -> str:
@@ -1091,16 +1116,16 @@ def _idle_capacity_description(state: SimulationState) -> str:
     ready_jobs = state.get_ready_jobs()
     critical_ready = any(job.critical_path for job in ready_jobs)
     if critical_ready:
-        return "Open capacity exists while critical ready work is waiting. Pulling the right subjobs forward can convert idle time into schedule protection, but it may disturb stable queues."
-    return "Open capacity exists while ready or nearly ready work is waiting. Today is a choice between filling idle stations now or keeping buffers available for disruption recovery."
+        return "Stations are open while key work waits. Use them or keep a buffer?"
+    return "Stations are open while work waits. Fill them or save room for trouble?"
 
 
 def _completion_readiness_description(state: SimulationState) -> str:
     """Describe completion risk without exposing progress fractions."""
     incomplete = [piece for piece in state.pieces.values() if not piece.completed]
     if any(piece.risk_score >= 70 for piece in incomplete):
-        return "Several remaining top-level jobs are close to becoming pacing items. Late dependencies can still push final delivery past the deadline unless the riskiest work gets protected."
-    return "The project still has unfinished top-level jobs. Late dependencies can still push final delivery past the deadline, so today is about protecting the work most likely to unlock completions."
+        return "Some unfinished jobs are getting risky. Pick what gets help today."
+    return "The project still has unfinished jobs. Pick what moves first today."
 
 
 def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) -> DecisionCard:
@@ -1113,26 +1138,23 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
             id=f"DAY-{day:02d}-DEC-{ordinal}",
             day=day,
             type=dtype,
-            title="ECHO recommendation available",
-            description=(
-                "An experimental ECHO recommendation is available for today's board. "
-                "It will look for critical-path moves and unused capacity, but the team may lose time if the recommendation is not usable."
-            ),
+            title="ECHO can help today",
+            description="ECHO has a schedule move. Use it or keep the manual plan?",
             target_ids=[event.target_id, event.id],
             severity=event.severity,
             choices=[
                 DecisionChoice(
                     id="1",
-                    label="Use ECHO recommendation",
-                    description="Let ECHO propose a move that protects urgent work and pulls useful capacity forward; there is a chance the analysis produces no usable schedule change.",
+                    label="Use ECHO",
+                    description="Take ECHO's move for today's board.",
                     immediate_effects={"type": "echo_recommendation", "event_id": event.id},
                     risk_effect=-8,
                     reschedule_effect=1,
                 ),
                 DecisionChoice(
                     id="2",
-                    label="Do nothing",
-                    description="Keep today's manual plan intact and avoid analysis churn, accepting that the recommendation will not reduce future pressure.",
+                    label="Keep manual plan",
+                    description="Skip the analysis and run the current plan.",
                     immediate_effects={"type": "wait", "event_id": event.id},
                     risk_effect=2,
                     reschedule_effect=0,
@@ -1144,26 +1166,23 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
             id=f"DAY-{day:02d}-DEC-{ordinal}",
             day=day,
             type=dtype,
-            title="Unexpected job request",
-            description=(
-                f"A new customer job arrived outside the initial {len(state.pieces)} jobs. "
-                "Do you want to prioritize it now or add it to the back of the queue?"
-            ),
+            title="New job arrived",
+            description=f"A customer added work. Put it up front or at the back?",
             target_ids=[event.target_id, event.id],
             severity=event.severity,
             choices=[
                 DecisionChoice(
                     id="1",
-                    label="Prioritize the new job",
-                    description="Add the new job to the submarine build and push its first subjob toward the front of a capable queue.",
+                    label="Put it up front",
+                    description="Add the job and start its first subjob soon.",
                     immediate_effects={"type": "prioritize_new_job", "event_id": event.id},
-                    risk_effect=-4,
-                    reschedule_effect=1,
+                    risk_effect=-2,
+                    reschedule_effect=2,
                 ),
                 DecisionChoice(
                     id="2",
-                    label="Add it to the back",
-                    description="Accept the new job but give it low priority so the original schedule stays protected for now.",
+                    label="Put it at the back",
+                    description="Accept it, but keep today's old work ahead.",
                     immediate_effects={"type": "backlog_new_job", "event_id": event.id},
                     risk_effect=4,
                     reschedule_effect=0,
@@ -1173,27 +1192,19 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
     choices = [
         DecisionChoice(
             id="1",
-            label="Resequence ready work",
-            description="Change the order of ready and queued work around this issue while leaving active work in place; useful when a small queue change can keep dependent work moving.",
+            label="Change the queue",
+            description="Move ready work around the trouble spot.",
             immediate_effects={"type": "resequence", "event_id": event.id},
             risk_effect=-5,
             reschedule_effect=1,
         ),
         DecisionChoice(
             id="2",
-            label="Expedite resolution",
-            description="Commit extra recovery effort to shorten or soften the disruption; best when the target is already blocking important work.",
+            label="Fix it now",
+            description="Spend effort to shorten the disruption.",
             immediate_effects={"type": "expedite_event", "event_id": event.id},
             risk_effect=-9,
-            reschedule_effect=1,
-        ),
-        DecisionChoice(
-            id="3",
-            label="Protect critical path",
-            description="Put critical dependencies ahead of routine queue work so downstream jobs are less likely to stall behind this disruption.",
-            immediate_effects={"type": "protect_critical", "event_id": event.id},
-            risk_effect=-7,
-            reschedule_effect=1,
+            reschedule_effect=2,
         ),
     ]
     if event.type in {
@@ -1208,9 +1219,9 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
     }:
         choices.append(
             DecisionChoice(
-                id="4",
-                label="Reroute affected work",
-                description="Move affected work to another capable workcenter if capacity exists; this can reduce exposure but adds setup and coordination churn.",
+                id="3",
+                label="Go around it",
+                description="Move affected work to another capable station.",
                 immediate_effects={"type": "reroute", "event_id": event.id},
                 risk_effect=-6,
                 reschedule_effect=1,
@@ -1219,9 +1230,9 @@ def _event_card(state: SimulationState, event: Event, ordinal: int, day: int) ->
     else:
         choices.append(
             DecisionChoice(
-                id="4",
-                label="Wait and contain",
-                description="Keep the current plan stable and monitor the issue, accepting that downstream slack may tighten if the disruption lingers.",
+                id="3",
+                label="Ride it out",
+                description="Keep the plan steady and absorb the risk.",
                 immediate_effects={"type": "wait", "event_id": event.id},
                 risk_effect=5,
                 reschedule_effect=0,
@@ -1247,31 +1258,31 @@ def _bottleneck_card(state: SimulationState, shop: Shop, ordinal: int, day: int)
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
         type=DecisionType.BOTTLENECK,
-        title=f"Bottleneck pressure in {shop.name}",
+        title=f"{shop.name} is backing up",
         description=_shop_pressure_description(state, shop),
         target_ids=[shop.id],
         severity=min(5, 1 + queued // 4 + blocked // 2),
         choices=[
             DecisionChoice(
                 id="1",
-                label="Split capacity",
-                description="Move eligible queued work into alternate capable capacity so this shop stops carrying the whole load; expect extra coordination.",
+                label="Split the load",
+                description="Move eligible work to other capable stations.",
                 immediate_effects={"type": "split_capacity"},
                 risk_effect=-7,
                 reschedule_effect=2,
             ),
             DecisionChoice(
                 id="2",
-                label="Protect critical subjobs",
-                description="Advance the work most likely to control final delivery and let lower-risk jobs wait behind it.",
-                immediate_effects={"type": "protect_critical"},
-                risk_effect=-8,
+                label="Due dates first",
+                description="Run the nearest due work first.",
+                immediate_effects={"type": "resequence"},
+                risk_effect=-4,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="3",
-                label="Defer low-risk work",
-                description="Make room by lowering priority on work with healthier slack, keeping the shop focused on urgent dependencies.",
+                label="Push easy work back",
+                description="Make room by delaying work with slack.",
                 immediate_effects={"type": "defer"},
                 risk_effect=-3,
                 reschedule_effect=1,
@@ -1285,48 +1296,47 @@ def _queue_congestion_card(state: SimulationState, shop: Shop, ordinal: int, day
     queued_jobs = [state.jobs[job_id] for job_id in shop.queued_job_ids if job_id in state.jobs]
     critical_count = sum(1 for job in queued_jobs if job.critical_path)
     description = (
-        f"{shop.name} has several subjobs waiting for the same capability family. "
-        "The next dispatching rule can either thin the queue, protect the riskiest work, or preserve shop stability."
+        f"{shop.name} has several subjobs waiting for the same kind of station. Pick the dispatch rule."
     )
     if critical_count:
-        description += f" {critical_count} queued subjob(s) are on or near the critical path."
+        description += f" {critical_count} waiting subjob(s) matter a lot."
     return DecisionCard(
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
         type=DecisionType.QUEUE_CONGESTION,
-        title=f"Queue congestion in {shop.name}",
+        title=f"{shop.name} queue is crowded",
         description=description,
         target_ids=[shop.id],
         severity=min(5, 2 + len(queued_jobs) // 3 + critical_count),
         choices=[
             DecisionChoice(
                 id="1",
-                label="Dispatch by due date",
-                description="Resequence the shop queue around the nearest due dates so late starts do not pile up.",
+                label="Due dates first",
+                description="Run the nearest due work first.",
                 immediate_effects={"type": "resequence"},
                 risk_effect=-4,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="2",
-                label="Split overloaded queue",
-                description="Move eligible work to alternate capacity and accept the added coordination effort.",
+                label="Split the queue",
+                description="Move some work to other capable stations.",
                 immediate_effects={"type": "split_capacity"},
                 risk_effect=-6,
                 reschedule_effect=2,
             ),
             DecisionChoice(
                 id="3",
-                label="Defer slack-rich jobs",
-                description="Lower priority on jobs with schedule room so constrained capacity stays focused on urgent dependencies.",
+                label="Push slack back",
+                description="Delay work that has room.",
                 immediate_effects={"type": "defer"},
                 risk_effect=-2,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="4",
-                label="Keep shop sequence",
-                description="Avoid another queue change and let the current dispatch order run, accepting continued congestion risk.",
+                label="Keep the line",
+                description="Do not change the queue today.",
                 immediate_effects={"type": "wait"},
                 risk_effect=3,
                 reschedule_effect=0,
@@ -1342,39 +1352,39 @@ def _critical_path_card(state: SimulationState, job: Job, ordinal: int, day: int
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
         type=DecisionType.CRITICAL_PATH,
-        title=f"Critical path exposure on {job.id}",
-        description=f"{piece_name} depends on {_capability_label(job.required_capability)} work. {_job_context(state, job)}",
+        title=f"{piece_name} is at risk",
+        description=f"{piece_name} needs {_capability_label(job.required_capability)} work. {_job_context(state, job)}",
         target_ids=[job.id],
         severity=5 if job.risk_score >= 70 else 4,
         choices=[
             DecisionChoice(
                 id="1",
-                label="Protect critical path",
-                description="Lift this dependency and the downstream work it unlocks ahead of routine starts.",
+                label="Protect this job",
+                description="Put this dependency ahead of routine starts.",
                 immediate_effects={"type": "protect_critical"},
-                risk_effect=-8,
+                risk_effect=-6,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="2",
-                label="Reroute subjob",
-                description="Use another capable workcenter to buy schedule room, accepting extra setup and coordination.",
+                label="Reroute it",
+                description="Move it to another capable station.",
                 immediate_effects={"type": "reroute"},
                 risk_effect=-6,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="3",
-                label="Preempt lower priority",
-                description="Interrupt lower-priority work only if it is occupying the best capable workcenter for this dependency.",
+                label="Bump lower work",
+                description="Interrupt lower-priority work if it blocks this job.",
                 immediate_effects={"type": "preempt"},
                 risk_effect=-7,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="4",
-                label="Hold sequence",
-                description="Preserve the current queue order and avoid immediate churn, accepting that this critical-path item may keep losing slack.",
+                label="Hold the line",
+                description="Keep the queue steady and accept the risk.",
                 immediate_effects={"type": "wait"},
                 risk_effect=4,
                 reschedule_effect=0,
@@ -1397,42 +1407,39 @@ def _handoff_card(state: SimulationState, job: Job, ordinal: int, day: int) -> D
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
         type=DecisionType.PRIORITY_CHANGE,
-        title=f"Handoff risk into {destination}",
-        description=(
-            f"{piece_name} needs a clean handoff from {source} into {destination}. "
-            f"{_job_context(state, job)} A small sequencing miss here can leave the receiving shop waiting or force a late expedite."
-        ),
+        title=f"Handoff into {destination}",
+        description=f"{piece_name} is moving from {source} to {destination}. {_job_context(state, job)}",
         target_ids=[job.id],
         severity=4 if job.critical_path or job.risk_score >= 55 else 3,
         choices=[
             DecisionChoice(
                 id="1",
-                label="Pull predecessor work forward",
-                description="Advance ready feeder work so the receiving shop has a cleaner start window.",
+                label="Pull feeder work",
+                description="Move earlier work up so the handoff is ready.",
                 immediate_effects={"type": "pull_forward"},
                 risk_effect=-4,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="2",
-                label="Protect receiving shop",
-                description="Raise priority on this handoff and the downstream dependency it unlocks.",
-                immediate_effects={"type": "protect_critical"},
-                risk_effect=-6,
+                label="Hold a slot",
+                description="Keep receiving capacity open for this handoff.",
+                immediate_effects={"type": "resequence"},
+                risk_effect=-4,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="3",
-                label="Resequence handoff lane",
-                description="Adjust queue order around the handoff while leaving active work in place.",
-                immediate_effects={"type": "resequence"},
-                risk_effect=-3,
+                label="Reroute feeder",
+                description="Use a different station if the current lane is tight.",
+                immediate_effects={"type": "reroute"},
+                risk_effect=-5,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="4",
-                label="Let shops coordinate",
-                description="Keep the handoff informal and avoid schedule churn, accepting the risk of waiting time.",
+                label="Let shops sort it",
+                description="Keep the handoff informal today.",
                 immediate_effects={"type": "wait"},
                 risk_effect=3,
                 reschedule_effect=0,
@@ -1447,15 +1454,15 @@ def _alternate_card(state: SimulationState, job: Job, ordinal: int, day: int) ->
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
         type=DecisionType.ALTERNATE_ROUTING,
-        title=f"Alternate routing available for {job.id}",
-        description=f"{_capability_label(job.required_capability).title()} work can move off its current queue. {_job_context(state, job)} Rerouting can reduce exposure, while staying put preserves queue stability.",
+        title=f"{job.id} has another route",
+        description=f"{_capability_label(job.required_capability).title()} work can move. {_job_context(state, job)}",
         target_ids=[job.id],
         severity=3,
         choices=[
             DecisionChoice(
                 id="1",
-                label="Reroute subjob",
-                description="Move the subjob to the best open alternate workcenter and give it a cleaner path through the shop floor.",
+                label="Reroute it",
+                description="Move the subjob to another capable station.",
                 immediate_effects={"type": "reroute"},
                 risk_effect=-6,
                 reschedule_effect=1,
@@ -1463,15 +1470,15 @@ def _alternate_card(state: SimulationState, job: Job, ordinal: int, day: int) ->
             DecisionChoice(
                 id="2",
                 label="Wait one day",
-                description="Preserve the current workcenter queue and avoid setup churn, accepting that the routing option may not stay helpful.",
+                description="Keep the current queue and avoid setup churn.",
                 immediate_effects={"type": "wait"},
                 risk_effect=3,
                 reschedule_effect=0,
             ),
             DecisionChoice(
                 id="3",
-                label="Pull forward peers",
-                description="Use the alternate capacity for related ready work so the capability family keeps flowing even if this subjob stays put.",
+                label="Move similar work",
+                description="Use the open route for related ready work.",
                 immediate_effects={"type": "pull_forward"},
                 risk_effect=-4,
                 reschedule_effect=1,
@@ -1487,42 +1494,39 @@ def _quality_triage_card(state: SimulationState, job: Job, ordinal: int, day: in
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
         type=DecisionType.QUALITY_REWORK,
-        title=f"Quality containment choice for {job.id}",
-        description=(
-            f"{piece_name} has {_capability_label(job.required_capability)} work with little room for a rework loop. "
-            f"{_job_context(state, job)} Choose how much inspection and queue disruption to accept before defects can spill into later work."
-        ),
+        title=f"{job.id} may need rework",
+        description=f"{piece_name} has little room for a quality loop. {_job_context(state, job)}",
         target_ids=[job.id],
         severity=4 if job.critical_path or job.risk_score >= 55 else 3,
         choices=[
             DecisionChoice(
                 id="1",
-                label="Add containment check",
-                description="Protect the dependency by adding attention now, reducing the chance that rework spills into downstream starts.",
-                immediate_effects={"type": "protect_critical"},
-                risk_effect=-6,
+                label="Check it now",
+                description="Add a quick containment check before it moves on.",
+                immediate_effects={"type": "resequence"},
+                risk_effect=-4,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="2",
-                label="Reroute for clean capacity",
-                description="Move the work to a capable station with less pressure so quality checks do not fight the main queue.",
+                label="Use clean capacity",
+                description="Move it to a less crowded station.",
                 immediate_effects={"type": "reroute"},
                 risk_effect=-5,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="3",
-                label="Defer suspect starts",
-                description="Lower priority on less urgent starts that could consume inspection attention before this job clears.",
+                label="Slow suspect starts",
+                description="Hold lower-urgency starts until this clears.",
                 immediate_effects={"type": "defer"},
                 risk_effect=-2,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="4",
-                label="Wait for formal rework",
-                description="Avoid adding checks until a defect is confirmed, accepting that later rework could be more disruptive.",
+                label="Wait for proof",
+                description="Do nothing unless a defect is confirmed.",
                 immediate_effects={"type": "wait"},
                 risk_effect=4,
                 reschedule_effect=0,
@@ -1537,34 +1541,34 @@ def _idle_card(state: SimulationState, ordinal: int, day: int) -> DecisionCard:
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
         type=DecisionType.IDLE_WORKCENTER,
-        title="Idle capacity while work is ready",
+        title="A station is idle",
         description=_idle_capacity_description(state),
         target_ids=[],
         severity=3,
         choices=[
             DecisionChoice(
                 id="1",
-                label="Pull forward ready work",
-                description="Release ready subjobs into open capacity now so useful shop time does not sit unused.",
+                label="Fill it now",
+                description="Move ready work into the open station.",
                 immediate_effects={"type": "pull_forward"},
                 risk_effect=-4,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="2",
-                label="Protect critical subjobs",
-                description="Use open capacity only where it helps critical dependencies or work that unlocks later starts.",
-                immediate_effects={"type": "protect_critical"},
-                risk_effect=-6,
-                reschedule_effect=1,
-            ),
-            DecisionChoice(
-                id="3",
-                label="Keep buffers open",
-                description="Hold capacity back for recovery work if active disruptions or warnings are likely to need a fast response.",
+                label="Save it",
+                description="Keep the station open for trouble.",
                 immediate_effects={"type": "wait"},
                 risk_effect=2,
                 reschedule_effect=0,
+            ),
+            DecisionChoice(
+                id="3",
+                label="Move short jobs",
+                description="Use the open station for quick ready work.",
+                immediate_effects={"type": "resequence"},
+                risk_effect=-3,
+                reschedule_effect=1,
             ),
         ],
     )
@@ -1582,31 +1586,31 @@ def _completion_readiness_card(state: SimulationState, ordinal: int, day: int) -
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
         type=DecisionType.COMPLETION_READINESS,
-        title="Project completion readiness",
+        title="Unfinished jobs remain",
         description=_completion_readiness_description(state),
         target_ids=target_ids,
         severity=4 if day >= late_stage_day else 3,
         choices=[
             DecisionChoice(
                 id="1",
-                label="Protect remaining dependencies",
-                description="Raise priority on subjobs that unlock the most remaining completion work.",
-                immediate_effects={"type": "protect_critical"},
-                risk_effect=-7,
-                reschedule_effect=1,
-            ),
-            DecisionChoice(
-                id="2",
-                label="Expedite near-complete jobs",
-                description="Spend recovery effort on jobs that are closest to completion so finished deliverables start stacking up.",
+                label="Finish near-done jobs",
+                description="Push jobs that are closest to complete.",
                 immediate_effects={"type": "pull_forward"},
                 risk_effect=-5,
                 reschedule_effect=1,
             ),
             DecisionChoice(
+                id="2",
+                label="Clear blockers",
+                description="Spend effort where work is stuck.",
+                immediate_effects={"type": "resequence"},
+                risk_effect=-4,
+                reschedule_effect=2,
+            ),
+            DecisionChoice(
                 id="3",
-                label="Hold capacity buffer",
-                description="Avoid queue churn and keep recovery capacity available for late disruptions.",
+                label="Keep a buffer",
+                description="Avoid queue churn and save recovery room.",
                 immediate_effects={"type": "wait"},
                 risk_effect=3,
                 reschedule_effect=0,
@@ -1623,31 +1627,31 @@ def _strategic_card(state: SimulationState, ordinal: int, day: int) -> DecisionC
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
         type=DecisionType.STRATEGIC_PRIORITY,
-        title="Strategic priority review",
-        description="Several queues are close in priority; today's rule will shape which dependencies unlock first. Choose whether due dates, critical path, or queue stability should win when shops have competing starts.",
+        title="Pick today's rule",
+        description="Several queues are close. What wins today?",
         target_ids=target_ids,
         severity=2,
         choices=[
             DecisionChoice(
                 id="1",
-                label="Earliest due first",
-                description="Favor subjobs tied to the nearest target milestone so deadline pressure stays visible in every queue.",
+                label="Due dates first",
+                description="Run the work with the nearest due date.",
                 immediate_effects={"type": "resequence"},
                 risk_effect=-3,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="2",
-                label="Critical path first",
-                description="Favor subjobs with tight slack and high downstream dependency value, even if less urgent work waits.",
-                immediate_effects={"type": "protect_critical"},
-                risk_effect=-5,
+                label="Open stations first",
+                description="Fill idle capacity before it is wasted.",
+                immediate_effects={"type": "pull_forward"},
+                risk_effect=-4,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="3",
-                label="Stabilize queues",
-                description="Let current workcenter queues run with minimal churn, preserving predictability while reducing intervention.",
+                label="Stable queues",
+                description="Let the current shop order run.",
                 immediate_effects={"type": "wait"},
                 risk_effect=2,
                 reschedule_effect=0,
@@ -1664,31 +1668,31 @@ def _fallback_strategic_card(state: SimulationState, ordinal: int, day: int) -> 
         id=f"DAY-{day:02d}-DEC-{ordinal}",
         day=day,
         type=DecisionType.STRATEGIC_PRIORITY,
-        title=f"Strategic planning review {ordinal}",
-        description="Use a broad schedule review to keep work aligned when no single disruption demands attention. The choice sets the tone for how the manual scheduler handles today's smaller tradeoffs.",
+        title=f"Small tradeoff {ordinal}",
+        description="No single problem owns the day. Pick the shop rule.",
         target_ids=target_ids,
         severity=2,
         choices=[
             DecisionChoice(
                 id="1",
-                label="Rebalance priorities",
-                description="Shift attention toward urgent work and keep flow moving across shops before pressure concentrates.",
+                label="Rebalance work",
+                description="Move attention toward urgent queues.",
                 immediate_effects={"type": "resequence"},
                 risk_effect=-2,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="2",
-                label="Protect key milestones",
-                description="Choose the sequence that safeguards the nearest delivery and the dependencies that unlock it.",
-                immediate_effects={"type": "protect_critical"},
-                risk_effect=-4,
+                label="Pull work forward",
+                description="Use open capacity before the day gets crowded.",
+                immediate_effects={"type": "pull_forward"},
+                risk_effect=-3,
                 reschedule_effect=1,
             ),
             DecisionChoice(
                 id="3",
-                label="Maintain stability",
-                description="Keep current queues intact and let shop teams execute without another scheduling change.",
+                label="Stay steady",
+                description="Keep queues intact today.",
                 immediate_effects={"type": "wait"},
                 risk_effect=2,
                 reschedule_effect=0,
@@ -1735,11 +1739,40 @@ def _wait_and_absorb(state: SimulationState, card: DecisionCard) -> str:
 def _protect_critical(state: SimulationState) -> str:
     """Raise critical-path subjob priorities and pull queued ones forward."""
     critical = state.get_critical_path_jobs()[:10]
+    accelerated = 0
+    assigned = 0
     for job in critical:
-        job.priority += 10
+        job.priority += 12
         if job.assigned_workcenter_id and job.status == JobStatus.QUEUED:
             state.assign_job(job.id, job.assigned_workcenter_id, front=True)
-    return f"Protected {len(critical)} critical-path subjobs by raising priority and queue position."
+            assigned += 1
+        elif job.status == JobStatus.READY:
+            target = _best_alternate_workcenter(state, job, allow_primary=True)
+            if target and state.assign_job(job.id, target.id, front=True):
+                assigned += 1
+        if _prepare_urgent_job(job):
+            accelerated += 1
+    detail = f"Protected {len(critical)} critical-path subjobs by raising priority"
+    if assigned:
+        detail += f", front-loading {assigned}"
+    if accelerated:
+        detail += f", accelerating {accelerated}"
+    return f"{detail}."
+
+
+def _prepare_urgent_job(job: Job) -> bool:
+    """Make urgent work genuinely shorter, including before duration locking."""
+    if job.is_complete:
+        return False
+    changed = False
+    if not job.started_once and job.base_duration_shifts > 1:
+        job.base_duration_shifts -= 1
+        job.original_duration_shifts = max(1, job.original_duration_shifts - 1)
+        changed = True
+    if job.remaining_duration_shifts > 1:
+        job.remaining_duration_shifts -= 1
+        changed = True
+    return changed
 
 
 def _expedite_event(state: SimulationState, event_id: str | None) -> str:
@@ -1771,16 +1804,53 @@ def _reroute_targets(state: SimulationState, card: DecisionCard) -> str:
     moved = 0
     for job in jobs[:3]:
         alt = _best_alternate_workcenter(state, job)
+        if not alt:
+            continue
+        current = state.workcenters.get(job.assigned_workcenter_id) if job.assigned_workcenter_id else None
+        current_disrupted = bool(
+            current
+            and current.status in {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}
+        )
+        if job.status == JobStatus.RUNNING and not current_disrupted:
+            continue
+        if current and not current_disrupted:
+            current_load = len(current.queue) + (1 if current.current_job_id else 0)
+            alt_load = len(alt.queue) + (1 if alt.current_job_id else 0)
+            if alt_load >= current_load:
+                continue
         if alt:
             state.assign_job(job.id, alt.id, front=job.critical_path)
             job.priority += 5
             moved += 1
-    return f"Rerouted {moved} affected subjob(s) to alternate capable workcenters."
+    if moved:
+        return f"Rerouted {moved} affected subjob(s) to alternate capable workcenters."
+    boosted = 0
+    prepared = 0
+    for job in jobs[:3]:
+        if job.is_complete:
+            continue
+        job.priority += 8
+        if job.assigned_workcenter_id and job.status == JobStatus.QUEUED:
+            state.assign_job(job.id, job.assigned_workcenter_id, front=True)
+        elif job.status == JobStatus.READY:
+            target = _best_alternate_workcenter(state, job, allow_primary=True)
+            if target:
+                state.assign_job(job.id, target.id, front=True)
+        if _prepare_urgent_job(job):
+            prepared += 1
+        boosted += 1
+    if boosted:
+        note = f"No better route was open; raised priority on {boosted} urgent subjob(s)"
+        if prepared:
+            note += f" and prepared {prepared}"
+        return f"{note}."
+    return "No better route was open today."
 
 
 def _preempt_for_card(state: SimulationState, card: DecisionCard) -> str:
     """Interrupt lower-priority work when a card's target justifies it."""
-    for job in _jobs_for_card(state, card):
+    jobs = _jobs_for_card(state, card)
+    for job in jobs:
         for wc_id in job.candidate_workcenter_ids:
             if wc_id not in state.workcenters:
                 continue
@@ -1788,6 +1858,22 @@ def _preempt_for_card(state: SimulationState, card: DecisionCard) -> str:
             if wc.current_job_id and state.jobs[wc.current_job_id].priority + 15 < job.priority:
                 state.preempt_current_job(wc.id, job.id)
                 return f"Preempted lower-priority work on {wc.name} for {job.id}."
+    boosted = 0
+    prepared = 0
+    for job in jobs[:3]:
+        if job.is_complete:
+            continue
+        job.priority += 9
+        if job.assigned_workcenter_id and job.status == JobStatus.QUEUED:
+            state.assign_job(job.id, job.assigned_workcenter_id, front=True)
+        if _prepare_urgent_job(job):
+            prepared += 1
+        boosted += 1
+    if boosted:
+        note = f"No safe preemption was available; raised priority on {boosted} urgent subjob(s)"
+        if prepared:
+            note += f" and prepared {prepared}"
+        return f"{note}."
     return "No safe preemption was available; priority was raised instead."
 
 
@@ -1830,6 +1916,15 @@ def _pull_forward_unaffected(state: SimulationState, card: DecisionCard) -> str:
         if alt:
             state.assign_job(job.id, alt.id, front=job.critical_path)
             moved += 1
+    if moved:
+        return f"Pulled forward {moved} ready subjobs into available capacity."
+    prepared = 0
+    for job in _jobs_for_card(state, card)[:3]:
+        job.priority += 6
+        if _prepare_urgent_job(job):
+            prepared += 1
+    if prepared:
+        return f"No ready work could move; prepared {prepared} urgent subjob(s)."
     return f"Pulled forward {moved} ready subjobs into available capacity."
 
 
@@ -2057,8 +2152,11 @@ def _jobs_for_card(state: SimulationState, card: DecisionCard) -> list[Job]:
                 jobs.extend(_jobs_for_event(state, event))
     if not jobs:
         jobs = state.get_critical_path_jobs()[:5] or state.get_ready_jobs()[:5]
+    live_jobs = list({job.id: job for job in jobs if not job.is_complete}.values())
+    if not live_jobs:
+        live_jobs = state.get_critical_path_jobs()[:5] or state.get_ready_jobs()[:5]
     return sorted(
-        list({job.id: job for job in jobs if not job.is_complete}.values()),
+        live_jobs,
         key=lambda job: (job.critical_path, job.risk_score, job.priority),
         reverse=True,
     )
