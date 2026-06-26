@@ -203,6 +203,8 @@ def _generate_shops_and_workcenters(
             capabilities=shop_capabilities,
             workcenter_ids=workcenter_ids,
         )
+    _ensure_capability_coverage(config, rng, shops, workcenters)
+    _refresh_shop_capabilities(shops, workcenters)
     return shops, workcenters
 
 
@@ -235,7 +237,7 @@ def _generate_pieces_and_jobs(
             shop_id = dominant_shop if rng.random() < 0.45 else rng.choice(piece_shops)
             shop = shops[shop_id]
             capability = rng.choice(shop.capabilities)
-            candidate_ids = _candidate_workcenters(capability, shop_id, workcenters, rng)
+            candidate_ids = _candidate_workcenters(capability, shop_id, workcenters, rng, config)
             job_id = f"JOB-{piece_index:02d}-{job_index:03d}"
             dependencies: list[str] = []
             if previous_job_ids:
@@ -299,21 +301,98 @@ def _candidate_workcenters(
     primary_shop_id: str,
     workcenters: dict[str, WorkCenter],
     rng: random.Random,
+    config: GameConfig,
 ) -> list[str]:
     """Return primary and alternate workcenters that can perform a capability."""
     primary = [wc.id for wc in workcenters.values() if wc.shop_id == primary_shop_id and capability in wc.capabilities]
     alternates = [wc.id for wc in workcenters.values() if wc.shop_id != primary_shop_id and capability in wc.capabilities]
     rng.shuffle(primary)
     rng.shuffle(alternates)
-    candidate_ids = primary[: rng.randint(3, min(8, max(3, len(primary))))] if primary else []
-    candidate_ids.extend(alternates[: rng.randint(0, min(3, len(alternates)))])
+    candidate_ids: list[str] = []
+    target_count = min(config.max_candidate_workcenters_per_job, max(config.min_candidate_workcenters_per_job, len(primary)))
+    if primary:
+        primary_count = min(len(primary), target_count)
+        candidate_ids.extend(primary[:primary_count])
+    needed = max(0, config.min_candidate_workcenters_per_job - len(candidate_ids))
+    alternate_limit = min(config.max_alternate_workcenters_per_job, len(alternates))
+    if alternate_limit:
+        alternate_count = rng.randint(min(needed, alternate_limit), alternate_limit)
+        candidate_ids.extend(alternates[:alternate_count])
     if not candidate_ids:
         candidate_ids = [wc.id for wc in workcenters.values() if capability in wc.capabilities]
     if not candidate_ids:
         candidate_ids = [wc.id for wc in workcenters.values() if wc.shop_id == primary_shop_id]
     if not candidate_ids:
         candidate_ids = list(workcenters.keys())
-    return candidate_ids
+    return candidate_ids[: config.max_candidate_workcenters_per_job]
+
+
+def _ensure_capability_coverage(
+    config: GameConfig,
+    rng: random.Random,
+    shops: dict[str, Shop],
+    workcenters: dict[str, WorkCenter],
+) -> None:
+    """Make generated capacity broad enough for larger scenarios to stay playable."""
+    target_count = min(config.min_capable_workcenters_per_capability, len(workcenters))
+    if target_count <= 1:
+        return
+    all_capabilities = sorted(
+        {
+            capability
+            for zero_index in range(config.shop_count)
+            for capability in SHOP_BLUEPRINTS[zero_index % len(SHOP_BLUEPRINTS)][1]
+        }
+    )
+    for capability in all_capabilities:
+        capable = [wc for wc in workcenters.values() if capability in wc.capabilities]
+        if len(capable) >= target_count:
+            continue
+        candidates = [
+            wc
+            for wc in workcenters.values()
+            if capability not in wc.capabilities
+        ]
+        rng.shuffle(candidates)
+        candidates.sort(key=lambda wc: (_capability_affinity(capability, wc), len(wc.capabilities), wc.id))
+        for wc in candidates[: max(0, target_count - len(capable))]:
+            wc.capabilities = sorted(set(wc.capabilities + [capability]))
+            capable.append(wc)
+
+
+def _capability_affinity(capability: str, workcenter: WorkCenter) -> int:
+    """Return a low score when a workcenter is a plausible alternate for a capability."""
+    related = {
+        "fixture": {"tooling", "fitting", "alignment"},
+        "tooling": {"fixture", "forming", "fitting"},
+        "certification": {"inspection", "metrology", "calibration"},
+        "inspection": {"certification", "metrology", "calibration"},
+        "systems_fit": {"assembly", "wiring", "calibration"},
+        "wiring": {"systems_fit", "assembly", "calibration"},
+        "curing": {"bonding", "coating", "layup"},
+        "bonding": {"curing", "layup", "forming"},
+        "alignment": {"metrology", "fixture", "fitting"},
+    }
+    if capability in workcenter.capabilities:
+        return 0
+    if related.get(capability, set()) & set(workcenter.capabilities):
+        return 1
+    return 2
+
+
+def _refresh_shop_capabilities(
+    shops: dict[str, Shop],
+    workcenters: dict[str, WorkCenter],
+) -> None:
+    """Refresh shop capability rollups after coverage adjustments."""
+    for shop in shops.values():
+        shop.capabilities = sorted(
+            {
+                capability
+                for workcenter_id in shop.workcenter_ids
+                for capability in workcenters[workcenter_id].capabilities
+            }
+        )
 
 
 def _assert_acyclic(jobs: dict[str, Job]) -> None:

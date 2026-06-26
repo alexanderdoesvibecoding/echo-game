@@ -17,8 +17,8 @@ from ..decisions import (
     active_decision_cards,
     apply_choice,
     decision_progress,
-    select_echo_choice,
 )
+from ..echo import apply_echo_decisions_for_day, select_echo_choice_for_state
 from ..enums import JobStatus, TargetType, WorkCenterStatus
 from ..metrics import (
     calculate_final_score,
@@ -138,7 +138,7 @@ class GameSession:
                 raise ValueError("Choice is not valid for that decision.")
             # Decision effects can mutate current queues and future event
             # chains. The returned note is the human-readable audit trail.
-            echo_choice = select_echo_choice(card, self.player_state.decision_cards)
+            echo_choice = select_echo_choice_for_state(self.player_state, card, self.config, self.player_state.decision_cards)
             note = apply_choice(self.player_state, card, choice, actor="player", echo_choice=echo_choice)
             self.applied_choices[card.id] = choice.id
             comparison = "Matched ECHO." if choice.id == echo_choice.id else f"ECHO would choose {echo_choice.label}."
@@ -161,7 +161,7 @@ class GameSession:
             self.last_result = advance_day(self.player_state, self.manual_scheduler)
             # The automated scheduler advances silently alongside the player so
             # it faces the same random event timeline.
-            self._apply_echo_decisions_for_current_day()
+            apply_echo_decisions_for_day(self.automated_state, self.config, self.echo_completed_days)
             advance_day(self.automated_state, self.automated_scheduler)
             # A new day means fresh decision cards and no selected choices.
             self.current_cards = []
@@ -200,26 +200,8 @@ class GameSession:
         # through the same deadline so the reveal has a complete comparison.
         while self.automated_state.current_shift < self.automated_state.deadline_shift and not self.automated_state.final_item_completed:
             self.automated_state.daily_notes.clear()
-            self._apply_echo_decisions_for_current_day()
+            apply_echo_decisions_for_day(self.automated_state, self.config, self.echo_completed_days)
             advance_day(self.automated_state, self.automated_scheduler)
-
-    def _apply_echo_decisions_for_current_day(self) -> None:
-        """Let ECHO answer the hidden benchmark decisions for its current day."""
-        day = self.automated_state.current_day
-        if day in self.echo_completed_days or self.automated_state.final_item_completed:
-            return
-        selected: dict[str, str] = {}
-        for _ in range(32):
-            cards = active_decision_cards(self.automated_state, day, selected)
-            open_cards = [card for card in cards if card.id not in selected]
-            if not open_cards:
-                self.echo_completed_days.add(day)
-                return
-            for card in open_cards:
-                choice = select_echo_choice(card, self.automated_state.decision_cards)
-                apply_choice(self.automated_state, card, choice, actor="ECHO", echo_choice=choice)
-                selected[card.id] = choice.id
-        self.echo_completed_days.add(day)
 
     def _overview(self, snapshot: MetricSnapshot) -> dict[str, Any]:
         """Build the compact header/overview payload for the dashboard."""

@@ -346,6 +346,11 @@ def select_echo_choice(card: DecisionCard, graph: dict[str, DecisionCard] | None
     )
 
 
+def score_echo_choice(choice: DecisionChoice, graph: dict[str, DecisionCard] | None = None) -> float:
+    """Return ECHO's static campaign-graph score for a choice."""
+    return _choice_path_score(choice, graph)
+
+
 def _choice_path_score(
     choice: DecisionChoice,
     graph: dict[str, DecisionCard] | None,

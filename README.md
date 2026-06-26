@@ -42,7 +42,7 @@ python -m echo_adventure --port 8766
 
 Use a seed when comparing changes. The same seed should generate the same scenario and event timeline unless scenario-generation logic changes.
 
-The demo mode is a five-day teaching run with three top-level jobs, three subjobs per job, shorter subjob durations, no random disruptions, no completion-time inspection rework, and two or three decisions per day. It is intended to be finishable in five minutes or less.
+The demo mode is an eight-day teaching run with six top-level jobs, five to seven subjobs per job, shorter subjob durations, no random disruptions, no completion-time inspection rework, and three decisions per day. It is intended to be finishable in one short sitting while still showing enough routing and dependency pressure to make ECHO's benchmark meaningful.
 
 With a fixed seed:
 
@@ -188,10 +188,14 @@ echo_adventure/
 
 ## Presets and Balance
 
-Game balance is controlled in `echo_adventure/config.py` through named presets. The current presets are:
+Game balance is controlled in `echo_adventure/config.py` through named profile-based presets. Each preset is assembled from workload, capacity, disruption, decision, and ECHO policy profiles, then flattened into `GameConfig` for the rest of the simulation. The current presets are:
 
-- `normal`: 15 days, 10 top-level jobs, 4-6 subjobs per job, random disruptions, cascades, and completion-time rework.
-- `demo`: 5 days, 4 top-level jobs, 4-5 subjobs per job, shorter durations, no random disruptions, and no completion-time rework.
+- `normal`: 19 days, 13 top-level jobs, 5-8 subjobs per job, random disruptions, cascades, and completion-time rework.
+- `demo`: 8 days, 6 top-level jobs, 5-7 subjobs per job, shorter durations, no random disruptions, and no completion-time rework.
+
+Capacity balance has explicit routing-coverage knobs. `min_capable_workcenters_per_capability`, `min_candidate_workcenters_per_job`, `max_candidate_workcenters_per_job`, and `max_alternate_workcenters_per_job` prevent larger scenarios from creating unfair single-machine traps for common late-game work.
+
+ECHO's hidden benchmark no longer picks decisions from the static campaign graph alone. The graph score is one signal, but ECHO now also evaluates the live shop board, critical-path pressure, queue congestion, active events, and available alternate routing before selecting a background decision. Optional cloned lookahead remains available through `echo_choice_lookahead_days`, but it is disabled by default for fast deterministic runs.
 
 Completion-time inspection rework is controlled by `completion_rework_probability`, `min_completion_rework_shifts`, and `max_completion_rework_shifts`. Keep these explicit in presets instead of reintroducing hard-coded probabilities in scenario generation.
 

@@ -35,6 +35,7 @@ class AutomatedScheduler(Scheduler):
                 state.preempt_current_job(wc.id, job.id)
             else:
                 state.assign_job(job.id, wc.id, front=job.critical_path or job.priority >= 85)
+        self._rebalance_queued_jobs(state)
         self._clean_and_reorder_queues(state)
 
     def _respond_to_known_events(self, state: SimulationState, known_events: list[Event]) -> None:
@@ -92,6 +93,39 @@ class AutomatedScheduler(Scheduler):
                     state.reschedule_count += 1
                 wc.queue = clean_queue
 
+    def _rebalance_queued_jobs(self, state: SimulationState) -> None:
+        """Move urgent queued work from long queues into better idle capacity."""
+        queued_jobs = [
+            job
+            for job in state.jobs.values()
+            if job.status == JobStatus.QUEUED
+            and not job.block_reason
+            and state.is_dependency_complete(job.id)
+        ]
+        if not queued_jobs:
+            return
+        move_limit = max(2, len(state.workcenters) // 8)
+        moved = 0
+        for job in sorted(queued_jobs, key=lambda item: self._job_score(state, item), reverse=True):
+            if moved >= move_limit:
+                return
+            current_wc = state.workcenters.get(job.assigned_workcenter_id) if job.assigned_workcenter_id else None
+            if current_wc and current_wc.current_job_id == job.id:
+                continue
+            slack = job.due_shift - state.current_shift - max(1, job.remaining_duration_shifts)
+            current_wait = self._queue_wait(current_wc, job.id) if current_wc else 999
+            if not (job.critical_path or job.priority >= 82 or slack <= 6 or current_wait >= 2 or job.queue_time >= 2):
+                continue
+            alternate = self._best_idle_workcenter(state, job, exclude={current_wc.id} if current_wc else set())
+            if not alternate:
+                continue
+            current_score = self._assignment_score(state, job, current_wc) if current_wc else -999.0
+            alternate_score = self._assignment_score(state, job, alternate) + 14.0
+            if alternate_score <= current_score + 6.0 and current_wait < 2:
+                continue
+            if state.assign_job(job.id, alternate.id, front=job.critical_path or slack <= 6):
+                moved += 1
+
     def _best_workcenter(
         self,
         state: SimulationState,
@@ -113,15 +147,46 @@ class AutomatedScheduler(Scheduler):
             return None
         return max(candidates, key=lambda wc: self._assignment_score(state, job, wc))
 
+    def _best_idle_workcenter(
+        self,
+        state: SimulationState,
+        job: Job,
+        exclude: set[str] | None = None,
+    ) -> WorkCenter | None:
+        """Return the strongest idle capable alternate for queued-job rebalancing."""
+        exclude = exclude or set()
+        candidates = [
+            state.workcenters[wc_id]
+            for wc_id in job.candidate_workcenter_ids
+            if wc_id in state.workcenters
+            and wc_id not in exclude
+            and job.required_capability in state.workcenters[wc_id].capabilities
+            and state.workcenters[wc_id].current_job_id is None
+            and state.workcenters[wc_id].status in {WorkCenterStatus.AVAILABLE, WorkCenterStatus.IDLE}
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda wc: self._assignment_score(state, job, wc))
+
+    def _queue_wait(self, wc: WorkCenter | None, job_id: str) -> int:
+        """Estimate how many queued/running jobs sit ahead of a queued job."""
+        if not wc:
+            return 999
+        wait = 1 if wc.current_job_id else 0
+        if job_id in wc.queue:
+            wait += wc.queue.index(job_id)
+        return wait
+
     def _assignment_score(self, state: SimulationState, job: Job, wc: WorkCenter) -> float:
         """Score a job/workcenter pairing for queue assignment decisions."""
         # Higher scores favor urgent, critical, high-unlock jobs on efficient
         # low-queue workcenters, while still charging for cross-shop movement.
-        queue_penalty = len(wc.queue) * 9 + (8 if wc.current_job_id else 0)
-        shop_bonus = 4 if wc.shop_id == job.shop_id else -2
+        queue_penalty = len(wc.queue) * 10 + (10 if wc.current_job_id else 0)
+        shop_bonus = 8 if wc.shop_id == job.shop_id else -6
         efficiency_bonus = wc.efficiency * 12
         unlock_bonus = downstream_count(state, job) * 1.8
         critical_bonus = 30 if job.critical_path else 0
+        reroute_penalty = 7 if job.candidate_workcenter_ids and wc.id != job.candidate_workcenter_ids[0] else 0
         slack = job.due_shift - state.current_shift - max(1, job.remaining_duration_shifts)
         slack_bonus = max(0, 20 - slack) * 2.2
         return (
@@ -134,6 +199,7 @@ class AutomatedScheduler(Scheduler):
             - queue_penalty
             - job.transport_delay_shifts
             - job.setup_time_shifts
+            - reroute_penalty
         )
 
     def _job_score(self, state: SimulationState, job: Job, wc: WorkCenter | None = None) -> float:

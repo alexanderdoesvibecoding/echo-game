@@ -1038,7 +1038,7 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
-    async function choose(cardId, choiceId) {
+    async function choose(cardId, choiceId, renderAfter = true) {
       try {
         state = await api("/api/choice", {
           method: "POST",
@@ -1048,9 +1048,13 @@ INDEX_HTML = r"""<!doctype html>
         dismissedDecisionKey = null;
         decisionModalVisible = false;
         showError("");
-        render();
+        if (renderAfter) {
+          render();
+        }
+        return state;
       } catch (error) {
         showError(error.message);
+        return null;
       }
     }
 
@@ -1182,9 +1186,17 @@ INDEX_HTML = r"""<!doctype html>
       renderDecisionModal();
     }
 
-    function submitDecision(cardId) {
+    async function submitDecision(cardId, advanceAfter = false) {
       if (!pendingChoice) return;
-      choose(cardId, pendingChoice);
+      const choiceId = pendingChoice;
+      const nextState = await choose(cardId, choiceId, !advanceAfter);
+      if (advanceAfter && nextState) {
+        if (readyToAdvance()) {
+          await prepareAdvanceDay();
+        } else {
+          render();
+        }
+      }
     }
 
     function selectPendingChoice(choiceId) {
@@ -1445,8 +1457,7 @@ INDEX_HTML = r"""<!doctype html>
       const summary = payload.lastSummary;
       const overlay = document.getElementById("summaryModalOverlay");
       const body = document.getElementById("summaryModalBody");
-      const notes = document.getElementById("summaryModalNotes");
-      if (!overlay || !body || !notes) return;
+      if (!overlay || !body) return;
       if (!summary || !modalVisible) {
         overlay.classList.remove("active");
         return;
@@ -1470,9 +1481,13 @@ INDEX_HTML = r"""<!doctype html>
 
         <h3>Past Due Subjobs</h3>
         ${renderPastDueJobs(summary.pastDueJobs)}
+
+        <h3>Updates</h3>
+        <ul class="notes">
+          ${(summary.notes || []).map(note => `<li>${escapeHtml(note)}</li>`).join("") || "<li>No notable notes recorded.</li>"}
+        </ul>
       `;
       body.scrollTop = 0;
-      notes.innerHTML = (summary.notes || []).map(note => `<li>${escapeHtml(note)}</li>`).join("") || "<li>No notable notes recorded.</li>";
     }
 
     function renderFinalModal() {
@@ -1721,6 +1736,8 @@ INDEX_HTML = r"""<!doctype html>
         if (!nextCard.choices.some(choice => choice.id === pendingChoice)) {
           pendingChoice = null;
         }
+        const isFinalDecision = progressState.total > 0 && progressState.completed + 1 >= progressState.total;
+        const submitLabel = isFinalDecision ? "End Day" : "Submit";
         body.innerHTML = `
           <div class="decision">
             <div class="decision-head">
@@ -1740,7 +1757,7 @@ INDEX_HTML = r"""<!doctype html>
               </button>
             `).join("")}
             <div class="inline-decision-actions">
-              <button ${!pendingChoice ? "disabled" : ""} class="primary" onclick="submitDecision('${nextCard.id}')">Submit</button>
+              <button ${!pendingChoice ? "disabled" : ""} class="primary" onclick="submitDecision('${nextCard.id}', ${isFinalDecision})">${submitLabel}</button>
             </div>
           </div>
         `;
@@ -1750,8 +1767,6 @@ INDEX_HTML = r"""<!doctype html>
       const choices = (state.appliedChoices || []).map(note => `<li>${escapeHtml(note)}</li>`).join("");
       body.innerHTML = `
         <div class="reveal-panel">
-          <h3>All choices made for today.</h3>
-          <div class="subtle">End the day to process the schedule and reveal the daily consequences.</div>
           ${choices ? `<ul class="notes">${choices}</ul>` : ""}
           <div class="inline-decision-actions">
             <button class="primary" onclick="prepareAdvanceDay()">End Day</button>
@@ -1780,6 +1795,8 @@ INDEX_HTML = r"""<!doctype html>
       if (nextCard) {
         // Only one open card is shown at a time. Submitting it asks the server
         // for the updated state, which may expose the next required card.
+        const isFinalDecision = progressState.total > 0 && progressState.completed + 1 >= progressState.total;
+        const submitLabel = isFinalDecision ? "End Day" : "Submit";
         body.innerHTML = `
           <div class="decision">
             <div class="decision-head">
@@ -1802,17 +1819,12 @@ INDEX_HTML = r"""<!doctype html>
         `;
         footer.innerHTML = `
           <button onclick="dismissDecisionModal()">Close</button>
-          <button ${!pendingChoice ? "disabled" : ""} class="primary" onclick="submitDecision('${nextCard.id}')">Submit</button>
+          <button ${!pendingChoice ? "disabled" : ""} class="primary" onclick="submitDecision('${nextCard.id}', ${isFinalDecision})">${submitLabel}</button>
         `;
         return;
       }
 
-      body.innerHTML = `
-        <div class="reveal-panel">
-          <h3>All choices made for today.</h3>
-          <div class="subtle">End the day to process the schedule and reveal the daily consequences.</div>
-        </div>
-      `;
+      body.innerHTML = "";
       footer.innerHTML = `
         <button onclick="dismissDecisionModal()">Close</button>
         <button class="primary" onclick="prepareAdvanceDay()">End Day</button>
@@ -2076,10 +2088,6 @@ INDEX_HTML = r"""<!doctype html>
     <div class="modal">
       <h1>Daily Summary</h1>
       <div class="modal-body" id="summaryModalBody"></div>
-      <div>
-        <h3>Updates</h3>
-        <ul class="notes" id="summaryModalNotes"></ul>
-      </div>
       <div class="modal-footer">
         <button id="modalAdvanceBtn" class="primary" onclick="commitAdvanceDay()">Advance Day</button>
       </div>
