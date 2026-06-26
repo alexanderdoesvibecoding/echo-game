@@ -154,11 +154,16 @@ class DecisionChoice:
     risk_effect: int
     reschedule_effect: int
     next_card_id: str | None = None
+    future_unlock_card_ids: list[str] = field(default_factory=list)
+    branch_tags_added: list[str] = field(default_factory=list)
+    branch_tags_removed: list[str] = field(default_factory=list)
+    branch_key: str | None = None
+    score_delta: float = 0.0
 
 
 @dataclass
 class DecisionCard:
-    """A daily player decision prompt tied to jobs, shops, pieces, or events."""
+    """A player decision prompt tied to the campaign graph and shop state."""
 
     id: str
     day: int
@@ -171,6 +176,13 @@ class DecisionCard:
     echo_choice_id: str | None = None
     parent_card_id: str | None = None
     parent_choice_id: str | None = None
+    child_card_ids: list[str] = field(default_factory=list)
+    future_unlock_card_ids: list[str] = field(default_factory=list)
+    required_tags: list[str] = field(default_factory=list)
+    excluded_tags: list[str] = field(default_factory=list)
+    branch_tags: list[str] = field(default_factory=list)
+    branch_key: str | None = None
+    campaign_priority: int = 100
 
 
 @dataclass
@@ -198,6 +210,26 @@ class DecisionProgress:
     answered_questions: int
     visible_cards: int
     open_card_ids: list[str]
+
+
+@dataclass
+class CampaignDecisionGraph:
+    """Prebuilt campaign-wide decision graph and day indexes.
+
+    Graph size is controlled at generation time by GameConfig limits. Runtime
+    selection only filters these existing nodes by day, branch tags, and
+    unlocked card ids; it does not create future cards.
+    """
+
+    campaign_root_card_id: str | None = None
+    root_card_ids: list[str] = field(default_factory=list)
+    card_ids: list[str] = field(default_factory=list)
+    cards_by_day: dict[int, list[str]] = field(default_factory=dict)
+    roots_by_day: dict[int, list[str]] = field(default_factory=dict)
+    daily_decision_counts: dict[int, int] = field(default_factory=dict)
+    max_campaign_nodes: int = 0
+    max_active_cards_per_day: int = 0
+    max_future_unlocks_per_choice: int = 0
 
 
 @dataclass
@@ -234,6 +266,7 @@ class Scenario:
     event_timeline: list[Event]
     deadline_shift: int
     decision_cards: dict[str, DecisionCard] = field(default_factory=dict)
+    campaign_decision_graph: CampaignDecisionGraph = field(default_factory=CampaignDecisionGraph)
     daily_decision_roots: dict[int, list[str]] = field(default_factory=dict)
     daily_decision_counts: dict[int, int] = field(default_factory=dict)
 
@@ -252,8 +285,17 @@ class SimulationState:
     jobs: dict[str, Job]
     event_timeline: list[Event]
     decision_cards: dict[str, DecisionCard] = field(default_factory=dict)
+    campaign_decision_graph: CampaignDecisionGraph = field(default_factory=CampaignDecisionGraph)
     daily_decision_roots: dict[int, list[str]] = field(default_factory=dict)
     daily_decision_counts: dict[int, int] = field(default_factory=dict)
+    unlocked_decision_card_ids: set[str] = field(default_factory=set)
+    completed_decision_card_ids: set[str] = field(default_factory=set)
+    campaign_branch_tags: set[str] = field(default_factory=set)
+    campaign_branch_tag_order: dict[str, int] = field(default_factory=dict)
+    campaign_selected_choices: dict[str, str] = field(default_factory=dict)
+    decision_path: list[str] = field(default_factory=list)
+    decision_path_signature: str = ""
+    decision_path_score_delta: float = 0.0
     current_shift: int = 0
     active_events: list[str] = field(default_factory=list)
     known_warnings: list[str] = field(default_factory=list)

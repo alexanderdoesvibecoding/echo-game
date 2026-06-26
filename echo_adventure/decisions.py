@@ -10,6 +10,7 @@ from .enums import DecisionType, EventType, JobStatus, TargetType, WorkCenterSta
 from .events import insert_unexpected_job, schedule_follow_on_event
 from .metrics import update_state_metrics
 from .models import (
+    CampaignDecisionGraph,
     DecisionCard,
     DecisionChoice,
     DecisionRecord,
@@ -22,37 +23,174 @@ from .models import (
 )
 
 
+_CAMPAIGN_ROUTE_THEMES: dict[str, tuple[str, str]] = {
+    "supplier_risk_ignored": (
+        "Supplier exposure",
+        "Earlier supplier risk was left open, so downstream material and logistics assumptions are less stable.",
+    ),
+    "supplier_risk_mitigated": (
+        "Supplier buffer",
+        "Earlier supplier mitigation created options, but the team now has to decide where those buffers matter most.",
+    ),
+    "critical_path_protected": (
+        "Protected path",
+        "Earlier choices protected critical-path work, shifting today toward preserving that advantage.",
+    ),
+    "crew_overloaded": (
+        "Crew load",
+        "Earlier intervention added coordination load, and today's plan has to manage the capacity it consumed.",
+    ),
+    "echo_trusted": (
+        "ECHO reliance",
+        "Earlier choices leaned on ECHO, opening a later automation-versus-judgment tradeoff.",
+    ),
+    "echo_overridden": (
+        "Manual override",
+        "Earlier choices overrode ECHO, so the branch now tests whether the manual plan has enough evidence behind it.",
+    ),
+    "quality_debt_created": (
+        "Quality debt",
+        "Earlier choices deferred quality containment, and later work may inherit the rework exposure.",
+    ),
+    "schedule_debt_created": (
+        "Schedule debt",
+        "Earlier choices preserved stability at the cost of future schedule slack.",
+    ),
+    "cost_debt_created": (
+        "Cost pressure",
+        "Earlier choices bought schedule protection with extra expediting, routing, or coordination cost.",
+    ),
+    "risk_debt_created": (
+        "Risk debt",
+        "Earlier choices accepted uncertainty, so today's branch tests how much exposure remains tolerable.",
+    ),
+    "work_rerouted": (
+        "Rerouted work",
+        "Earlier choices moved work across alternate capacity, creating a later routing and handoff consequence.",
+    ),
+    "flow_resequenced": (
+        "Flow resequenced",
+        "Earlier choices changed queue order, so today's card follows the altered path through the shop.",
+    ),
+    "wait_escalation": (
+        "Escalated wait",
+        "Earlier choices waited for more information, letting a later escalation card enter the campaign route.",
+    ),
+    "priority_churn": (
+        "Priority churn",
+        "Earlier choices changed priority rules, so this branch tests whether the churn helped or moved pressure.",
+    ),
+}
+
+_CHOICE_BRANCH_PROFILES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "echo_recommendation": ("echo_trusted", ("echo_trusted", "cost_debt_created")),
+    "expedite_event": ("supplier_risk_mitigated", ("supplier_risk_mitigated", "cost_debt_created")),
+    "protect_critical": ("critical_path_protected", ("critical_path_protected", "crew_overloaded")),
+    "reroute": ("work_rerouted", ("work_rerouted", "schedule_debt_created")),
+    "split_capacity": ("crew_overloaded", ("crew_overloaded", "cost_debt_created")),
+    "pull_forward": ("critical_path_protected", ("critical_path_protected", "crew_overloaded")),
+    "prioritize_new_job": ("priority_churn", ("priority_churn", "cost_debt_created")),
+    "backlog_new_job": ("schedule_debt_created", ("schedule_debt_created", "supplier_risk_ignored")),
+    "resequence": ("flow_resequenced", ("flow_resequenced",)),
+    "preempt": ("crew_overloaded", ("crew_overloaded", "schedule_debt_created")),
+    "defer": ("schedule_debt_created", ("schedule_debt_created", "quality_debt_created")),
+    "wait": ("wait_escalation", ("wait_escalation", "risk_debt_created")),
+    "note": ("risk_debt_created", ("risk_debt_created",)),
+}
+
+
+def generate_campaign_decision_graph(
+    state: SimulationState,
+    config: GameConfig,
+) -> tuple[dict[str, DecisionCard], CampaignDecisionGraph, dict[int, list[str]], dict[int, int]]:
+    """Build one bounded campaign-wide decision graph at scenario creation.
+
+    Every future route card is created here. During play, choices only unlock
+    and filter these existing cards by branch tags, so Day 5 cards can depend
+    on Day 1 decisions without being generated on Day 5.
+    """
+    cards: dict[str, DecisionCard] = {}
+    graph = CampaignDecisionGraph(
+        max_campaign_nodes=config.max_campaign_decision_nodes,
+        max_active_cards_per_day=min(config.max_active_decision_cards_per_day, config.max_decisions_per_day),
+        max_future_unlocks_per_choice=config.max_future_unlocks_per_choice,
+    )
+    day_templates: dict[int, list[DecisionCard]] = {}
+
+    for day in range(1, config.total_days + 1):
+        _prime_graph_state_for_day(state, day, config)
+        day_templates[day] = _generate_root_decision_cards(state, day, config)
+
+    day_one_templates = day_templates.get(1) or [_strategic_card(state, 1, 1)]
+    root_count = max(1, min(config.min_decisions_per_day, config.max_active_decision_cards_per_day, len(day_one_templates)))
+    for ordinal, template in enumerate(day_one_templates[:root_count], start=1):
+        card_id = "CMP-D01-ROOT" if ordinal == 1 else f"CMP-D01-ROOT-{ordinal:02d}"
+        root = _campaign_clone_card(
+            template,
+            card_id=card_id,
+            day=1,
+            title_prefix="Campaign opening" if ordinal == 1 else "Opening branch",
+            description_prefix="Campaign branch affected by earlier decisions will appear on later days.",
+            campaign_priority=ordinal,
+        )
+        cards[root.id] = root
+        graph.root_card_ids.append(root.id)
+        graph.cards_by_day.setdefault(1, []).append(root.id)
+        graph.roots_by_day.setdefault(1, []).append(root.id)
+        if graph.campaign_root_card_id is None:
+            graph.campaign_root_card_id = root.id
+
+    route_tags = list(_CAMPAIGN_ROUTE_THEMES)[: config.max_branch_variants_per_day]
+    for day in range(2, config.total_days + 1):
+        templates = day_templates.get(day) or day_one_templates
+        for index, tag in enumerate(route_tags):
+            if len(cards) >= config.max_campaign_decision_nodes:
+                break
+            theme_title, theme_description = _CAMPAIGN_ROUTE_THEMES[tag]
+            template = templates[index % len(templates)]
+            card = _campaign_clone_card(
+                template,
+                card_id=_campaign_card_id(day, tag),
+                day=day,
+                title_prefix=theme_title,
+                description_prefix=theme_description,
+                required_tags=[tag],
+                branch_tags=[tag],
+                branch_key=tag,
+                campaign_priority=20 + index,
+            )
+            cards[card.id] = card
+            graph.cards_by_day.setdefault(day, []).append(card.id)
+            graph.roots_by_day.setdefault(day, []).append(card.id)
+
+    _decorate_campaign_choices(cards, config)
+    for card in cards.values():
+        card.echo_choice_id = select_echo_choice(card, cards).id
+        card.future_unlock_card_ids = sorted(
+            {
+                future_id
+                for choice in card.choices
+                for future_id in choice.future_unlock_card_ids
+                if future_id in cards
+            }
+        )
+
+    graph.card_ids = sorted(cards)
+    graph.cards_by_day = {day: ids for day, ids in sorted(graph.cards_by_day.items())}
+    graph.roots_by_day = {day: ids for day, ids in sorted(graph.roots_by_day.items())}
+    graph.daily_decision_counts = {
+        day: min(graph.max_active_cards_per_day, len(ids))
+        for day, ids in graph.cards_by_day.items()
+    }
+    return cards, graph, graph.roots_by_day, graph.daily_decision_counts
+
+
 def generate_decision_graph(
     state: SimulationState,
     config: GameConfig,
 ) -> tuple[dict[str, DecisionCard], dict[int, list[str]], dict[int, int]]:
-    """Prepare all daily decision paths once at scenario creation."""
-    cards: dict[str, DecisionCard] = {}
-    roots_by_day: dict[int, list[str]] = {}
-    counts_by_day: dict[int, int] = {}
-    for day in range(1, config.total_days + 1):
-        _prime_graph_state_for_day(state, day, config)
-        day_cards = _generate_root_decision_cards(state, day, config)
-        counts_by_day[day] = len(day_cards)
-        if not day_cards:
-            roots_by_day[day] = []
-            continue
-        root = day_cards[0]
-        root.id = f"DAY-{day:02d}-Q01"
-        root.parent_card_id = None
-        root.parent_choice_id = None
-        cards[root.id] = root
-        roots_by_day[day] = [root.id]
-        _attach_next_question_cards(
-            root,
-            cards,
-            day=day,
-            question_number=2,
-            total_questions=len(day_cards),
-            question_templates=day_cards[1:],
-        )
-    for card in cards.values():
-        card.echo_choice_id = select_echo_choice(card, cards).id
+    """Compatibility wrapper returning day indexes from the campaign graph."""
+    cards, _graph, roots_by_day, counts_by_day = generate_campaign_decision_graph(state, config)
     return cards, roots_by_day, counts_by_day
 
 
@@ -61,7 +199,41 @@ def active_decision_cards(
     day: int,
     selected_choices: dict[str, str],
 ) -> list[DecisionCard]:
-    """Return the currently visible daily questions."""
+    """Return the currently visible campaign decision cards."""
+    if state.campaign_decision_graph.card_ids:
+        return active_campaign_decision_cards(state, day, selected_choices)
+    return _active_legacy_decision_cards(state, day, selected_choices)
+
+
+def active_campaign_decision_cards(
+    state: SimulationState,
+    day: int,
+    selected_choices: dict[str, str],
+) -> list[DecisionCard]:
+    """Select prebuilt campaign graph nodes for today's active branch."""
+    graph = state.campaign_decision_graph
+    effective_choices = {**state.campaign_selected_choices, **selected_choices}
+    unlocked = set(state.unlocked_decision_card_ids) | set(graph.root_card_ids)
+    candidate_ids = graph.cards_by_day.get(day) or [
+        card_id for card_id, card in state.decision_cards.items() if card.day == day
+    ]
+    limit = graph.max_active_cards_per_day or state.daily_decision_counts.get(day, 0) or len(candidate_ids)
+    cards = [
+        card
+        for card_id in candidate_ids
+        if (card := state.decision_cards.get(card_id))
+        and _campaign_card_available(card, state, unlocked, effective_choices)
+    ]
+    cards.sort(key=lambda card: _campaign_active_sort_key(state, card))
+    return cards[:limit] if limit > 0 else cards
+
+
+def _active_legacy_decision_cards(
+    state: SimulationState,
+    day: int,
+    selected_choices: dict[str, str],
+) -> list[DecisionCard]:
+    """Return visible cards for pre-campaign saves/tests."""
     cards: list[DecisionCard] = []
     question_limit = state.daily_decision_counts.get(day, 0)
     for root_id in state.daily_decision_roots.get(day, []):
@@ -81,12 +253,52 @@ def active_decision_cards(
     return cards
 
 
+def _campaign_card_available(
+    card: DecisionCard,
+    state: SimulationState,
+    unlocked: set[str],
+    selected_choices: dict[str, str],
+) -> bool:
+    """Return whether a prebuilt campaign node belongs to the active route."""
+    if card.id not in unlocked:
+        return False
+    if any(tag not in state.campaign_branch_tags for tag in card.required_tags):
+        return False
+    if any(tag in state.campaign_branch_tags for tag in card.excluded_tags):
+        return False
+    if card.parent_card_id:
+        return selected_choices.get(card.parent_card_id) == card.parent_choice_id
+    return True
+
+
+def _campaign_active_sort_key(state: SimulationState, card: DecisionCard) -> tuple[int, int, int, str]:
+    """Prefer earlier branch tags when too many route cards are unlocked."""
+    tag_order = min(
+        (state.campaign_branch_tag_order.get(tag, 999) for tag in card.required_tags),
+        default=999,
+    )
+    return (tag_order, card.campaign_priority, -card.severity, card.id)
+
+
 def decision_progress(
     state: SimulationState,
     day: int,
     selected_choices: dict[str, str],
 ) -> DecisionProgress:
     """Return progress through the day's fixed number of questions."""
+    if state.campaign_decision_graph.card_ids:
+        cards = active_campaign_decision_cards(state, day, selected_choices)
+        effective_choices = {**state.campaign_selected_choices, **selected_choices}
+        open_card_ids = [card.id for card in cards if card.id not in effective_choices]
+        answered = len(cards) - len(open_card_ids)
+        return DecisionProgress(
+            day=day,
+            total_questions=len(cards),
+            answered_questions=answered,
+            visible_cards=len(cards),
+            open_card_ids=open_card_ids,
+        )
+
     total_questions = state.daily_decision_counts.get(day, len(state.daily_decision_roots.get(day, [])))
     visible = 0
     answered = 0
@@ -134,7 +346,11 @@ def select_echo_choice(card: DecisionCard, graph: dict[str, DecisionCard] | None
     )
 
 
-def _choice_path_score(choice: DecisionChoice, graph: dict[str, DecisionCard] | None) -> float:
+def _choice_path_score(
+    choice: DecisionChoice,
+    graph: dict[str, DecisionCard] | None,
+    depth: int = 0,
+) -> float:
     """Score a choice plus its best downstream decision path for ECHO."""
     effect_rank = {
         "echo_recommendation": 0,
@@ -155,10 +371,22 @@ def _choice_path_score(choice: DecisionChoice, graph: dict[str, DecisionCard] | 
         + effect_rank.get(choice.immediate_effects.get("type", "note"), 20) * 3
         + choice.reschedule_effect * 4
     )
-    if not graph or not choice.next_card_id or choice.next_card_id not in graph:
+    if choice.score_delta:
+        immediate -= choice.score_delta * 1.5
+    if not graph or depth >= 1:
         return immediate
-    child = graph[choice.next_card_id]
-    return immediate + min(_choice_path_score(child_choice, graph) for child_choice in child.choices) * 0.9
+    child_ids = []
+    if choice.next_card_id:
+        child_ids.append(choice.next_card_id)
+    child_ids.extend(choice.future_unlock_card_ids[:3])
+    child_scores = []
+    for child_id in dict.fromkeys(child_ids):
+        child = graph.get(child_id)
+        if child:
+            child_scores.append(min(_choice_path_score(child_choice, graph, depth + 1) for child_choice in child.choices))
+    if not child_scores:
+        return immediate
+    return immediate + min(child_scores) * 0.65
 
 
 def _generate_root_decision_cards(state: SimulationState, day: int, config: GameConfig | None = None) -> list[DecisionCard]:
@@ -266,9 +494,145 @@ def _renumber_decision_cards(cards: list[DecisionCard], day: int) -> list[Decisi
                 echo_choice_id=card.echo_choice_id,
                 parent_card_id=card.parent_card_id,
                 parent_choice_id=card.parent_choice_id,
+                child_card_ids=list(card.child_card_ids),
+                future_unlock_card_ids=list(card.future_unlock_card_ids),
+                required_tags=list(card.required_tags),
+                excluded_tags=list(card.excluded_tags),
+                branch_tags=list(card.branch_tags),
+                branch_key=card.branch_key,
+                campaign_priority=card.campaign_priority,
             )
         )
     return renumbered
+
+
+def _campaign_clone_card(
+    template: DecisionCard,
+    card_id: str,
+    day: int,
+    title_prefix: str,
+    description_prefix: str,
+    required_tags: list[str] | None = None,
+    excluded_tags: list[str] | None = None,
+    branch_tags: list[str] | None = None,
+    branch_key: str | None = None,
+    campaign_priority: int = 100,
+) -> DecisionCard:
+    """Clone a generated operational template into a campaign graph node."""
+    return DecisionCard(
+        id=card_id,
+        day=day,
+        type=template.type,
+        title=f"{title_prefix}: {template.title}",
+        description=f"{description_prefix} {template.description}",
+        target_ids=list(template.target_ids),
+        severity=template.severity,
+        choices=_clone_choices(template.choices),
+        echo_choice_id=template.echo_choice_id,
+        parent_card_id=template.parent_card_id,
+        parent_choice_id=template.parent_choice_id,
+        child_card_ids=[],
+        required_tags=list(required_tags or []),
+        excluded_tags=list(excluded_tags or []),
+        branch_tags=list(branch_tags or []),
+        branch_key=branch_key,
+        campaign_priority=campaign_priority,
+    )
+
+
+def _campaign_card_id(day: int, tag: str) -> str:
+    """Return the stable id for a prebuilt route card."""
+    return f"CMP-D{day:02d}-{tag.upper().replace('_', '-')}"
+
+
+def _decorate_campaign_choices(cards: dict[str, DecisionCard], config: GameConfig) -> None:
+    """Attach branch projections, future unlocks, and score deltas to choices."""
+    available_card_ids = set(cards)
+    for card in cards.values():
+        for choice in card.choices:
+            branch_key, tags = project_choice_branch_state(choice)
+            choice.branch_key = branch_key
+            choice.branch_tags_added = tags
+            choice.future_unlock_card_ids = _future_unlock_card_ids_for_choice(
+                choice_day=card.day,
+                branch_tags=tags,
+                available_card_ids=available_card_ids,
+                config=config,
+            )
+            choice.score_delta = _decision_choice_score_delta(card, choice, tags)
+
+
+def project_choice_branch_state(choice: DecisionChoice) -> tuple[str, list[str]]:
+    """Project a choice into persistent campaign branch tags."""
+    effect_type = choice.immediate_effects.get("type", "note")
+    primary, tags = _CHOICE_BRANCH_PROFILES.get(effect_type, _CHOICE_BRANCH_PROFILES["note"])
+    projected = list(tags)
+    if choice.risk_effect > 0:
+        projected.append("risk_debt_created")
+    if choice.reschedule_effect >= 2:
+        projected.append("crew_overloaded")
+    if effect_type == "wait" and choice.risk_effect >= 4:
+        projected.append("supplier_risk_ignored")
+    return primary, _stable_unique_tags(projected)
+
+
+def _stable_unique_tags(tags: list[str] | tuple[str, ...]) -> list[str]:
+    """Deduplicate tags without changing route priority."""
+    return [tag for tag in dict.fromkeys(tags) if tag in _CAMPAIGN_ROUTE_THEMES]
+
+
+def _future_unlock_card_ids_for_choice(
+    choice_day: int,
+    branch_tags: list[str],
+    available_card_ids: set[str],
+    config: GameConfig,
+) -> list[str]:
+    """Return bounded future route nodes unlocked by one choice."""
+    future_days = _future_unlock_days(choice_day, config.total_days)
+    unlocks: list[str] = []
+    primary_tags = branch_tags[: max(1, min(2, len(branch_tags)))]
+    for future_day in future_days:
+        for tag in primary_tags:
+            card_id = _campaign_card_id(future_day, tag)
+            if card_id in available_card_ids and card_id not in unlocks:
+                unlocks.append(card_id)
+                break
+        if len(unlocks) >= config.max_future_unlocks_per_choice:
+            break
+    if len(unlocks) < config.max_future_unlocks_per_choice and len(branch_tags) > 1 and future_days:
+        latest_day = future_days[-1]
+        for tag in branch_tags[1:]:
+            card_id = _campaign_card_id(latest_day, tag)
+            if card_id in available_card_ids and card_id not in unlocks:
+                unlocks.append(card_id)
+            if len(unlocks) >= config.max_future_unlocks_per_choice:
+                break
+    return unlocks
+
+
+def _future_unlock_days(choice_day: int, total_days: int) -> list[int]:
+    """Choose future days that keep the graph branching without exploding."""
+    days = []
+    for offset in (1, 2, 4):
+        day = choice_day + offset
+        if day <= total_days:
+            days.append(day)
+    return days
+
+
+def _decision_choice_score_delta(card: DecisionCard, choice: DecisionChoice, tags: list[str]) -> float:
+    """Return a deterministic path-specific score modifier for one choice."""
+    material = f"{card.id}:{choice.id}:{choice.label}:{','.join(tags)}"
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()
+    path_fraction = (int(digest[:6], 16) % 1000) / 1000.0
+    operational_value = (-choice.risk_effect * 0.28) - (choice.reschedule_effect * 0.18)
+    if "cost_debt_created" in tags:
+        operational_value -= 0.25
+    if "critical_path_protected" in tags or "supplier_risk_mitigated" in tags:
+        operational_value += 0.35
+    if "risk_debt_created" in tags or "schedule_debt_created" in tags:
+        operational_value -= 0.2
+    return round(operational_value + path_fraction, 3)
 
 
 def _decision_rng(state: SimulationState, day: int, config: GameConfig) -> random.Random:
@@ -291,6 +655,40 @@ def _decision_rng(state: SimulationState, day: int, config: GameConfig) -> rando
     )
     seed_int = int.from_bytes(hashlib.sha256(seed_material.encode("utf-8")).digest()[:16], "big")
     return random.Random(seed_int)
+
+
+def apply_campaign_choice(state: SimulationState, card: DecisionCard, choice: DecisionChoice) -> None:
+    """Persist branch state changes from one campaign graph choice."""
+    state.completed_decision_card_ids.add(card.id)
+    state.campaign_selected_choices[card.id] = choice.id
+    for tag in choice.branch_tags_removed:
+        state.campaign_branch_tags.discard(tag)
+        state.campaign_branch_tag_order.pop(tag, None)
+    next_order = len(state.campaign_branch_tag_order)
+    for tag in choice.branch_tags_added:
+        if tag not in state.campaign_branch_tag_order:
+            state.campaign_branch_tag_order[tag] = next_order
+            next_order += 1
+    state.campaign_branch_tags.update(choice.branch_tags_added)
+    unlock_future_decision_nodes(state, choice.future_unlock_card_ids)
+    state.decision_path.append(f"{card.id}:{choice.id}")
+    state.decision_path_signature = decision_path_signature(state)
+    state.decision_path_score_delta = round(state.decision_path_score_delta + choice.score_delta, 4)
+
+
+def unlock_future_decision_nodes(state: SimulationState, card_ids: list[str]) -> None:
+    """Unlock prebuilt future campaign nodes, ignoring unknown save data ids."""
+    for card_id in card_ids:
+        if card_id in state.decision_cards:
+            state.unlocked_decision_card_ids.add(card_id)
+
+
+def decision_path_signature(state: SimulationState) -> str:
+    """Return a deterministic signature of the ordered decision path."""
+    if not state.decision_path:
+        return ""
+    material = "|".join(state.decision_path)
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
 
 
 def apply_choice(
@@ -339,6 +737,7 @@ def apply_choice(
     forward_note = _apply_forward_decision_effect(state, card, choice)
     if forward_note:
         note = f"{note} {forward_note}"
+    apply_campaign_choice(state, card, choice)
     state.daily_notes.append(note)
     state.decision_history.append(
         DecisionRecord(
@@ -458,6 +857,12 @@ def _clone_choices(choices: list[DecisionChoice]) -> list[DecisionChoice]:
             immediate_effects=dict(choice.immediate_effects),
             risk_effect=choice.risk_effect,
             reschedule_effect=choice.reschedule_effect,
+            next_card_id=choice.next_card_id,
+            future_unlock_card_ids=list(choice.future_unlock_card_ids),
+            branch_tags_added=list(choice.branch_tags_added),
+            branch_tags_removed=list(choice.branch_tags_removed),
+            branch_key=choice.branch_key,
+            score_delta=choice.score_delta,
         )
         for choice in choices
     ]

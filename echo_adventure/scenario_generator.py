@@ -6,7 +6,7 @@ import copy
 import random
 
 from .config import GameConfig
-from .decisions import generate_decision_graph
+from .decisions import generate_campaign_decision_graph
 from .enums import JobStatus
 from .events import generate_event_timeline
 from .models import Job, PuzzlePiece, Scenario, Shop, SimulationState, WorkCenter
@@ -92,9 +92,10 @@ def generate_scenario(config: GameConfig) -> Scenario:
     )
     (
         scenario.decision_cards,
+        scenario.campaign_decision_graph,
         scenario.daily_decision_roots,
         scenario.daily_decision_counts,
-    ) = generate_decision_graph(graph_state, config)
+    ) = generate_campaign_decision_graph(graph_state, config)
     return scenario
 
 

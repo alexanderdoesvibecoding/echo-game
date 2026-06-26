@@ -36,8 +36,10 @@ def initialize_state(scenario: Scenario, shifts_per_day: int) -> SimulationState
         jobs=copy.deepcopy(scenario.jobs),
         event_timeline=copy.deepcopy(scenario.event_timeline),
         decision_cards=copy.deepcopy(scenario.decision_cards),
+        campaign_decision_graph=copy.deepcopy(scenario.campaign_decision_graph),
         daily_decision_roots=copy.deepcopy(scenario.daily_decision_roots),
         daily_decision_counts=copy.deepcopy(scenario.daily_decision_counts),
+        unlocked_decision_card_ids=set(scenario.campaign_decision_graph.root_card_ids),
     )
     update_state_metrics(state)
     return state

@@ -20,7 +20,13 @@ from ..decisions import (
     select_echo_choice,
 )
 from ..enums import JobStatus, TargetType, WorkCenterStatus
-from ..metrics import calculate_snapshot, day_shift, update_state_metrics
+from ..metrics import (
+    calculate_final_score,
+    calculate_snapshot,
+    day_shift,
+    score_decision_path_differentiator,
+    update_state_metrics,
+)
 from ..models import DecisionCard, DecisionChoice, DecisionProgress, Event, MetricSnapshot, PuzzlePiece, SimulationState
 from ..scenario_generator import generate_scenario
 from ..schedulers.automated import AutomatedScheduler
@@ -934,7 +940,7 @@ def main(argv: list[str] | None = None) -> None:
 def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: SimulationState | None = None) -> dict[str, Any]:
     """Convert a MetricSnapshot into frontend-friendly camelCase fields."""
     completion_shift = state.completion_shift if state else None
-    return {
+    payload = {
         "shift": snapshot.shift,
         "day": snapshot.day,
         "piecesCompleted": snapshot.pieces_completed,
@@ -951,6 +957,15 @@ def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: Simu
         "deadlineMet": snapshot.deadline_met,
         "completion": day_shift(completion_shift, shifts_per_day) if completion_shift else None,
     }
+    if state:
+        payload.update(
+            {
+                "finalScore": calculate_final_score(state),
+                "decisionPathDifferentiator": score_decision_path_differentiator(state),
+                "decisionPathSignature": state.decision_path_signature or "-",
+            }
+        )
+    return payload
 
 
 def _parse_optional_seed(value: Any) -> int | None:

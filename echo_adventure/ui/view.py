@@ -812,7 +812,7 @@ INDEX_HTML = r"""<!doctype html>
         <h1>Shipyard Scheduler Choose Your Own Adventure Game</h1>
         <div class="status-line">
           <span class="badge" id="dayBadge">Day</span>
-          <span class="badge warn" id="decisionProgress">0/0 Daily Questions Complete</span>
+          <span class="badge warn" id="decisionProgress">0/0 Campaign Decisions Complete</span>
         </div>
       </div>
     </div>
@@ -909,7 +909,7 @@ INDEX_HTML = r"""<!doctype html>
     <div class="modal decision-modal">
       <div class="modal-titlebar">
         <div>
-          <h1 id="decisionModalTitle">Daily Decisions</h1>
+          <h1 id="decisionModalTitle">Campaign Decisions</h1>
           <div class="subtle" id="decisionModalSubtitle"></div>
         </div>
         <button id="closeDecisionBtn" class="icon-button" title="Dismiss decisions" onclick="dismissDecisionModal()">×</button>
@@ -1489,6 +1489,7 @@ INDEX_HTML = r"""<!doctype html>
         </div>
         <table>
           <tbody>
+            <tr><td>Final score</td><td>${Number(p.finalScore || 0).toFixed(2)}</td><td>${Number(a.finalScore || 0).toFixed(2)}</td></tr>
             <tr><td>Deadline met</td><td>${p.deadlineMet ? "Yes" : "No"}</td><td>${a.deadlineMet ? "Yes" : "No"}</td></tr>
             <tr><td>Project completed</td><td>${p.finalItemCompleted ? "Yes" : "No"}</td><td>${a.finalItemCompleted ? "Yes" : "No"}</td></tr>
             <tr><td>Completion</td><td>${p.completion || "Not complete"}</td><td>${a.completion || "Not complete"}</td></tr>
@@ -1499,6 +1500,7 @@ INDEX_HTML = r"""<!doctype html>
             <tr><td>Idle time</td><td>${p.idleTime}</td><td>${a.idleTime}</td></tr>
             <tr><td>Reschedules</td><td>${p.reschedules}</td><td>${a.reschedules}</td></tr>
             <tr><td>Schedule risk</td><td>${Math.round(p.scheduleRisk)}</td><td>${Math.round(a.scheduleRisk)}</td></tr>
+            <tr><td>Strategic path signature</td><td>${Number(p.decisionPathDifferentiator || 0).toFixed(2)}</td><td>${Number(a.decisionPathDifferentiator || 0).toFixed(2)}</td></tr>
           </tbody>
         </table>
         <h3>Subjobs Complete Over Time</h3>
@@ -1684,7 +1686,7 @@ INDEX_HTML = r"""<!doctype html>
         return;
       }
 
-      progress.textContent = `${chosenCount}/${totalCount} Daily Questions Complete`;
+      progress.textContent = `${chosenCount}/${totalCount} Campaign Decisions Complete`;
       progress.className = `badge ${remainingCount ? "warn" : "good"}`;
       if (advanceBtn) advanceBtn.disabled = !readyToAdvance();
     }
@@ -1698,7 +1700,7 @@ INDEX_HTML = r"""<!doctype html>
         subtitle.textContent = "Run complete";
         body.innerHTML = `
           <div class="reveal-panel">
-            <h3>Daily decisions are complete.</h3>
+            <h3>Campaign decisions are complete.</h3>
             <div class="subtle">Review the final operational comparison at the top of the page.</div>
           </div>
         `;
@@ -1706,7 +1708,7 @@ INDEX_HTML = r"""<!doctype html>
       }
 
       const progressState = decisionProgress();
-      subtitle.textContent = `${progressState.completed}/${progressState.total} daily questions complete`;
+      subtitle.textContent = `${progressState.completed}/${progressState.total} campaign decisions complete`;
       const nextCard = state.decisions.find(card => !card.selectedChoice);
 
       if (nextCard) {
@@ -1767,7 +1769,7 @@ INDEX_HTML = r"""<!doctype html>
       const progressState = decisionProgress();
       const nextCard = state.decisions.find(card => !card.selectedChoice);
       overlay.classList.add("active");
-      subtitle.textContent = `${progressState.completed}/${progressState.total} daily questions complete`;
+      subtitle.textContent = `${progressState.completed}/${progressState.total} campaign decisions complete`;
 
       if (nextCard) {
         // Only one open card is shown at a time. Submitting it asks the server
@@ -1861,6 +1863,16 @@ INDEX_HTML = r"""<!doctype html>
         </thead>
         <tbody>
           <tr>
+            <td>Final score</td>
+            <td>${Number(p.finalScore || 0).toFixed(2)}</td>
+            <td>${Number(a.finalScore || 0).toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td>Strategic path signature</td>
+            <td>${Number(p.decisionPathDifferentiator || 0).toFixed(2)}</td>
+            <td>${Number(a.decisionPathDifferentiator || 0).toFixed(2)}</td>
+          </tr>
+          <tr>
             <td>Deadline met</td>
             <td>${p.deadlineMet ? "Yes" : "No"}</td>
             <td>${a.deadlineMet ? "Yes" : "No"}</td>
@@ -1919,7 +1931,7 @@ INDEX_HTML = r"""<!doctype html>
               <td>${escapeHtml(row.card)}</td>
               <td>${escapeHtml(row.playerChoice || "-")}</td>
               <td>${escapeHtml(row.echoChoice || "-")}</td>
-              <td>${row.aligned ? "Yes" : "No"}</td>
+              <td>${row.matched ? "Yes" : "No"}</td>
             </tr>
           `).join("")}
         </tbody>

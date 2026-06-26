@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from functools import lru_cache
 
 from .enums import JobStatus, PieceStatus, WorkCenterStatus
@@ -59,6 +60,36 @@ def calculate_snapshot(state: SimulationState) -> MetricSnapshot:
         final_item_completed=state.final_item_completed,
         deadline_met=state.final_item_completed and (state.completion_shift or 9999) <= state.deadline_shift,
     )
+
+
+def score_decision_path_differentiator(state: SimulationState) -> float:
+    """Return a deterministic score component tied to the full choice path."""
+    if not state.decision_path:
+        return 0.0
+    signature = state.decision_path_signature or hashlib.sha256("|".join(state.decision_path).encode("utf-8")).hexdigest()[:16]
+    signature_component = (int(signature[:8], 16) % 2500) / 100.0
+    return round(state.decision_path_score_delta + signature_component, 2)
+
+
+def calculate_final_score(state: SimulationState) -> float:
+    """Calculate the deterministic final score used by the reveal UI/tests."""
+    snapshot = calculate_snapshot(state)
+    completion_shift = state.completion_shift or snapshot.projected_completion_shift
+    deadline_margin = state.deadline_shift - completion_shift
+    completion_bonus = 260.0 if snapshot.deadline_met else 0.0
+    margin_component = max(-90.0, min(120.0, deadline_margin * 4.0))
+    work_component = snapshot.jobs_completed * 7.5 + snapshot.pieces_completed * 18.0
+    penalty = (
+        snapshot.jobs_remaining * 11.0
+        + snapshot.jobs_late * 8.0
+        + snapshot.jobs_behind_schedule * 4.5
+        + snapshot.reschedules * 1.25
+        + snapshot.idle_time * 0.08
+        + snapshot.schedule_risk * 1.4
+    )
+    score = 500.0 + completion_bonus + margin_component + work_component - penalty
+    score += score_decision_path_differentiator(state)
+    return round(score, 2)
 
 
 def calculate_schedule_risk(state: SimulationState, projected_completion_shift: int | None = None) -> float:
