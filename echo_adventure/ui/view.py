@@ -875,22 +875,25 @@ INDEX_HTML = r"""<!doctype html>
         <div class="welcome-visual" aria-label="Submarine">
           <svg viewBox="0 0 720 250" role="img" aria-label="Submarine underway">
             <defs>
-              <linearGradient id="welcomeSubBody" x1="0" x2="1">
-                <stop offset="0" stop-color="#1c8c86"></stop>
-                <stop offset="1" stop-color="#0d5552"></stop>
+              <linearGradient id="welcomeSubBody" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#24a19c"></stop>
+                <stop offset="100%" stop-color="#0d5552"></stop>
               </linearGradient>
             </defs>
-            <path d="M 118 134 C 158 75 270 57 433 67 C 560 75 637 101 675 134 C 637 167 560 193 433 201 C 270 211 158 193 118 134 Z" fill="url(#welcomeSubBody)"></path>
-            <path d="M 121 134 L 55 88 L 75 134 L 55 180 Z" fill="#146b67"></path>
-            <path d="M 330 70 L 359 34 L 425 34 L 459 75 Z" fill="#146b67"></path>
-            <path d="M 455 67 C 520 73 595 93 647 121" fill="none" stroke="rgba(255,255,255,0.32)" stroke-width="6" stroke-linecap="round"></path>
-            <g fill="#dff6f4" stroke="#0b4542" stroke-width="5">
-              <circle cx="246" cy="134" r="15"></circle>
-              <circle cx="306" cy="134" r="15"></circle>
-              <circle cx="497" cy="134" r="15"></circle>
-              <circle cx="557" cy="134" r="15"></circle>
+
+            <path d="M 60 135 L 85 135 M 50 100 L 60 135 L 50 170" fill="none" stroke="#0d5552" stroke-width="8" stroke-linecap="round"></path>
+            <path d="M 110 105 L 75 90 L 85 135 Z" fill="#146b67"></path>
+            <path d="M 110 165 L 75 180 L 85 135 Z" fill="#146b67"></path>
+            <path d="M 80 135 C 80 80, 160 85, 350 85 C 560 85, 660 100, 660 135 C 660 170, 560 185, 350 185 C 160 185, 80 190, 80 135 Z" fill="url(#welcomeSubBody)"></path>
+            <path d="M 300 86 L 310 35 L 380 35 L 390 86 Z" fill="#146b67"></path>
+            <path d="M 330 35 L 330 15 L 340 15 M 360 35 L 360 20" fill="none" stroke="#0d5552" stroke-width="5" stroke-linecap="round"></path>
+            <path d="M 140 105 C 260 100, 480 100, 620 115" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="4" stroke-linecap="round"></path>
+            <g fill="#dff6f4" stroke="#0b4542" stroke-width="4">
+              <circle cx="200" cy="135" r="14"></circle>
+              <circle cx="260" cy="135" r="14"></circle>
+              <circle cx="460" cy="135" r="14"></circle>
+              <circle cx="520" cy="135" r="14"></circle>
             </g>
-            <path d="M 672 134 L 700 116 M 672 134 L 700 152 M 57 88 L 28 75 M 57 180 L 28 193" fill="none" stroke="#0d5552" stroke-width="8" stroke-linecap="round"></path>
           </svg>
         </div>
         <p class="welcome-blurb" id="welcomeBlurb">Your job is to get these jobs done on time. Each decision you make can risk or reward other jobs.</p>
@@ -1372,10 +1375,13 @@ INDEX_HTML = r"""<!doctype html>
       const labelSize = Math.max(9, Math.min(16, cellWidth * 0.2, cellHeight * 0.32));
       const safeId = String(instanceId || "summary").replace(/[^a-zA-Z0-9_-]/g, "");
       const clipId = `submarineClip-${safeId}`;
-      const bodyPath = "M 102 149 C 135 89 231 69 420 73 C 570 76 663 104 707 149 C 663 194 570 222 420 225 C 231 229 135 209 102 149 Z";
-      const tailPath = "M 104 149 L 51 105 L 64 149 L 51 193 Z";
-      const towerPath = "M 342 75 L 367 37 L 433 37 L 461 78 Z";
-      const portHoles = [250, 306, 500, 556].map(x => `<circle cx="${x}" cy="149" r="9"></circle>`).join("");
+      const bodyPath = "M 85 155 C 85 92, 175 97, 375 97 C 610 97, 700 114, 700 155 C 700 196, 610 213, 375 213 C 175 213, 85 218, 85 155 Z";
+      const tailPath = "M 115 120 L 75 105 L 85 155 Z M 115 190 L 75 205 L 85 155 Z";
+      const towerPath = "M 320 98 L 330 40 L 400 40 L 411 98 Z";
+      const detailLinesPath = "M 65 155 L 90 155 M 55 115 L 65 155 L 55 195 M 350 40 L 350 18 L 360 18 M 380 40 L 380 23";
+      const portHoles = [215, 275, 495, 555]
+        .map(x => `<circle cx="${x}" cy="155" r="14"></circle>`)
+        .join("");
       const tileMarkup = tiles.map((tile, index) => {
         const col = index % columns;
         const row = Math.floor(index / columns);
@@ -1420,8 +1426,8 @@ INDEX_HTML = r"""<!doctype html>
               <path class="submarine-outline" d="${bodyPath}"></path>
               <path class="submarine-outline" d="${towerPath}"></path>
               <g clip-path="url(#${clipId})">${tileMarkup}</g>
+              <path class="submarine-detail" d="${detailLinesPath}" fill="none" stroke-width="5" stroke-linecap="round"></path>
               <g class="submarine-detail">${portHoles}</g>
-              <path class="submarine-detail" d="M 704 149 L 729 132 M 704 149 L 729 166 M 52 105 L 27 92 M 52 193 L 27 206"></path>
             </svg>
           </div>
           <div class="puzzle-legend">
