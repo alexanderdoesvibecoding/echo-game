@@ -1214,11 +1214,11 @@ def _job_queue_wait(state: SimulationState, job_id: str) -> int:
 
 def _piece_finish_delta_label(delta: int, completed: bool) -> str:
     """Return compact early/late wording for a top-level job finish estimate."""
-    prefix = "Finished" if completed else "Projected"
+    prefix = "Finished" if completed else "Done"
     if delta > 0:
-        return f"{prefix} {delta} shift(s) early"
+        return f"{prefix} {delta} shift(s) before due"
     if delta < 0:
-        return f"{prefix} {abs(delta)} shift(s) late"
+        return f"{prefix} {abs(delta)} shift(s) after due"
     return f"{prefix} on time"
 
 

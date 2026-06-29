@@ -333,6 +333,33 @@ INDEX_HTML = r"""<!doctype html>
     }
     .metric.hoverable {
       cursor: help;
+      border-color: rgba(22, 124, 120, 0.34);
+      box-shadow: 0 0 0 1px rgba(22, 124, 120, 0.08);
+    }
+    .metric-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .metric-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 22px;
+      padding: 2px 7px;
+      border: 1px solid rgba(22, 124, 120, 0.22);
+      border-radius: 999px;
+      color: var(--teal-dark);
+      background: rgba(22, 124, 120, 0.08);
+      font-size: 11px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+    .metric-hint::after {
+      content: "⌄";
+      font-size: 12px;
+      line-height: 1;
     }
     .metric-popover {
       display: none;
@@ -340,8 +367,8 @@ INDEX_HTML = r"""<!doctype html>
       top: calc(100% + 8px);
       left: 0;
       z-index: 50;
-      width: min(470px, calc(100vw - 44px));
-      padding: 10px;
+      width: min(560px, calc(100vw - 44px));
+      padding: 12px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--panel);
@@ -353,27 +380,50 @@ INDEX_HTML = r"""<!doctype html>
       display: block;
     }
     .metric-popover h3 {
-      margin-bottom: 7px;
+      margin-bottom: 9px;
+    }
+    .metric-popover-frame {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
     }
     .metric-popover table {
       table-layout: auto;
+      border-collapse: separate;
+      border-spacing: 0;
       font-size: 12px;
+    }
+    .metric-popover th {
+      background: #f6f8f5;
     }
     .metric-popover th,
     .metric-popover td {
-      padding: 6px;
+      border-bottom: 0;
+      padding: 7px 8px;
       white-space: nowrap;
     }
     .metric-popover td:first-child {
       white-space: normal;
       min-width: 92px;
     }
-    .metric-popover .timing {
-      font-weight: 760;
-    }
     html[data-theme="dark"] .metric-popover {
       background: #1a202a;
       border-color: #3a4352;
+    }
+    html[data-theme="dark"] .metric.hoverable {
+      border-color: rgba(93, 217, 224, 0.32);
+      box-shadow: 0 0 0 1px rgba(93, 217, 224, 0.08);
+    }
+    html[data-theme="dark"] .metric-hint {
+      background: rgba(93, 217, 224, 0.1);
+      border-color: rgba(93, 217, 224, 0.22);
+      color: #5dd9e0;
+    }
+    html[data-theme="dark"] .metric-popover-frame {
+      border-color: #3a4352;
+    }
+    html[data-theme="dark"] .metric-popover th {
+      background: #252d38;
     }
 
     .progress {
@@ -1789,7 +1839,10 @@ INDEX_HTML = r"""<!doctype html>
       ];
       $("metrics").innerHTML = metrics.map(([label, value, pct, tone, tooltip, showBar, detail]) => `
         <div class="metric ${detail ? "hoverable" : ""}" ${detail ? `tabindex="0" aria-describedby="jobsMetricPopover"` : ""}>
-          <span class="subtle">${label}<span class="info-icon" data-tooltip="${escapeHtml(tooltip)}">i</span></span>
+          <div class="metric-title-row">
+            <span class="subtle">${label}<span class="info-icon" data-tooltip="${escapeHtml(tooltip)}">i</span></span>
+            ${detail ? `<span class="metric-hint">Details</span>` : ""}
+          </div>
           <strong>${value}</strong>
           ${showBar ? `<div class="progress"><div class="bar ${tone}" style="width:${Math.max(0, Math.min(1, pct)) * 100}%"></div></div>` : ""}
           ${detail}
@@ -1806,30 +1859,32 @@ INDEX_HTML = r"""<!doctype html>
       return `
         <div id="jobsMetricPopover" class="metric-popover" role="tooltip">
           <h3>Jobs</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Job</th>
-                <th>Subjobs Remaining</th>
-                <th>Projected Finish</th>
-                <th>Timing</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${pieces.map(piece => {
-                const remaining = Number(piece.subjobsRemaining ?? Math.max(0, Number(piece.total || 0) - Number(piece.completed || 0)));
-                const total = Number(piece.total || 0);
-                return `
-                  <tr>
-                    <td>${escapeHtml(piece.displayId || piece.id || "-")}</td>
-                    <td>${remaining}/${total}</td>
-                    <td>${escapeHtml(piece.projectedCompletion || "-")}</td>
-                    <td class="timing">${escapeHtml(piece.finishDeltaLabel || "-")}</td>
-                  </tr>
-                `;
-              }).join("")}
-            </tbody>
-          </table>
+          <div class="metric-popover-frame">
+            <table>
+              <thead>
+                <tr>
+                  <th>Job</th>
+                  <th>Subjobs Complete</th>
+                  <th>Projected Finish</th>
+                  <th>Due Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${pieces.map(piece => {
+                  const completed = Number(piece.completed || 0);
+                  const total = Number(piece.total || 0);
+                  return `
+                    <tr>
+                      <td>${escapeHtml(piece.displayId || piece.id || "-")}</td>
+                      <td>${completed}/${total}</td>
+                      <td>${escapeHtml(piece.projectedCompletion || "-")}</td>
+                      <td>${escapeHtml(piece.dueDate || "-")}</td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
         </div>
       `;
     }
