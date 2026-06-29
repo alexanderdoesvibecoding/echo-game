@@ -125,6 +125,8 @@ def validate_scenario(scenario: Scenario, config: GameConfig) -> None:
     for job in scenario.jobs.values():
         if not job.candidate_workcenter_ids:
             raise ValueError(f"{job.id} has no capable workcenter.")
+        if not 1 <= job.due_shift <= config.deadline_shift:
+            raise ValueError(f"{job.id} due shift outside configured deadline.")
         for dep_id in job.dependency_ids:
             if dep_id not in scenario.jobs:
                 raise ValueError(f"{job.id} depends on unknown job {dep_id}.")
@@ -213,8 +215,10 @@ def _generate_pieces_and_jobs(
     pieces: dict[str, PuzzlePiece] = {}
     jobs: dict[str, Job] = {}
     shop_ids = list(shops.keys())
+    piece_due_days = _assign_piece_due_days(config, rng, config.piece_count)
     for piece_index in range(1, config.piece_count + 1):
         piece_id = f"PIECE-{piece_index:02d}"
+        piece_due_shift = _day_to_due_shift(piece_due_days[piece_index], config)
         max_piece_shop_count = min(5, len(shop_ids))
         min_piece_shop_count = min(2, max_piece_shop_count)
         piece_shop_count = rng.randint(min_piece_shop_count, max_piece_shop_count)
@@ -250,10 +254,6 @@ def _generate_pieces_and_jobs(
                 and rng.random() < config.transport_delay_probability
                 else 0
             )
-            due_shift = min(
-                config.deadline_shift - 4,
-                4 + int((job_index / job_count) * (config.deadline_shift - 8)) + rng.randint(-2, 3),
-            )
             duration = base_duration + setup + transport
             job = Job(
                 id=job_id,
@@ -269,7 +269,7 @@ def _generate_pieces_and_jobs(
                 dependency_ids=dependencies,
                 status=JobStatus.NOT_READY,
                 priority=rng.randint(35, 75),
-                due_shift=max(2, due_shift),
+                due_shift=piece_due_shift,
                 risk_score=float(rng.randint(8, 30)),
                 original_duration_shifts=duration,
             )
@@ -289,6 +289,36 @@ def _generate_pieces_and_jobs(
             total_job_count=len(piece_job_ids),
         )
     return pieces, jobs
+
+
+def _assign_piece_due_days(config: GameConfig, rng: random.Random, piece_count: int) -> dict[int, int]:
+    """Return a monotonic spread of piece indexes to day-based due dates.
+
+    The rng argument keeps future jitter tied to the scenario seed; the current
+    spread is intentionally stable so piece due dates stay easy to read.
+    """
+    if piece_count <= 0:
+        return {}
+
+    start_day = 1 if config.total_days <= 1 else 2 if config.total_days <= 5 else 3
+    start_day = min(start_day, config.total_days)
+    available_days = list(range(start_day, config.total_days + 1)) or [1]
+
+    if piece_count == 1:
+        return {1: available_days[0]}
+
+    last_available_index = max(0, len(available_days) - 1)
+    due_days: dict[int, int] = {}
+    for piece_index in range(1, piece_count + 1):
+        offset = round(((piece_index - 1) / (piece_count - 1)) * last_available_index)
+        due_days[piece_index] = available_days[offset]
+    return due_days
+
+
+def _day_to_due_shift(day: int, config: GameConfig) -> int:
+    """Convert a one-based due day to the final shift of that day."""
+    clamped_day = max(1, min(config.total_days, int(day)))
+    return max(1, min(config.deadline_shift, clamped_day * config.shifts_per_day))
 
 
 def _candidate_workcenters(

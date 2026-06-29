@@ -349,12 +349,17 @@ INDEX_HTML = r"""<!doctype html>
       background: rgba(22, 124, 120, 0.08);
       font-size: 11px;
       font-weight: 760;
+      line-height: 1;
       white-space: nowrap;
     }
     .metric-hint::after {
-      content: "⌄";
-      font-size: 12px;
-      line-height: 1;
+      content: "";
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 5px solid currentColor;
+      flex: 0 0 auto;
     }
     .metric-popover {
       display: none;
@@ -499,7 +504,18 @@ INDEX_HTML = r"""<!doctype html>
       padding: 14px;
     }
     .inline-decisions .decision {
-      max-width: 820px;
+      width: 100%;
+    }
+    .decision-choices {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 8px;
+      padding: 10px;
+    }
+    .decision-choices .choice {
+      width: 100%;
+      min-height: 76px;
+      margin: 0;
     }
     .inline-decision-actions {
       display: flex;
@@ -540,7 +556,8 @@ INDEX_HTML = r"""<!doctype html>
     }
     .chart-frame {
       width: 100%;
-      overflow: hidden;
+      position: relative;
+      overflow: visible;
     }
     .chart-frame svg {
       display: block;
@@ -578,6 +595,39 @@ INDEX_HTML = r"""<!doctype html>
     }
     .chart-player { color: var(--teal); }
     .chart-echo { color: var(--violet); }
+    .chart-dot {
+      cursor: pointer;
+    }
+    .chart-dot:focus {
+      outline: none;
+      filter: drop-shadow(0 0 4px rgba(22, 124, 120, 0.32));
+    }
+    .chart-tooltip {
+      position: absolute;
+      z-index: 5;
+      display: none;
+      width: min(320px, calc(100vw - 64px));
+      padding: 10px 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--ink);
+      box-shadow: var(--shadow);
+      font-size: 12px;
+      line-height: 1.35;
+      pointer-events: none;
+    }
+    .chart-tooltip.active { display: block; }
+    .chart-tooltip strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 13px;
+    }
+    .chart-tooltip div { margin-top: 3px; }
+    html[data-theme="dark"] .chart-tooltip {
+      background: #1a202a;
+      border-color: #3a4352;
+    }
     .submarine-puzzle {
       display: grid;
       gap: 10px;
@@ -899,7 +949,7 @@ INDEX_HTML = r"""<!doctype html>
           </div>
         </div>
         <div class="split">
-          <div class="reveal-panel"><h3>Subjobs Complete Over Time</h3><div id="finalCompletionChart"></div></div>
+          <div class="reveal-panel"><h3>Decision Score Impact</h3><div id="finalCompletionChart"></div></div>
           <div class="reveal-panel"><h3>Metric Comparison</h3><table id="finalTable"></table></div>
           <div class="reveal-panel"><h3>Outcome Drivers</h3><ul class="notes" id="finalNotes"></ul></div>
           <div class="reveal-panel"><h3>Decision Audit</h3><table id="decisionAuditTable"></table></div>
@@ -1524,68 +1574,157 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function renderCompletionChart(history) {
-      const questions = Array.isArray(history?.questions)
-        ? history.questions
-        : (Array.isArray(history?.days) ? history.days : []);
-      const player = Array.isArray(history?.player) ? history.player : [];
-      const echo = Array.isArray(history?.automated) ? history.automated : [];
-      const count = Math.min(questions.length, player.length, echo.length);
-      if (!count) return `<div class="subtle">No completion history recorded.</div>`;
+      const decisionPoints = Array.isArray(history?.decisionPoints) ? history.decisionPoints : [];
+      const count = decisionPoints.length;
+      if (!count) return `<div class="subtle">No decision score history recorded.</div>`;
 
       const width = 640;
       const height = 260;
-      const pad = { left: 44, right: 18, top: 18, bottom: 42 };
-      const maxCompleted = Math.max(1, Number(history?.total) || 0, ...player, ...echo);
-      const maxIndex = Math.max(1, count - 1);
+      const pad = { left: 54, right: 18, top: 18, bottom: 42 };
+      const formatImpact = (value) => {
+        const number = Number(value) || 0;
+        return `${number >= 0 ? "+" : ""}${number.toFixed(2)}`;
+      };
+      const playerImpact = decisionPoints.map(decisionPoint => Number(decisionPoint.playerDelta) || 0);
+      const echoImpact = decisionPoints.map(decisionPoint => Number(decisionPoint.echoDelta) || 0);
+      const rawMin = Math.min(0, ...playerImpact, ...echoImpact);
+      const rawMax = Math.max(0, ...playerImpact, ...echoImpact);
+      const scoreSpan = Math.max(1, rawMax - rawMin);
+      const minScore = rawMin - scoreSpan * 0.15;
+      const maxScore = rawMax + scoreSpan * 0.15;
       const plotWidth = width - pad.left - pad.right;
       const plotHeight = height - pad.top - pad.bottom;
       const point = (value, index) => {
-        const x = pad.left + (index / maxIndex) * plotWidth;
-        const y = pad.top + (1 - Math.max(0, Math.min(maxCompleted, value)) / maxCompleted) * plotHeight;
+        const x = count === 1 ? pad.left + plotWidth / 2 : pad.left + (index / (count - 1)) * plotWidth;
+        const y = pad.top + ((maxScore - value) / (maxScore - minScore)) * plotHeight;
         return [x, y];
       };
       const pathFor = (series) => series.slice(0, count).map((value, index) => {
         const [x, y] = point(Number(value) || 0, index);
         return `${index ? "L" : "M"} ${x.toFixed(1)} ${y.toFixed(1)}`;
       }).join(" ");
-      const yTicks = [...new Set([0, Math.round(maxCompleted / 2), maxCompleted])];
-      const xTicks = [...new Set([0, Math.floor(maxIndex / 2), maxIndex])];
+      const yTicks = rawMin === rawMax
+        ? [-1, 0, 1]
+        : [...new Set([rawMin, 0, rawMax].map(value => Number(value.toFixed(2))))].sort((a, b) => a - b);
+      const xTicks = count <= 3
+        ? Array.from({ length: count }, (_, index) => index)
+        : [...new Set([0, Math.floor((count - 1) / 2), count - 1])];
       const yGrid = yTicks.map(value => {
         const [, y] = point(value, 0);
         return `
           <line class="chart-grid" x1="${pad.left}" y1="${y.toFixed(1)}" x2="${(width - pad.right).toFixed(1)}" y2="${y.toFixed(1)}"></line>
-          <text class="chart-label" x="${pad.left - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">${value}</text>
+          <text class="chart-label" x="${pad.left - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">${formatImpact(value)}</text>
         `;
       }).join("");
       const xLabels = xTicks.map(index => {
         const [x] = point(0, index);
-        const question = questions[index] ?? index;
-        const label = question === 0 ? "Start" : `Question ${question}`;
+        const sequence = Number(decisionPoints[index]?.sequence || index + 1);
+        const label = `Q${sequence}`;
         return `<text class="chart-label" x="${x.toFixed(1)}" y="${height - 12}" text-anchor="middle">${escapeHtml(label)}</text>`;
       }).join("");
-      const [playerX, playerY] = point(Number(player[count - 1]) || 0, count - 1);
-      const [echoX, echoY] = point(Number(echo[count - 1]) || 0, count - 1);
+      const decisionAttrs = (decisionPoint, series) => `
+        tabindex="0"
+        data-series="${escapeHtml(series)}"
+        data-day="${escapeHtml(decisionPoint.day || "-")}"
+        data-question="${escapeHtml(decisionPoint.questionTitle || decisionPoint.questionText || decisionPoint.questionId || "-")}"
+        data-player-choice="${escapeHtml(decisionPoint.playerChoice || "-")}"
+        data-echo-choice="${escapeHtml(decisionPoint.echoChoice || "-")}"
+        data-player-impact="${escapeHtml(formatImpact(decisionPoint.playerDelta))}"
+        data-echo-impact="${escapeHtml(formatImpact(decisionPoint.echoDelta))}"
+        data-player-cumulative="${escapeHtml(formatImpact(decisionPoint.playerCumulativeScore))}"
+        data-echo-cumulative="${escapeHtml(formatImpact(decisionPoint.echoCumulativeScore))}"
+        data-affected="${escapeHtml(decisionPoint.affectedLabel || "-")}"
+        onmousemove="showDecisionChartTooltip(event, this)"
+        onmouseleave="hideDecisionChartTooltip()"
+        onfocus="showDecisionChartTooltip(event, this)"
+        onblur="hideDecisionChartTooltip()"
+      `;
+      const decisionMarker = (decisionPoint, series, index) => {
+        const values = series === "Player" ? playerImpact : echoImpact;
+        const value = Number(values[index]) || 0;
+        const [x, y] = point(value, index);
+        if (series === "Player") {
+          return `
+            <circle class="chart-dot chart-player-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.8" fill="var(--teal)" stroke="#fff" stroke-width="1.4" ${decisionAttrs(decisionPoint, series)}></circle>
+          `;
+        }
+        return `
+          <circle class="chart-dot chart-echo-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5.6" fill="var(--panel)" stroke="var(--violet)" stroke-width="2.2" ${decisionAttrs(decisionPoint, series)}></circle>
+        `;
+      };
 
       return `
         <div class="completion-chart">
           <div class="chart-legend">
-            <span class="chart-key chart-player"><span class="chart-swatch"></span>Your schedule</span>
-            <span class="chart-key chart-echo"><span class="chart-swatch"></span>ECHO benchmark</span>
+            <span class="chart-key chart-player"><span class="chart-swatch"></span>Your impact</span>
+            <span class="chart-key chart-echo"><span class="chart-swatch"></span>ECHO impact</span>
           </div>
           <div class="chart-frame">
-            <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Line chart comparing cumulative subjobs completed by player and ECHO by question">
+            <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Line chart comparing decision score impact by question for player and ECHO">
               ${yGrid}
               <line class="chart-axis" x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}"></line>
               <line class="chart-axis" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${height - pad.bottom}"></line>
               ${xLabels}
-              <path d="${pathFor(player)}" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-              <path d="${pathFor(echo)}" fill="none" stroke="var(--violet)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-              <circle cx="${playerX.toFixed(1)}" cy="${playerY.toFixed(1)}" r="4" fill="var(--teal)"></circle>
-              <circle cx="${echoX.toFixed(1)}" cy="${echoY.toFixed(1)}" r="4" fill="var(--violet)"></circle>
+              <path d="${pathFor(playerImpact)}" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path d="${pathFor(echoImpact)}" fill="none" stroke="var(--violet)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+              <g>${decisionPoints.map((decisionPoint, index) => decisionMarker(decisionPoint, "Player", index)).join("")}</g>
+              <g>${decisionPoints.map((decisionPoint, index) => decisionMarker(decisionPoint, "ECHO", index)).join("")}</g>
             </svg>
+            <div class="chart-tooltip" id="decisionChartTooltip"></div>
           </div>
         </div>
       `;
+    }
+
+    function showDecisionChartTooltip(event, marker) {
+      const tooltip = $("decisionChartTooltip");
+      if (!tooltip || !marker) return;
+      const data = marker.dataset;
+      tooltip.innerHTML = `
+        <strong>${escapeHtml(data.series || "Decision")} point</strong>
+        <div>Day ${escapeHtml(data.day || "-")}</div>
+        <div>Question: ${escapeHtml(data.question || "-")}</div>
+        <div>Player picked: ${escapeHtml(data.playerChoice || "-")}</div>
+        <div>ECHO picked: ${escapeHtml(data.echoChoice || "-")}</div>
+        <div>Player impact: ${escapeHtml(data.playerImpact || "+0.00")} (${escapeHtml(data.playerCumulative || "+0.00")} cumulative)</div>
+        <div>ECHO impact: ${escapeHtml(data.echoImpact || "+0.00")} (${escapeHtml(data.echoCumulative || "+0.00")} cumulative)</div>
+        <div>Job/Subjob: ${escapeHtml(data.affected || "-")}</div>
+      `;
+      tooltip.classList.add("active");
+      positionDecisionChartTooltip(event, marker, tooltip);
+    }
+
+    function positionDecisionChartTooltip(event, marker, tooltip) {
+      const frame = tooltip.parentElement;
+      if (!frame) return;
+      const frameRect = frame.getBoundingClientRect();
+      const markerRect = marker.getBoundingClientRect();
+      const clientX = Number.isFinite(event?.clientX) && event.clientX > 0
+        ? event.clientX
+        : markerRect.left + markerRect.width / 2;
+      const clientY = Number.isFinite(event?.clientY) && event.clientY > 0
+        ? event.clientY
+        : markerRect.top;
+      const tooltipWidth = tooltip.offsetWidth || 260;
+      const tooltipHeight = tooltip.offsetHeight || 120;
+      let left = clientX - frameRect.left + 12;
+      let top = clientY - frameRect.top - tooltipHeight - 10;
+
+      if (left + tooltipWidth > frameRect.width) {
+        left = Math.max(8, frameRect.width - tooltipWidth - 8);
+      }
+      if (top < 8) {
+        top = clientY - frameRect.top + 14;
+      }
+
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top = `${top}px`;
+    }
+
+    function hideDecisionChartTooltip() {
+      const tooltip = $("decisionChartTooltip");
+      if (!tooltip) return;
+      tooltip.classList.remove("active");
     }
 
     function renderMetrics() {
@@ -1675,6 +1814,12 @@ INDEX_HTML = r"""<!doctype html>
       const body = $("inlineDecisionBody");
       if (!subtitle || !body) return;
 
+      if (modalVisible && pendingAdvanceState) {
+        subtitle.textContent = "";
+        body.innerHTML = "";
+        return;
+      }
+
       if (!state || state.gameOver) {
         subtitle.textContent = "Run complete";
         body.innerHTML = `
@@ -1708,12 +1853,14 @@ INDEX_HTML = r"""<!doctype html>
               </div>
               <p>${escapeHtml(nextCard.description)}</p>
             </div>
-            ${nextCard.choices.map(choice => `
-              <button class="choice ${pendingChoice === choice.id ? "selected" : ""}" onclick="selectPendingChoice('${choice.id}')">
-                <strong>${escapeHtml(choice.label)}</strong>
-                <small>${escapeHtml(choice.description)}</small>
-              </button>
-            `).join("")}
+            <div class="decision-choices">
+              ${nextCard.choices.map(choice => `
+                <button class="choice ${pendingChoice === choice.id ? "selected" : ""}" onclick="selectPendingChoice('${choice.id}')">
+                  <strong>${escapeHtml(choice.label)}</strong>
+                  <small>${escapeHtml(choice.description)}</small>
+                </button>
+              `).join("")}
+            </div>
             <div class="inline-decision-actions">
               <button ${!pendingChoice ? "disabled" : ""} class="primary" onclick="submitDecision('${nextCard.id}', ${isFinalDecision})">${submitLabel}</button>
             </div>
