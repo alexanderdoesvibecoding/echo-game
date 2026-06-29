@@ -323,12 +323,57 @@ INDEX_HTML = r"""<!doctype html>
       padding: 10px 11px;
       background: #fff;
       min-height: 74px;
+      position: relative;
     }
     .metric strong {
       display: block;
       font-size: 22px;
       line-height: 1.1;
       margin-top: 6px;
+    }
+    .metric.hoverable {
+      cursor: help;
+    }
+    .metric-popover {
+      display: none;
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      z-index: 50;
+      width: min(470px, calc(100vw - 44px));
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      cursor: default;
+    }
+    .metric.hoverable:hover .metric-popover,
+    .metric.hoverable:focus-within .metric-popover {
+      display: block;
+    }
+    .metric-popover h3 {
+      margin-bottom: 7px;
+    }
+    .metric-popover table {
+      table-layout: auto;
+      font-size: 12px;
+    }
+    .metric-popover th,
+    .metric-popover td {
+      padding: 6px;
+      white-space: nowrap;
+    }
+    .metric-popover td:first-child {
+      white-space: normal;
+      min-width: 92px;
+    }
+    .metric-popover .timing {
+      font-weight: 760;
+    }
+    html[data-theme="dark"] .metric-popover {
+      background: #1a202a;
+      border-color: #3a4352;
     }
 
     .progress {
@@ -529,44 +574,51 @@ INDEX_HTML = r"""<!doctype html>
       overflow: hidden;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: linear-gradient(180deg, #eef5f5 0%, #f9fbf8 100%);
+      background: linear-gradient(180deg, #f0f4f2 0%, #fafbf8 100%);
     }
     .puzzle-stage svg {
       display: block;
       width: 100%;
       height: auto;
     }
-    .submarine-outline {
-      fill: rgba(22, 124, 120, 0.08);
-      stroke: rgba(13, 85, 82, 0.3);
-      stroke-width: 2;
-    }
-    .submarine-detail {
-      fill: none;
-      stroke: rgba(13, 85, 82, 0.32);
-      stroke-width: 2;
-      stroke-linecap: round;
+    .puzzle-slot {
+      fill: rgba(255, 255, 255, 0.48);
+      stroke: rgba(102, 112, 109, 0.42);
+      stroke-width: 1.6;
+      stroke-dasharray: 6 5;
     }
     .puzzle-piece {
+      transition: opacity 180ms ease, filter 180ms ease, stroke-width 180ms ease;
+    }
+    .puzzle-piece.placed {
+      fill: #728481;
       stroke: #f7faf7;
-      stroke-width: 1.2;
-      transition: opacity 180ms ease, filter 180ms ease;
+      stroke-width: 1.5;
     }
-    .puzzle-piece.pending {
-      fill: rgba(255, 255, 255, 0.76);
-      stroke: rgba(102, 112, 109, 0.44);
-      stroke-dasharray: 5 4;
+    .puzzle-piece.unplaced {
+      fill: #fbfaf4;
+      stroke: rgba(102, 112, 109, 0.76);
+      stroke-width: 1.7;
+      filter: drop-shadow(0 7px 9px rgba(32, 37, 36, 0.16));
     }
-    .puzzle-piece.on-time {
-      fill: var(--green);
-    }
-    .puzzle-piece.late {
-      fill: #d8a72f;
-    }
-    .puzzle-piece.added {
+    .puzzle-piece.newly-placed {
       stroke: var(--ink);
-      stroke-width: 2.2;
-      filter: drop-shadow(0 4px 6px rgba(32, 37, 36, 0.22));
+      stroke-width: 2.4;
+      filter: drop-shadow(0 4px 5px rgba(32, 37, 36, 0.18));
+    }
+    .piece-detail {
+      fill: none;
+      stroke: rgba(32, 37, 36, 0.34);
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+    .piece-detail-fill {
+      fill: rgba(247, 250, 247, 0.65);
+      stroke: rgba(32, 37, 36, 0.38);
+      stroke-width: 3;
+      pointer-events: none;
     }
     .puzzle-label {
       font-weight: 800;
@@ -591,28 +643,39 @@ INDEX_HTML = r"""<!doctype html>
       border: 1px solid var(--line);
       display: inline-block;
     }
-    .legend-swatch.on-time { background: var(--green); }
-    .legend-swatch.late { background: #d8a72f; }
-    .legend-swatch.pending { background: rgba(255, 255, 255, 0.76); }
+    .legend-swatch.placed { background: #728481; }
+    .legend-swatch.waiting { background: #fbfaf4; }
+    .legend-swatch.slot { background: rgba(255, 255, 255, 0.48); border-style: dashed; }
     .puzzle-added .badge {
       border-radius: 6px;
     }
     html[data-theme="dark"] .puzzle-stage {
-      background: linear-gradient(180deg, #16212a 0%, #111821 100%);
+      background: linear-gradient(180deg, #17212a 0%, #111821 100%);
     }
-    html[data-theme="dark"] .submarine-outline {
-      fill: rgba(22, 124, 120, 0.12);
-      stroke: rgba(93, 217, 224, 0.28);
-    }
-    html[data-theme="dark"] .submarine-detail {
-      stroke: rgba(93, 217, 224, 0.34);
-    }
-    html[data-theme="dark"] .puzzle-piece.pending {
-      fill: rgba(37, 45, 56, 0.78);
+    html[data-theme="dark"] .puzzle-slot {
+      fill: rgba(37, 45, 56, 0.42);
       stroke: rgba(165, 176, 184, 0.42);
     }
-    html[data-theme="dark"] .legend-swatch.pending {
-      background: rgba(37, 45, 56, 0.78);
+    html[data-theme="dark"] .puzzle-piece.placed {
+      fill: #7f9490;
+      stroke: #111821;
+    }
+    html[data-theme="dark"] .puzzle-piece.unplaced {
+      fill: #252d38;
+      stroke: rgba(165, 176, 184, 0.78);
+    }
+    html[data-theme="dark"] .piece-detail {
+      stroke: rgba(240, 243, 245, 0.38);
+    }
+    html[data-theme="dark"] .piece-detail-fill {
+      fill: rgba(240, 243, 245, 0.14);
+      stroke: rgba(240, 243, 245, 0.42);
+    }
+    html[data-theme="dark"] .legend-swatch.waiting {
+      background: #252d38;
+    }
+    html[data-theme="dark"] .legend-swatch.slot {
+      background: rgba(37, 45, 56, 0.42);
     }
     .notes {
       margin: 0;
@@ -1291,51 +1354,150 @@ INDEX_HTML = r"""<!doctype html>
       `;
     }
 
-    function puzzleGridFor(count) {
-      if (count <= 0) return { columns: 1, rows: 1 };
-      if (count <= 6) return { columns: count, rows: 1 };
-      if (count <= 12) return { columns: 4, rows: Math.ceil(count / 4) };
-      if (count <= 18) return { columns: 5, rows: Math.ceil(count / 5) };
-      const columns = Math.ceil(Math.sqrt(count * 1.7));
-      return { columns, rows: Math.ceil(count / columns) };
+    function submarinePieceSlots(total) {
+      if (total <= 0) return [];
+      const n = (value) => Number(value).toFixed(1);
+      const hullTop = (x) => 154 + Math.pow(Math.abs(x - 350) / 230, 1.75) * 19;
+      const hullBottom = (x) => 286 - Math.pow(Math.abs(x - 350) / 230, 1.75) * 19;
+      const wholePath = "M 70 220 C 70 138, 184 144, 365 144 C 630 144, 730 174, 730 220 C 730 266, 630 296, 365 296 C 184 296, 70 302, 70 220 Z";
+      const tailSlot = () => ({
+        part: "tail section",
+        path: "M 126 188 L 66 166 L 84 220 L 66 274 L 126 252 L 150 220 Z",
+        centerX: 106,
+        centerY: 220,
+        labelY: 222,
+        labelSize: 10,
+        details: [],
+      });
+      const noseSlot = () => ({
+        part: "front section",
+        path: "M 570 172 C 660 172 724 188 738 220 C 724 252 660 268 570 268 Z",
+        centerX: 640,
+        centerY: 220,
+        labelY: 241,
+        labelSize: 11,
+        details: [`<circle class="piece-detail-fill" cx="640" cy="209" r="12"></circle>`],
+      });
+      const sailSlot = () => ({
+        part: "sail and mast",
+        path: "M 340 154 L 354 90 L 424 90 L 438 154 Z",
+        centerX: 389,
+        centerY: 124,
+        labelY: 128,
+        labelSize: 10,
+        details: [
+          `<path class="piece-detail" d="M 376 90 L 376 68 L 390 68 M 408 90 L 408 72"></path>`,
+        ],
+      });
+      const bodySlot = (index, count) => {
+        const startX = 130;
+        const endX = 570;
+        const width = (endX - startX) / count;
+        const x1 = startX + index * width;
+        const x2 = index === count - 1 ? endX : startX + (index + 1) * width;
+        const top1 = hullTop(x1);
+        const top2 = hullTop(x2);
+        const bottom1 = hullBottom(x1);
+        const bottom2 = hullBottom(x2);
+        const curve = Math.max(18, width * 0.32);
+        const path = [
+          `M ${n(x1)} ${n(top1)}`,
+          `C ${n(x1 + curve)} ${n(top1 - 8)} ${n(x2 - curve)} ${n(top2 - 8)} ${n(x2)} ${n(top2)}`,
+          `L ${n(x2)} ${n(bottom2)}`,
+          `C ${n(x2 - curve)} ${n(bottom2 + 8)} ${n(x1 + curve)} ${n(bottom1 + 8)} ${n(x1)} ${n(bottom1)}`,
+          "Z",
+        ].join(" ");
+        const portholes = [218, 282, 456, 520]
+          .filter((x) => x > x1 + 16 && x < x2 - 16)
+          .map((x) => `<circle class="piece-detail-fill" cx="${x}" cy="207" r="12"></circle>`);
+        let part = "middle hull";
+        if (count === 1) part = "main hull";
+        else if (index === 0) part = "aft hull";
+        else if (index === count - 1) part = "forward hull";
+        else part = `middle hull ${index}`;
+        return {
+          part,
+          path,
+          centerX: (x1 + x2) / 2,
+          centerY: (top1 + top2 + bottom1 + bottom2) / 4,
+          labelY: portholes.length ? 242 : 222,
+          labelSize: Math.max(9, Math.min(12, width * 0.13)),
+          details: portholes,
+        };
+      };
+
+      if (total === 1) {
+        return [{
+          part: "submarine",
+          path: wholePath,
+          centerX: 400,
+          centerY: 220,
+          labelY: 222,
+          labelSize: 13,
+          details: [],
+        }];
+      }
+      if (total === 2) {
+        return [tailSlot(), noseSlot()];
+      }
+      if (total === 3) {
+        return [
+          bodySlot(0, 1),
+          noseSlot(),
+          sailSlot(),
+        ];
+      }
+
+      const bodyCount = Math.max(1, total - 3);
+      const slots = [tailSlot()];
+      for (let index = 0; index < bodyCount; index += 1) {
+        slots.push(bodySlot(index, bodyCount));
+      }
+      slots.push(noseSlot(), sailSlot());
+      return slots.slice(0, total);
     }
 
-    function jigsawPath(x, y, width, height, index, columns, total) {
-      const row = Math.floor(index / columns);
-      const col = index % columns;
-      const n = (value) => Number(value).toFixed(1);
-      const tab = Math.max(5, Math.min(width, height) * 0.16);
-      const topInterior = index - columns >= 0;
-      const rightInterior = col < columns - 1 && index + 1 < total;
-      const bottomInterior = index + columns < total;
-      const leftInterior = col > 0;
-      const topDir = (row + col) % 2 === 0 ? -1 : 1;
-      const rightDir = (row + col) % 2 === 0 ? 1 : -1;
-      const bottomDir = (row + col) % 2 === 0 ? 1 : -1;
-      const leftDir = (row + col) % 2 === 0 ? -1 : 1;
+    function loosePiecePosition(index) {
+      const positions = [
+        { x: 112, y: 64, angle: -10 },
+        { x: 260, y: 56, angle: 7 },
+        { x: 430, y: 62, angle: -5 },
+        { x: 610, y: 70, angle: 9 },
+        { x: 128, y: 356, angle: 8 },
+        { x: 300, y: 365, angle: -7 },
+        { x: 480, y: 360, angle: 6 },
+        { x: 650, y: 344, angle: -8 },
+      ];
+      if (index < positions.length) return positions[index];
+      const extra = index - positions.length;
+      const column = extra % 4;
+      const row = Math.floor(extra / 4);
+      return {
+        x: 120 + column * 170,
+        y: row % 2 === 0 ? 50 : 370,
+        angle: index % 2 === 0 ? -6 : 6,
+      };
+    }
 
-      let d = `M ${n(x)} ${n(y)}`;
-      if (topInterior) {
-        d += ` H ${n(x + width * 0.38)} C ${n(x + width * 0.43)} ${n(y)} ${n(x + width * 0.42)} ${n(y + topDir * tab)} ${n(x + width * 0.5)} ${n(y + topDir * tab)} C ${n(x + width * 0.58)} ${n(y + topDir * tab)} ${n(x + width * 0.57)} ${n(y)} ${n(x + width * 0.62)} ${n(y)} H ${n(x + width)}`;
-      } else {
-        d += ` H ${n(x + width)}`;
-      }
-      if (rightInterior) {
-        d += ` V ${n(y + height * 0.38)} C ${n(x + width)} ${n(y + height * 0.43)} ${n(x + width + rightDir * tab)} ${n(y + height * 0.42)} ${n(x + width + rightDir * tab)} ${n(y + height * 0.5)} C ${n(x + width + rightDir * tab)} ${n(y + height * 0.58)} ${n(x + width)} ${n(y + height * 0.57)} ${n(x + width)} ${n(y + height * 0.62)} V ${n(y + height)}`;
-      } else {
-        d += ` V ${n(y + height)}`;
-      }
-      if (bottomInterior) {
-        d += ` H ${n(x + width * 0.62)} C ${n(x + width * 0.57)} ${n(y + height)} ${n(x + width * 0.58)} ${n(y + height + bottomDir * tab)} ${n(x + width * 0.5)} ${n(y + height + bottomDir * tab)} C ${n(x + width * 0.42)} ${n(y + height + bottomDir * tab)} ${n(x + width * 0.43)} ${n(y + height)} ${n(x + width * 0.38)} ${n(y + height)} H ${n(x)}`;
-      } else {
-        d += ` H ${n(x)}`;
-      }
-      if (leftInterior) {
-        d += ` V ${n(y + height * 0.62)} C ${n(x)} ${n(y + height * 0.57)} ${n(x + leftDir * tab)} ${n(y + height * 0.58)} ${n(x + leftDir * tab)} ${n(y + height * 0.5)} C ${n(x + leftDir * tab)} ${n(y + height * 0.42)} ${n(x)} ${n(y + height * 0.43)} ${n(x)} ${n(y + height * 0.38)} V ${n(y)}`;
-      } else {
-        d += ` V ${n(y)}`;
-      }
-      return `${d} Z`;
+    function renderPuzzleSection(tile, slot, className, transform = "") {
+      const label = escapeHtml(tile.label || tile.id || "");
+      const assembled = className === "placed";
+      const status = assembled
+        ? `Assembled${tile.completedAt ? ` at ${tile.completedAt}` : ""}`
+        : `Waiting outside${tile.due ? `; due ${tile.due}` : ""}`;
+      const title = `${tile.name || tile.id}: ${slot.part}. ${status}.`;
+      const transformAttr = transform ? ` transform="${transform}"` : "";
+      const newlyPlaced = assembled && tile.newlyCompleted ? " newly-placed" : "";
+      const labelFill = assembled ? "#ffffff" : "var(--ink)";
+      return `
+        <g class="puzzle-section ${className}"${transformAttr}>
+          <path class="puzzle-piece ${className}${newlyPlaced}" d="${slot.path}">
+            <title>${escapeHtml(title)}</title>
+          </path>
+          ${(slot.details || []).join("")}
+          <text class="puzzle-label" x="${slot.centerX.toFixed(1)}" y="${(slot.labelY || slot.centerY).toFixed(1)}" font-size="${(slot.labelSize || 11).toFixed(1)}" fill="${labelFill}">${label}</text>
+        </g>
+      `;
     }
 
     function renderSubmarinePuzzle(puzzle, instanceId) {
@@ -1343,79 +1505,51 @@ INDEX_HTML = r"""<!doctype html>
       if (!tiles.length) return "";
 
       const total = tiles.length;
-      const { columns, rows } = puzzleGridFor(total);
-      const width = 760;
-      const height = 290;
-      const gridX = 122;
-      const gridY = rows === 1 ? 118 : 86;
-      const gridWidth = 520;
-      const gridHeight = rows === 1 ? 82 : 126;
-      const cellWidth = gridWidth / columns;
-      const cellHeight = gridHeight / rows;
-      const labelSize = Math.max(9, Math.min(16, cellWidth * 0.2, cellHeight * 0.32));
-      const safeId = String(instanceId || "summary").replace(/[^a-zA-Z0-9_-]/g, "");
-      const clipId = `submarineClip-${safeId}`;
-      const bodyPath = "M 85 155 C 85 92, 175 97, 375 97 C 610 97, 700 114, 700 155 C 700 196, 610 213, 375 213 C 175 213, 85 218, 85 155 Z";
-      const tailPath = "M 115 120 L 75 105 L 85 155 Z M 115 190 L 75 205 L 85 155 Z";
-      const towerPath = "M 320 98 L 330 40 L 400 40 L 411 98 Z";
-      const detailLinesPath = "M 65 155 L 90 155 M 55 115 L 65 155 L 55 195 M 350 40 L 350 18 L 360 18 M 380 40 L 380 23";
-      const portHoles = [215, 275, 495, 555]
-        .map(x => `<circle cx="${x}" cy="155" r="14"></circle>`)
-        .join("");
-      const tileMarkup = tiles.map((tile, index) => {
-        const col = index % columns;
-        const row = Math.floor(index / columns);
-        const x = gridX + col * cellWidth;
-        const y = gridY + row * cellHeight;
-        const centerX = x + cellWidth / 2;
-        const centerY = y + cellHeight / 2;
-        const tone = tile.tone === "late" ? "late" : tile.tone === "on-time" ? "on-time" : "pending";
-        const added = tile.newlyCompleted ? " added" : "";
-        const label = escapeHtml(tile.label || tile.id || "");
-        const status = tile.completed
-          ? `${tile.late ? "Late" : "On time"}; completed ${tile.completedAt || ""}`
-          : `Pending; due ${tile.due || ""}`;
-        return `
-          <path class="puzzle-piece ${tone}${added}" d="${jigsawPath(x, y, cellWidth, cellHeight, index, columns, total)}">
-            <title>${escapeHtml(`${tile.name || tile.id}: ${status}`)}</title>
-          </path>
-          <text class="puzzle-label" x="${centerX.toFixed(1)}" y="${centerY.toFixed(1)}" font-size="${labelSize.toFixed(1)}" fill="${tile.completed ? "#fff" : "var(--muted)"}">${label}</text>
-        `;
-      }).join("");
-      const addedToday = tiles.filter(tile => tile.newlyCompleted);
-      const addedMarkup = addedToday.length
-        ? addedToday.map(tile => `<span class="badge ${tile.late ? "warn" : "good"}">${escapeHtml(tile.label)}</span>`).join("")
-        : `<span class="subtle">No jobs were added today.</span>`;
+      const width = 800;
+      const height = 420;
+      const slots = submarinePieceSlots(total);
+      const slotMarkup = slots.map((slot) => `
+        <path class="puzzle-slot" d="${slot.path}">
+          <title>${escapeHtml(`${slot.part} slot`)}</title>
+        </path>
+      `).join("");
+      const placedMarkup = tiles.map((tile, index) => (
+        tile.completed ? renderPuzzleSection(tile, slots[index], "placed") : ""
+      )).join("");
+      const unplacedMarkup = tiles
+        .map((tile, index) => ({ tile, index, slot: slots[index] }))
+        .filter((item) => !item.tile.completed)
+        .map((item, looseIndex) => {
+          const position = loosePiecePosition(looseIndex);
+          const dx = position.x - item.slot.centerX;
+          const dy = position.y - item.slot.centerY;
+          const transform = `translate(${dx.toFixed(1)} ${dy.toFixed(1)}) rotate(${position.angle} ${item.slot.centerX.toFixed(1)} ${item.slot.centerY.toFixed(1)})`;
+          return renderPuzzleSection(item.tile, item.slot, "unplaced", transform);
+        }).join("");
+      const placedToday = tiles.filter(tile => tile.completed && tile.newlyCompleted);
+      const placedMarkupToday = placedToday.length
+        ? placedToday.map(tile => `<span class="badge">${escapeHtml(tile.label)}</span>`).join("")
+        : `<span class="subtle">No jobs were placed today.</span>`;
 
       return `
         <div class="submarine-puzzle">
           <div class="puzzle-caption">
             <strong>Submarine Assembly</strong>
-            <span>${puzzle.completed}/${puzzle.total} jobs assembled; ${puzzle.completedToday} added today</span>
+            <span>${puzzle.completed}/${puzzle.total} sections assembled; ${puzzle.completedToday} placed today</span>
           </div>
           <div class="puzzle-stage">
-            <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Submarine jigsaw showing completed jobs">
-              <defs>
-                <clipPath id="${clipId}">
-                  <path d="${bodyPath}"></path>
-                  <path d="${tailPath}"></path>
-                  <path d="${towerPath}"></path>
-                </clipPath>
-              </defs>
-              <path class="submarine-outline" d="${tailPath}"></path>
-              <path class="submarine-outline" d="${bodyPath}"></path>
-              <path class="submarine-outline" d="${towerPath}"></path>
-              <g clip-path="url(#${clipId})">${tileMarkup}</g>
-              <path class="submarine-detail" d="${detailLinesPath}" fill="none" stroke-width="5" stroke-linecap="round"></path>
-              <g class="submarine-detail">${portHoles}</g>
+            <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Submarine puzzle showing assembled and waiting sections">
+              <g aria-hidden="true">${slotMarkup}</g>
+              <g>${placedMarkup}</g>
+              <g>${unplacedMarkup}</g>
             </svg>
           </div>
           <div class="puzzle-legend">
-            <span><span class="legend-swatch on-time"></span> On time</span>
-            <span><span class="legend-swatch late"></span> Late</span>
-            <span><span class="legend-swatch pending"></span> Not complete</span>
+            <span><span class="legend-swatch placed"></span> Assembled in submarine</span>
+            <span><span class="legend-swatch waiting"></span> Waiting outside</span>
+            <span><span class="legend-swatch slot"></span> Empty slot</span>
           </div>
-          <div class="puzzle-added"><span>Added today:</span>${addedMarkup}</div>
+          <div class="puzzle-added"><span>Placed today:</span>${placedMarkupToday}</div>
         </div>
       `;
     }
@@ -1647,19 +1781,57 @@ INDEX_HTML = r"""<!doctype html>
       const snap = state.snapshot;
       const totalSubjobs = snap.jobsCompleted + snap.jobsRemaining;
       const metrics = [
-        ["Jobs Complete", `${snap.piecesCompleted}/${state.pieces.length}`, snap.piecesCompleted / state.pieces.length, "good", "How many top-level jobs are complete.", true],
-        ["Subjobs Complete", `${fmtNum(snap.jobsCompleted)}/${fmtNum(totalSubjobs)}`, snap.jobsCompleted / Math.max(1, totalSubjobs), "good", "Total subjobs finished out of all required work.", true],
-        ["Subjobs Behind Schedule", fmtNum(snap.jobsBehindSchedule), 0, snap.jobsBehindSchedule > 0 ? "warn" : "good", "Incomplete subjobs whose target completion date has already passed.", false],
-        ["Subjobs Late", fmtNum(snap.jobsLate), 0, snap.jobsLate > 0 ? "warn" : "good", "Completed subjobs that finished after their target completion date.", false],
-        ["Schedule Risk", `${Math.round(snap.scheduleRisk)}/100`, snap.scheduleRisk / 100, snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good", "Overall probability of missing the deadline (0 = safe, 100 = critical).", true]
+        ["Jobs Complete", `${snap.piecesCompleted}/${state.pieces.length}`, snap.piecesCompleted / state.pieces.length, "good", "How many top-level jobs are complete.", true, renderJobsMetricPopover()],
+        ["Subjobs Complete", `${fmtNum(snap.jobsCompleted)}/${fmtNum(totalSubjobs)}`, snap.jobsCompleted / Math.max(1, totalSubjobs), "good", "Total subjobs finished out of all required work.", true, ""],
+        ["Subjobs Behind Schedule", fmtNum(snap.jobsBehindSchedule), 0, snap.jobsBehindSchedule > 0 ? "warn" : "good", "Incomplete subjobs whose target completion date has already passed.", false, ""],
+        ["Subjobs Late", fmtNum(snap.jobsLate), 0, snap.jobsLate > 0 ? "warn" : "good", "Completed subjobs that finished after their target completion date.", false, ""],
+        ["Schedule Risk", `${Math.round(snap.scheduleRisk)}/100`, snap.scheduleRisk / 100, snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good", "Overall probability of missing the deadline (0 = safe, 100 = critical).", true, ""]
       ];
-      $("metrics").innerHTML = metrics.map(([label, value, pct, tone, tooltip, showBar]) => `
-        <div class="metric">
+      $("metrics").innerHTML = metrics.map(([label, value, pct, tone, tooltip, showBar, detail]) => `
+        <div class="metric ${detail ? "hoverable" : ""}" ${detail ? `tabindex="0" aria-describedby="jobsMetricPopover"` : ""}>
           <span class="subtle">${label}<span class="info-icon" data-tooltip="${escapeHtml(tooltip)}">i</span></span>
           <strong>${value}</strong>
           ${showBar ? `<div class="progress"><div class="bar ${tone}" style="width:${Math.max(0, Math.min(1, pct)) * 100}%"></div></div>` : ""}
+          ${detail}
         </div>
       `).join("");
+    }
+
+    function renderJobsMetricPopover() {
+      const pieces = Array.isArray(state?.pieces)
+        ? [...state.pieces].sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }))
+        : [];
+      if (!pieces.length) return "";
+
+      return `
+        <div id="jobsMetricPopover" class="metric-popover" role="tooltip">
+          <h3>Jobs</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Subjobs Remaining</th>
+                <th>Projected Finish</th>
+                <th>Timing</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pieces.map(piece => {
+                const remaining = Number(piece.subjobsRemaining ?? Math.max(0, Number(piece.total || 0) - Number(piece.completed || 0)));
+                const total = Number(piece.total || 0);
+                return `
+                  <tr>
+                    <td>${escapeHtml(piece.displayId || piece.id || "-")}</td>
+                    <td>${remaining}/${total}</td>
+                    <td>${escapeHtml(piece.projectedCompletion || "-")}</td>
+                    <td class="timing">${escapeHtml(piece.finishDeltaLabel || "-")}</td>
+                  </tr>
+                `;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
     }
 
     function renderDecisions() {

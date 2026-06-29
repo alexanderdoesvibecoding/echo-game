@@ -246,7 +246,11 @@ class GameSession:
         for piece in sorted(self.player_state.pieces.values(), key=lambda item: (-item.risk_score, item.id)):
             blocked = sum(1 for job_id in piece.job_ids if self.player_state.jobs[job_id].is_blocked)
             critical = any(self.player_state.jobs[job_id].critical_path for job_id in piece.job_ids)
-            last_job = self.player_state.jobs[piece.job_ids[-1]] if piece.job_ids else None
+            due_shift = _piece_due_shift(self.player_state, piece)
+            projected_shift = _piece_projected_completion_shift(self.player_state, piece)
+            completion_shift = _piece_completion_shift(self.player_state, piece)
+            finish_shift = completion_shift or projected_shift
+            finish_delta = due_shift - finish_shift
             piece_jobs: list[dict[str, Any]] = []
             for job_id in piece.job_ids:
                 job = self.player_state.jobs[job_id]
@@ -281,7 +285,11 @@ class GameSession:
                     "progress": round(piece.percent_complete, 3),
                     "blocked": blocked,
                     "critical": critical,
-                    "dueDate": day_shift(last_job.due_shift, self.config.shifts_per_day) if last_job else "-",
+                    "subjobsRemaining": max(0, piece.total_job_count - piece.completed_job_count),
+                    "dueDate": day_shift(due_shift, self.config.shifts_per_day),
+                    "projectedCompletion": day_shift(finish_shift, self.config.shifts_per_day),
+                    "finishDelta": finish_delta,
+                    "finishDeltaLabel": _piece_finish_delta_label(finish_delta, completion_shift is not None),
                     "risk": round(piece.risk_score, 1),
                     "jobs": piece_jobs,
                 }
@@ -1138,13 +1146,80 @@ def _job_was_late(state: SimulationState, job) -> bool:
 
 
 def _piece_due_shift(state: SimulationState, piece: PuzzlePiece) -> int:
-    """Return the top-level job due shift used for puzzle on-time coloring."""
+    """Return the top-level job due shift."""
     due_shifts = [
         state.jobs[job_id].due_shift
         for job_id in piece.job_ids
         if job_id in state.jobs
     ]
     return max(due_shifts, default=state.deadline_shift)
+
+
+def _piece_projected_completion_shift(state: SimulationState, piece: PuzzlePiece) -> int:
+    """Estimate when a top-level job will finish from its remaining dependency path."""
+    completion_shift = _piece_completion_shift(state, piece)
+    if completion_shift is not None:
+        return completion_shift
+
+    job_ids = [job_id for job_id in piece.job_ids if job_id in state.jobs]
+    if not job_ids:
+        return state.current_shift
+
+    piece_job_ids = set(job_ids)
+    memo: dict[str, int] = {}
+
+    def remaining_path(job_id: str) -> int:
+        if job_id in memo:
+            return memo[job_id]
+
+        job = state.jobs[job_id]
+        if job.is_complete:
+            own_remaining = 0
+        else:
+            own_remaining = max(1, job.remaining_duration_shifts)
+            if job.status == JobStatus.QUEUED:
+                own_remaining += min(4, _job_queue_wait(state, job_id))
+            elif job.is_blocked:
+                own_remaining += 3
+
+        downstream = [
+            remaining_path(dependent_id)
+            for dependent_id in job.dependent_job_ids
+            if dependent_id in piece_job_ids
+        ]
+        memo[job_id] = own_remaining + max(downstream, default=0)
+        return memo[job_id]
+
+    incomplete = [
+        job_id
+        for job_id in job_ids
+        if not state.jobs[job_id].is_complete
+    ]
+    if not incomplete:
+        return state.current_shift
+    return state.current_shift + max(remaining_path(job_id) for job_id in incomplete)
+
+
+def _job_queue_wait(state: SimulationState, job_id: str) -> int:
+    """Return a small queue-position estimate for a queued subjob."""
+    job = state.jobs[job_id]
+    if not job.assigned_workcenter_id or job.assigned_workcenter_id not in state.workcenters:
+        return 0
+    wc = state.workcenters[job.assigned_workcenter_id]
+    wait = 1 if wc.current_job_id and wc.current_job_id != job_id else 0
+    if job_id in wc.queue:
+        wait += wc.queue.index(job_id)
+    return wait
+
+
+def _piece_finish_delta_label(delta: int, completed: bool) -> str:
+    """Return compact early/late wording for a top-level job finish estimate."""
+    prefix = "Finished" if completed else "Projected"
+    if delta > 0:
+        return f"{prefix} {delta} shift(s) early"
+    if delta < 0:
+        return f"{prefix} {abs(delta)} shift(s) late"
+    return f"{prefix} on time"
 
 
 def _piece_completion_shift(state: SimulationState, piece: PuzzlePiece) -> int | None:
