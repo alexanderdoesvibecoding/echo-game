@@ -64,7 +64,7 @@ class EchoProfile:
     """Hidden benchmark policy knobs for ECHO's background play."""
 
     echo_choice_lookahead_days: int = 0
-    echo_choice_projection_limit: int = 6
+    echo_choice_projection_limit: int = 0
 
 
 @dataclass(frozen=True)
@@ -87,33 +87,6 @@ class BalancePreset:
 
 GAME_PRESETS: dict[str, BalancePreset] = {
     "normal": BalancePreset(
-        workload=WorkloadProfile(
-            total_days=19,
-            piece_count=13,
-            min_jobs_per_piece=5,
-            max_jobs_per_piece=8,
-            max_job_duration_shifts=4,
-            setup_time_choices=(0, 0, 0, 0, 1),
-            transport_delay_probability=0.16,
-        ),
-        capacity=CapacityProfile(
-            max_workcenters_per_shop=6,
-            min_capable_workcenters_per_capability=3,
-            min_candidate_workcenters_per_job=3,
-            max_candidate_workcenters_per_job=8,
-            max_alternate_workcenters_per_job=4,
-        ),
-        disruptions=DisruptionProfile(
-            min_base_events=6,
-            max_base_events=9,
-            min_extra_quality_rework_events=1,
-            max_extra_quality_rework_events=2,
-            completion_rework_probability=0.10,
-            min_completion_rework_shifts=1,
-            max_completion_rework_shifts=3,
-        ),
-    ),
-    "demo": BalancePreset(
         workload=WorkloadProfile(
             total_days=8,
             piece_count=6,
@@ -183,7 +156,7 @@ class GameConfig:
     max_active_decision_cards_per_day: int = 5
     max_branch_variants_per_day: int = 12
     echo_choice_lookahead_days: int = 0
-    echo_choice_projection_limit: int = 6
+    echo_choice_projection_limit: int = 0
     seed: int | None = None
     use_color: bool = True
     debug: bool = False
@@ -202,6 +175,8 @@ class GameConfig:
         debug: bool = False,
     ) -> "GameConfig":
         """Return a config built from one editable game preset."""
+        if preset == "demo":
+            preset = "normal"
         values = GAME_PRESETS.get(preset)
         if values is None:
             raise ValueError(f"Unknown game preset: {preset}")
@@ -211,8 +186,8 @@ class GameConfig:
 
     @classmethod
     def demo(cls, seed: int | None = None, use_color: bool = True, debug: bool = False) -> "GameConfig":
-        """Return a short scenario that can be completed in one sitting."""
-        return cls.for_preset("demo", seed=seed, use_color=use_color, debug=debug)
+        """Return the normal single-preset scenario for legacy callers."""
+        return cls.for_preset("normal", seed=seed, use_color=use_color, debug=debug)
 
 
 def resolve_seed(seed: int | None) -> int:

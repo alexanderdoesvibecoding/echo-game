@@ -2,7 +2,7 @@
 
 ECHO Adventure is a scheduling strategy game set in a fictional advanced manufacturing yard.
 
-The player acts as a manual scheduler trying to finish a 15-job project in 15 in-game days. Every run creates a reproducible manufacturing scenario with shops, workcenters, subjobs, dependencies, material problems, quality findings, equipment failures, weather, crew pressure, engineering holds, certification issues, and downstream event cascades. A hidden automated scheduler runs the same scenario in parallel and is revealed only at the end as an operational benchmark.
+The player acts as a manual scheduler trying to finish a short manufacturing project before its deadline. Every run creates a reproducible scenario with shops, workcenters, subjobs, dependencies, routing pressure, and daily scheduling decisions. A hidden automated scheduler runs the same scenario in parallel and is revealed only at the end as an operational benchmark.
 
 ## Gameplay
 
@@ -36,13 +36,12 @@ Useful flags:
 
 ```bash
 python -m echo_adventure --seed 12345
-python -m echo_adventure --demo
 python -m echo_adventure --port 8766
 ```
 
 Use a seed when comparing changes. The same seed should generate the same scenario and event timeline unless scenario-generation logic changes.
 
-The demo mode is an eight-day teaching run with six top-level jobs, five to seven subjobs per job, shorter subjob durations, no random disruptions, no completion-time inspection rework, and three decisions per day. It is intended to be finishable in one short sitting while still showing enough routing and dependency pressure to make ECHO's benchmark meaningful.
+The normal scenario is an eight-day focused run with six top-level jobs, five to seven subjobs per job, shorter subjob durations, no random disruptions, no completion-time inspection rework, and three decisions per day. It is intended to be finishable in one short sitting while still showing enough routing and dependency pressure to make ECHO's benchmark meaningful.
 
 With a fixed seed:
 
@@ -110,13 +109,13 @@ Subjobs carry priority, due shift, risk score, candidate workcenters, and depend
 
 ### Rework
 
-Rework is intentionally common in normal mode. It can happen through:
+Rework can happen through decision/event effects such as:
 
 - Quality rework events.
 - Rework spillover events.
-- Completion-time inspection rework.
+- Completion-time inspection rework, if that balance knob is re-enabled.
 
-Demo mode disables random event rework and completion-time inspection rework so that the short run is a scheduling tutorial rather than a hidden-defect survival challenge.
+The default normal run disables random event rework and completion-time inspection rework so the game teaches visible decisions first.
 
 The UI marks subjobs that have had rework with a small red dot next to the subjob id.
 
@@ -188,23 +187,22 @@ echo_adventure/
 
 ## Presets and Balance
 
-Game balance is controlled in `echo_adventure/config.py` through named profile-based presets. Each preset is assembled from workload, capacity, disruption, decision, and ECHO policy profiles, then flattened into `GameConfig` for the rest of the simulation. The current presets are:
+Game balance is controlled in `echo_adventure/config.py` through one named profile-based preset. The preset is assembled from workload, capacity, disruption, decision, and ECHO policy profiles, then flattened into `GameConfig` for the rest of the simulation:
 
-- `normal`: 19 days, 13 top-level jobs, 5-8 subjobs per job, random disruptions, cascades, and completion-time rework.
-- `demo`: 8 days, 6 top-level jobs, 5-7 subjobs per job, shorter durations, no random disruptions, and no completion-time rework.
+- `normal`: 8 days, 6 top-level jobs, 5-7 subjobs per job, shorter durations, no random disruptions, and no completion-time rework.
 
 Capacity balance has explicit routing-coverage knobs. `min_capable_workcenters_per_capability`, `min_candidate_workcenters_per_job`, `max_candidate_workcenters_per_job`, and `max_alternate_workcenters_per_job` prevent larger scenarios from creating unfair single-machine traps for common late-game work.
 
-ECHO's hidden benchmark no longer picks decisions from the static campaign graph alone. The graph score is one signal, but ECHO now also evaluates the live shop board, critical-path pressure, queue congestion, active events, and available alternate routing before selecting a background decision. Optional cloned lookahead remains available through `echo_choice_lookahead_days`, but it is disabled by default for fast deterministic runs.
+ECHO's hidden benchmark no longer picks decisions from the static campaign graph alone. ECHO scores every reachable downstream decision in the campaign tree, then projects each live choice through the remaining run with the automated scheduler. Projected choices are ranked by finishing the job, finishing in the fewest shifts, and then maximizing the deterministic final score. Set `echo_choice_lookahead_days` to a positive number only when you want to cap that projection for experiments; the default `0` means ECHO looks through the rest of the run. `echo_choice_projection_limit` defaults to `0`, which means projection-only card answering is uncapped.
 
 Completion-time inspection rework is controlled by `completion_rework_probability`, `min_completion_rework_shifts`, and `max_completion_rework_shifts`. Keep these explicit in presets instead of reintroducing hard-coded probabilities in scenario generation.
 
-Demo mode should be finishable by ECHO across sampled seeds. If ECHO cannot finish a demo seed, a human player is unlikely to have a fair path either. Good tuning options are:
+Normal mode should be finishable by ECHO across sampled seeds. If ECHO cannot finish a normal seed, a human player is unlikely to have a fair path either. Good tuning options are:
 
-- Reduce demo subjob chain length or duration before adding more deadline days.
-- Keep hidden defects disabled in demo; teach visible decisions first.
+- Reduce subjob chain length or duration before adding more deadline days.
+- Keep hidden defects disabled by default; teach visible decisions first.
 - Preserve challenge with decision pressure and queue tradeoffs, not surprise rework.
-- Add known failing seeds to `test_echo_wins_demo_sampled_seeds` before tuning.
+- Add known failing seeds to `test_echo_wins_normal_sampled_seeds` before tuning.
 
 ## Browser API
 
@@ -237,12 +235,11 @@ Request:
 
 ```json
 {
-  "mode": "demo",
   "seed": "12345"
 }
 ```
 
-The mode can be `normal` or `demo`. The seed may be empty or omitted to use a random seed.
+The seed may be empty or omitted to use a random seed.
 
 ### `POST /api/choice`
 
@@ -277,7 +274,7 @@ python -m pytest
 
 The tests live under `echo_adventure/tests/`. Keep them visible to git; balance regressions are easy to miss if local test files are ignored.
 
-Useful balance check while tuning demo mode:
+Useful balance check while tuning normal mode:
 
 ```bash
 python - <<'PY'
@@ -286,7 +283,7 @@ from echo_adventure.tests.test_echo_wins import _run_echo
 
 misses = []
 for seed in range(1, 101):
-    snapshot = _run_echo(GameConfig.for_preset("demo", seed=seed))
+    snapshot = _run_echo(GameConfig.for_preset("normal", seed=seed))
     if not snapshot.deadline_met:
         misses.append(seed)
 print(misses)

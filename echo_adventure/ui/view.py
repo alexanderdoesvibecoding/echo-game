@@ -435,14 +435,6 @@ INDEX_HTML = r"""<!doctype html>
       justify-content: flex-end;
       padding: 2px 10px 10px;
     }
-    .mode-choices {
-      display: grid;
-      gap: 8px;
-    }
-    .mode-choices .choice {
-      width: 100%;
-      margin: 0;
-    }
     .decision-modal {
       max-width: 680px;
     }
@@ -927,22 +919,13 @@ INDEX_HTML = r"""<!doctype html>
       <div class="modal-titlebar">
         <div>
           <h1 id="newRunModalTitle">New Game</h1>
-          <div class="subtle">Choose a preset.</div>
+          <div class="subtle">Start a fresh run with the standard scenario.</div>
         </div>
         <button id="closeNewRunModalBtn" class="icon-button" title="Close new run settings" onclick="closeNewRunModal()">×</button>
       </div>
       <div class="modal-body">
         <div class="settings-form">
-          <div class="mode-choices">
-            <button id="normalModeBtn" class="choice" type="button" onclick="selectRunMode('normal')">
-              <strong>Normal</strong>
-              <small>Full project run with the standard schedule length, job count, and disruption mix.</small>
-            </button>
-            <button id="demoModeBtn" class="choice" type="button" onclick="selectRunMode('demo')">
-              <strong>Demo</strong>
-              <small>Short five-day run with fewer jobs and faster pacing.</small>
-            </button>
-          </div>
+          <p class="subtle">FILLER TEXT (DON'T TOUCH YET)</p>
           <div id="newRunError" class="modal-error hidden"></div>
         </div>
       </div>
@@ -961,7 +944,6 @@ INDEX_HTML = r"""<!doctype html>
     let decisionModalVisible = false;
     let newRunModalVisible = false;
     let settingsMenuOpen = false;
-    let selectedRunMode = "normal";
     let finalModalDismissed = false;
     let dismissedDecisionKey = null;
 
@@ -1018,7 +1000,7 @@ INDEX_HTML = r"""<!doctype html>
       try {
         state = await api("/api/new", {
           method: "POST",
-          body: JSON.stringify({ mode: selectedRunMode })
+          body: JSON.stringify({})
         });
         pendingChoice = null;
         dismissedDecisionKey = null;
@@ -1261,7 +1243,6 @@ INDEX_HTML = r"""<!doctype html>
       closeSettingsMenu();
       newRunModalVisible = true;
       showNewRunError("");
-      selectedRunMode = state ? state.mode || "normal" : "normal";
       renderNewRunModal();
     }
 
@@ -1275,19 +1256,6 @@ INDEX_HTML = r"""<!doctype html>
       const overlay = $("newRunModalOverlay");
       if (!overlay) return;
       overlay.classList.toggle("active", newRunModalVisible);
-      ["normal", "demo"].forEach(mode => {
-        const button = $(`${mode}ModeBtn`);
-        if (!button) return;
-        const selected = selectedRunMode === mode;
-        button.classList.toggle("selected", selected);
-        button.setAttribute("aria-pressed", selected ? "true" : "false");
-      });
-    }
-
-    function selectRunMode(mode) {
-      selectedRunMode = mode === "demo" ? "demo" : "normal";
-      showNewRunError("");
-      renderNewRunModal();
     }
 
     function renderPastDueJobs(pastDueJobs) {
@@ -1524,7 +1492,7 @@ INDEX_HTML = r"""<!doctype html>
             <tr><td>Strategic path signature</td><td>${Number(p.decisionPathDifferentiator || 0).toFixed(2)}</td><td>${Number(a.decisionPathDifferentiator || 0).toFixed(2)}</td></tr>
           </tbody>
         </table>
-        <h3>Subjobs Complete Over Time</h3>
+        <h3>Subjobs Complete By Question</h3>
         ${renderCompletionChart(final.completionHistory)}
       `;
       body.scrollTop = 0;
@@ -1550,15 +1518,17 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function renderCompletionChart(history) {
-      const days = Array.isArray(history?.days) ? history.days : [];
+      const questions = Array.isArray(history?.questions)
+        ? history.questions
+        : (Array.isArray(history?.days) ? history.days : []);
       const player = Array.isArray(history?.player) ? history.player : [];
       const echo = Array.isArray(history?.automated) ? history.automated : [];
-      const count = Math.min(days.length, player.length, echo.length);
+      const count = Math.min(questions.length, player.length, echo.length);
       if (!count) return `<div class="subtle">No completion history recorded.</div>`;
 
       const width = 640;
       const height = 260;
-      const pad = { left: 44, right: 18, top: 18, bottom: 36 };
+      const pad = { left: 44, right: 18, top: 18, bottom: 42 };
       const maxCompleted = Math.max(1, Number(history?.total) || 0, ...player, ...echo);
       const maxIndex = Math.max(1, count - 1);
       const plotWidth = width - pad.left - pad.right;
@@ -1583,9 +1553,9 @@ INDEX_HTML = r"""<!doctype html>
       }).join("");
       const xLabels = xTicks.map(index => {
         const [x] = point(0, index);
-        const day = days[index] ?? index;
-        const label = day === 0 ? "Start" : `Day ${day}`;
-        return `<text class="chart-label" x="${x.toFixed(1)}" y="${height - 10}" text-anchor="middle">${escapeHtml(label)}</text>`;
+        const question = questions[index] ?? index;
+        const label = question === 0 ? "Start" : `Question ${question}`;
+        return `<text class="chart-label" x="${x.toFixed(1)}" y="${height - 12}" text-anchor="middle">${escapeHtml(label)}</text>`;
       }).join("");
       const [playerX, playerY] = point(Number(player[count - 1]) || 0, count - 1);
       const [echoX, echoY] = point(Number(echo[count - 1]) || 0, count - 1);
@@ -1597,7 +1567,7 @@ INDEX_HTML = r"""<!doctype html>
             <span class="chart-key chart-echo"><span class="chart-swatch"></span>ECHO benchmark</span>
           </div>
           <div class="chart-frame">
-            <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Line chart comparing cumulative subjobs completed by player and ECHO">
+            <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Line chart comparing cumulative subjobs completed by player and ECHO by question">
               ${yGrid}
               <line class="chart-axis" x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}"></line>
               <line class="chart-axis" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${height - pad.bottom}"></line>

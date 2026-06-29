@@ -4,10 +4,10 @@ import random
 import unittest
 
 from echo_adventure.config import GameConfig
-from echo_adventure.decisions import active_decision_cards, apply_choice, generate_campaign_decision_graph
-from echo_adventure.enums import EventType, TargetType
+from echo_adventure.decisions import active_decision_cards, apply_choice, generate_campaign_decision_graph, select_echo_choice
+from echo_adventure.enums import DecisionType, EventType, TargetType
 from echo_adventure.metrics import calculate_final_score
-from echo_adventure.models import Event, SimulationState
+from echo_adventure.models import DecisionCard, DecisionChoice, Event, SimulationState
 from echo_adventure.scenario_generator import generate_scenario
 from echo_adventure.schedulers.manual import ManualScheduler
 from echo_adventure.simulation import advance_day
@@ -15,7 +15,7 @@ from echo_adventure.simulation import initialize_state
 
 
 def make_state(seed=12345):
-    config = GameConfig.demo(seed=seed)
+    config = GameConfig.for_preset("normal", seed=seed)
     scenario = generate_scenario(config)
     state = initialize_state(scenario, config.shifts_per_day)
     return state, config
@@ -84,8 +84,8 @@ def advance_to_day(state, target_day, chooser):
         advance_day(state, scheduler)
 
 
-def run_demo_path(seed, chooser):
-    config = GameConfig.demo(seed=seed)
+def run_normal_path(seed, chooser):
+    config = GameConfig.for_preset("normal", seed=seed)
     scenario = generate_scenario(config)
     state = initialize_state(scenario, config.shifts_per_day)
     scheduler = ManualScheduler()
@@ -98,7 +98,7 @@ def run_demo_path(seed, chooser):
 
 
 def scenario_with_day_five_event(seed=24680):
-    config = GameConfig.demo(seed=seed)
+    config = GameConfig.for_preset("normal", seed=seed)
     scenario = generate_scenario(config)
     day_five_shift = (5 - 1) * config.shifts_per_day
     scenario.event_timeline.append(
@@ -137,7 +137,7 @@ def scenario_with_day_five_event(seed=24680):
 
 class DeterministicDecisionGenerationTests(unittest.TestCase):
     def test_campaign_graph_exists_at_scenario_creation(self):
-        config = GameConfig.demo(seed=12345)
+        config = GameConfig.for_preset("normal", seed=12345)
         scenario = generate_scenario(config)
 
         graph = scenario.campaign_decision_graph
@@ -236,8 +236,8 @@ class DeterministicDecisionGenerationTests(unittest.TestCase):
         def chooser(_state, card):
             return card.choices[(card.day + len(card.id)) % len(card.choices)]
 
-        scenario_a, state_a, active_a, score_a = run_demo_path(seed=13579, chooser=chooser)
-        scenario_b, state_b, active_b, score_b = run_demo_path(seed=13579, chooser=chooser)
+        scenario_a, state_a, active_a, score_a = run_normal_path(seed=13579, chooser=chooser)
+        scenario_b, state_b, active_b, score_b = run_normal_path(seed=13579, chooser=chooser)
 
         self.assertEqual(graph_signature(scenario_a), graph_signature(scenario_b))
         self.assertEqual(active_a, active_b)
@@ -250,7 +250,7 @@ class DeterministicDecisionGenerationTests(unittest.TestCase):
         scores = set()
 
         for path_index in range(100):
-            config = GameConfig.demo(seed=424242)
+            config = GameConfig.for_preset("normal", seed=424242)
             scenario = generate_scenario(config)
             state = initialize_state(scenario, config.shifts_per_day)
 
@@ -292,6 +292,79 @@ class DeterministicDecisionGenerationTests(unittest.TestCase):
 
         self.assertTrue(unchosen_day5_unlocks)
         self.assertTrue(day5_ids.isdisjoint(unchosen_day5_unlocks))
+
+    def test_echo_static_choice_reads_full_reachable_tree(self):
+        root = DecisionCard(
+            id="ROOT",
+            day=1,
+            type=DecisionType.CRITICAL_PATH,
+            title="Root",
+            description="Root",
+            target_ids=[],
+            severity=1,
+            choices=[
+                DecisionChoice(
+                    id="1",
+                    label="Looks good now",
+                    description="Looks good now",
+                    immediate_effects={"type": "echo_recommendation"},
+                    risk_effect=0,
+                    reschedule_effect=0,
+                    next_card_id="CHILD",
+                ),
+                DecisionChoice(
+                    id="2",
+                    label="Safer path",
+                    description="Safer path",
+                    immediate_effects={"type": "echo_recommendation"},
+                    risk_effect=1,
+                    reschedule_effect=0,
+                ),
+            ],
+        )
+        child = DecisionCard(
+            id="CHILD",
+            day=2,
+            type=DecisionType.CRITICAL_PATH,
+            title="Child",
+            description="Child",
+            target_ids=[],
+            severity=1,
+            choices=[
+                DecisionChoice(
+                    id="1",
+                    label="Grandchild path",
+                    description="Grandchild path",
+                    immediate_effects={"type": "echo_recommendation"},
+                    risk_effect=0,
+                    reschedule_effect=0,
+                    next_card_id="GRANDCHILD",
+                )
+            ],
+        )
+        grandchild = DecisionCard(
+            id="GRANDCHILD",
+            day=3,
+            type=DecisionType.CRITICAL_PATH,
+            title="Grandchild",
+            description="Grandchild",
+            target_ids=[],
+            severity=1,
+            choices=[
+                DecisionChoice(
+                    id="1",
+                    label="Hidden bad tail",
+                    description="Hidden bad tail",
+                    immediate_effects={"type": "wait"},
+                    risk_effect=10,
+                    reschedule_effect=0,
+                )
+            ],
+        )
+
+        graph = {card.id: card for card in (root, child, grandchild)}
+
+        self.assertEqual(select_echo_choice(root, graph).id, "2")
 
 
 if __name__ == "__main__":

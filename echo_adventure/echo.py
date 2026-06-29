@@ -8,7 +8,7 @@ import math
 from .config import GameConfig
 from .decisions import active_decision_cards, apply_choice, score_echo_choice, select_echo_choice
 from .enums import DecisionType, EventType, JobStatus, TargetType, WorkCenterStatus
-from .metrics import calculate_snapshot, update_state_metrics
+from .metrics import calculate_final_score, calculate_snapshot, update_state_metrics
 from .models import DecisionCard, DecisionChoice, Event, Job, SimulationState
 from .schedulers.automated import AutomatedScheduler
 from .schedulers.base import downstream_count
@@ -58,69 +58,75 @@ def select_echo_choice_for_state(
     config: GameConfig,
     graph: dict[str, DecisionCard] | None = None,
 ) -> DecisionChoice:
-    """Choose ECHO's response from the campaign graph and a live-board forecast."""
+    """Choose ECHO's response from the full campaign tree and live-board forecast."""
     graph = graph or state.decision_cards
     update_state_metrics(state)
     scored = []
+    tree_score_memo: dict[str, float] = {}
     for choice in card.choices:
-        static_score = score_echo_choice(choice, graph) * 0.65
-        live_score = _live_operational_score(state, card, choice)
-        forecast_score = _forecast_choice_score(state, card, choice, config)
-        scored.append((forecast_score + live_score + static_score, choice.id, choice))
+        objective = _forecast_choice_objective(state, card, choice, config, graph, tree_score_memo)
+        scored.append((objective, choice.id, choice))
     return min(scored, key=lambda item: (item[0], item[1]))[2]
 
 
-def _forecast_choice_score(
+def _forecast_choice_objective(
     state: SimulationState,
     card: DecisionCard,
     choice: DecisionChoice,
     config: GameConfig,
-) -> float:
-    """Score a choice by applying it to a clone and advancing a short horizon."""
-    if config.echo_choice_lookahead_days <= 0:
-        return 0.0
+    graph: dict[str, DecisionCard],
+    tree_score_memo: dict[str, float],
+) -> tuple[float, ...]:
+    """Rank a choice by projected finish first, then projected final score."""
+    heuristic_score = _heuristic_choice_score(state, card, choice, graph, tree_score_memo)
     projected = copy.deepcopy(state)
     projected_card = projected.decision_cards.get(card.id)
     if not projected_card:
-        return 0.0
+        return _failed_forecast_objective(heuristic_score)
     projected_choice = next((candidate for candidate in projected_card.choices if candidate.id == choice.id), None)
     if not projected_choice:
-        return math.inf
+        return _failed_forecast_objective(heuristic_score)
 
     try:
-        baseline = select_echo_choice(projected_card, projected.decision_cards)
+        baseline = select_echo_choice(projected_card)
         apply_choice(projected, projected_card, projected_choice, actor="ECHO-forecast", echo_choice=baseline)
         scheduler = AutomatedScheduler()
-        for _ in range(config.echo_choice_lookahead_days):
+        day_limit = config.echo_choice_lookahead_days if config.echo_choice_lookahead_days > 0 else None
+        days_advanced = 0
+        while projected.current_shift < projected.deadline_shift and not projected.final_item_completed:
+            if day_limit is not None and days_advanced >= day_limit:
+                break
             if projected.final_item_completed or projected.current_shift >= projected.deadline_shift:
                 break
             _apply_static_echo_choices(projected, config)
             advance_day(projected, scheduler)
+            days_advanced += 1
     except Exception:
-        return math.inf
+        return _failed_forecast_objective(heuristic_score)
 
     snapshot = calculate_snapshot(projected)
     completion_shift = projected.completion_shift or snapshot.projected_completion_shift
-    deadline_overrun = max(0, completion_shift - projected.deadline_shift)
-    deadline_margin = projected.deadline_shift - completion_shift
+    final_score = calculate_final_score(projected)
+    completion_rank = 0.0 if projected.final_item_completed else 1.0
     return (
-        snapshot.jobs_remaining * 95.0
-        + deadline_overrun * 22.0
-        + snapshot.jobs_behind_schedule * 12.0
-        + snapshot.jobs_late * 10.0
-        + snapshot.schedule_risk * 3.4
-        + snapshot.reschedules * 1.1
-        + snapshot.idle_time * 0.02
-        - snapshot.jobs_completed * 5.0
-        - snapshot.pieces_completed * 18.0
-        - max(0, deadline_margin) * 1.6
+        completion_rank,
+        float(completion_shift),
+        -final_score,
+        float(snapshot.jobs_remaining),
+        float(snapshot.jobs_late),
+        float(snapshot.jobs_behind_schedule),
+        float(snapshot.reschedules),
+        float(snapshot.idle_time),
+        float(snapshot.schedule_risk),
+        heuristic_score,
     )
 
 
 def _apply_static_echo_choices(state: SimulationState, config: GameConfig) -> None:
     """Answer projection-only cards with the static campaign scorer."""
     selected: dict[str, str] = {}
-    for _ in range(max(8, config.echo_choice_projection_limit)):
+    max_rounds = max(8, len(state.decision_cards), config.echo_choice_projection_limit)
+    for _ in range(max_rounds):
         cards = active_decision_cards(state, state.current_day, selected)
         open_cards = [
             card
@@ -129,10 +135,43 @@ def _apply_static_echo_choices(state: SimulationState, config: GameConfig) -> No
         ]
         if not open_cards:
             return
-        for card in open_cards[: config.echo_choice_projection_limit]:
-            choice = select_echo_choice(card, state.decision_cards)
+        if config.echo_choice_projection_limit > 0:
+            cards_to_apply = open_cards[: config.echo_choice_projection_limit]
+        else:
+            cards_to_apply = open_cards
+        for card in cards_to_apply:
+            choice = select_echo_choice(card)
             apply_choice(state, card, choice, actor="ECHO-forecast", echo_choice=choice)
             selected[card.id] = choice.id
+
+
+def _heuristic_choice_score(
+    state: SimulationState,
+    card: DecisionCard,
+    choice: DecisionChoice,
+    graph: dict[str, DecisionCard],
+    tree_score_memo: dict[str, float],
+) -> float:
+    """Return the low-is-good fallback score used when projection cannot finish."""
+    static_score = score_echo_choice(choice, graph, tree_score_memo) * 0.65
+    live_score = _live_operational_score(state, card, choice)
+    return live_score + static_score
+
+
+def _failed_forecast_objective(heuristic_score: float) -> tuple[float, ...]:
+    """Keep failed projections deterministic and worse than valid projections."""
+    return (
+        2.0,
+        math.inf,
+        math.inf,
+        math.inf,
+        math.inf,
+        math.inf,
+        math.inf,
+        math.inf,
+        math.inf,
+        heuristic_score,
+    )
 
 
 def _live_operational_score(

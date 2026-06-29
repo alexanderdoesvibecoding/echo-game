@@ -258,7 +258,7 @@ def test_completion_rework_is_same_for_same_job_at_different_shifts():
 
 
 def test_finish_automated_does_not_force_incomplete_benchmark_to_win():
-    session = GameSession(seed=1, demo=True)
+    session = GameSession(seed=1)
     session.automated_state.current_shift = session.automated_state.deadline_shift
     session.automated_state.final_item_completed = False
     session.automated_state.completion_shift = None

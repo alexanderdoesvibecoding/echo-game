@@ -22,16 +22,9 @@ def _run_echo(config):
 
 
 def test_echo_wins_normal_sampled_seeds():
-    for seed in range(1, 31):
+    balance_regression_seeds = [76, 99, 101, 139, 140]
+    for seed in [*range(1, 31), *balance_regression_seeds]:
         config = GameConfig.for_preset("normal", seed=seed)
         snapshot = _run_echo(config)
         assert snapshot.deadline_met, f"ECHO missed normal seed {seed}"
-
-
-def test_echo_wins_demo_sampled_seeds():
-    balance_regression_seeds = [76, 99, 101, 139, 140]
-    for seed in [*range(1, 31), *balance_regression_seeds]:
-        config = GameConfig.for_preset("demo", seed=seed)
-        snapshot = _run_echo(config)
-        assert snapshot.deadline_met, f"ECHO missed demo seed {seed}"
         

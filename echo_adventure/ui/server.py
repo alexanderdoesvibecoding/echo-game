@@ -48,8 +48,6 @@ class GameSession:
     def __init__(
         self,
         seed: int | None = None,
-        demo: bool = False,
-        mode: str | None = None,
     ) -> None:
         # RLock allows helper methods called inside locked public methods to
         # safely reuse the same lock if the implementation grows later.
@@ -57,8 +55,7 @@ class GameSession:
         # Resolve random seeds immediately so the UI can always display and
         # replay the exact generated scenario.
         self.seed = resolve_seed(seed)
-        self.mode = mode or ("demo" if demo else "normal")
-        self.demo = self.mode == "demo"
+        self.mode = "normal"
         self.config = GameConfig.for_preset(self.mode, seed=self.seed)
         # Both schedulers share a scenario but mutate independent state copies.
         self.scenario = generate_scenario(self.config)
@@ -592,44 +589,73 @@ class GameSession:
         player_snapshot: MetricSnapshot,
         automated_snapshot: MetricSnapshot,
     ) -> dict[str, Any]:
-        """Return daily cumulative subjob completion counts for the final chart."""
-        total_days = max(1, self.config.total_days)
-        days = list(range(total_days + 1))
+        """Return question-indexed cumulative subjob completion counts for the final chart."""
         total_jobs = max(len(self.player_state.jobs), len(self.automated_state.jobs))
+        total_questions = max(
+            1,
+            len(self.player_state.decision_history),
+            len(self.automated_state.decision_history),
+        )
+        questions = list(range(total_questions + 1))
 
         return {
-            "days": days,
+            "days": questions,
+            "questions": questions,
             "total": total_jobs,
-            "player": self._completion_series(self.player_state, player_snapshot, total_days, total_jobs),
-            "automated": self._completion_series(self.automated_state, automated_snapshot, total_days, total_jobs),
+            "player": self._completion_series(self.player_state, player_snapshot, total_questions, total_jobs),
+            "automated": self._completion_series(self.automated_state, automated_snapshot, total_questions, total_jobs),
         }
 
     def _completion_series(
         self,
         state: SimulationState,
         final_snapshot: MetricSnapshot,
-        total_days: int,
+        total_questions: int,
         total_jobs: int,
     ) -> list[int]:
-        """Build a carry-forward daily series from metric snapshots."""
-        completions_by_day: dict[int, int] = {0: 0}
+        """Build a carry-forward series bucketed by answered question count."""
+        question_count_by_day = self._question_count_by_day(state)
+        completions_by_question: dict[int, int] = {0: 0}
         for snapshot in state.metric_history:
-            day = max(0, min(total_days, snapshot.day))
-            completions_by_day[day] = max(completions_by_day.get(day, 0), snapshot.jobs_completed)
+            question = max(0, min(total_questions, question_count_by_day.get(snapshot.day, 0)))
+            completions_by_question[question] = max(
+                completions_by_question.get(question, 0),
+                snapshot.jobs_completed,
+            )
 
-        final_day = max(0, min(total_days, final_snapshot.day))
-        completions_by_day[final_day] = max(completions_by_day.get(final_day, 0), final_snapshot.jobs_completed)
+        final_question = max(0, min(total_questions, question_count_by_day.get(final_snapshot.day, total_questions)))
+        completions_by_question[final_question] = max(
+            completions_by_question.get(final_question, 0),
+            final_snapshot.jobs_completed,
+        )
 
         if state.final_item_completed and state.completion_shift:
-            completion_day = max(1, min(total_days, ((state.completion_shift - 1) // state.shifts_per_day) + 1))
-            completions_by_day[completion_day] = max(completions_by_day.get(completion_day, 0), total_jobs)
+            completion_day = max(1, min(self.config.total_days, ((state.completion_shift - 1) // state.shifts_per_day) + 1))
+            completion_question = max(0, min(total_questions, question_count_by_day.get(completion_day, total_questions)))
+            completions_by_question[completion_question] = max(
+                completions_by_question.get(completion_question, 0),
+                total_jobs,
+            )
 
         current = 0
         series: list[int] = []
-        for day in range(total_days + 1):
-            current = max(current, completions_by_day.get(day, current))
+        for question in range(total_questions + 1):
+            current = max(current, completions_by_question.get(question, current))
             series.append(min(total_jobs, current))
         return series
+
+    def _question_count_by_day(self, state: SimulationState) -> dict[int, int]:
+        """Return cumulative answered decision-question counts by day."""
+        questions_on_day: dict[int, int] = {}
+        for record in state.decision_history:
+            questions_on_day[record.day] = questions_on_day.get(record.day, 0) + 1
+
+        cumulative = 0
+        counts = {0: 0}
+        for day in range(1, self.config.total_days + 1):
+            cumulative += questions_on_day.get(day, 0)
+            counts[day] = cumulative
+        return counts
     
     def _final_review_payload(
         self,
@@ -832,13 +858,8 @@ class GameRequestHandler(BaseHTTPRequestHandler):
             # create/read a run, apply decisions, then advance days.
             if parsed.path == "/api/new":
                 data = self._read_json()
-                mode = str(data.get("mode", "normal")).lower()
-                if mode not in {"normal", "demo"}:
-                    raise ValueError("Choose either normal or demo mode.")
                 type(self).session = GameSession(
                     seed=_parse_optional_seed(data.get("seed")),
-                    demo=mode == "demo",
-                    mode=mode,
                 )
                 self._send_json(type(self).session.state_payload())
             elif parsed.path == "/api/choice":
@@ -891,16 +912,15 @@ class GameRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def run_ui_server(seed: int | None = None, host: str = "127.0.0.1", port: int = 8765, demo: bool = False) -> None:
+def run_ui_server(seed: int | None = None, host: str = "127.0.0.1", port: int = 8765) -> None:
     """Start the local browser UI server."""
     # A fresh handler subclass lets us attach a mutable class-level session
     # without modifying BaseHTTPRequestHandler itself.
     handler = type("SessionHandler", (GameRequestHandler,), {})
-    handler.session = GameSession(seed=seed, demo=demo)
+    handler.session = GameSession(seed=seed)
     server = ThreadingHTTPServer((host, port), handler)
     url = f"http://{host}:{port}"
-    mode_label = "demo" if demo else "normal"
-    print(f"ECHO Adventure UI running at {url} ({mode_label} mode)")
+    print(f"ECHO Adventure UI running at {url} (normal mode)")
     print("Press Ctrl+C to stop.")
     try:
         server.serve_forever()
@@ -914,9 +934,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--seed", type=int, help="Run a reproducible scenario seed.")
     parser.add_argument("--host", default="127.0.0.1", help="Host for the local UI server.")
     parser.add_argument("--port", type=int, default=8765, help="Port for the local UI server.")
-    parser.add_argument("--demo", action="store_true", help="Start with the short five-day demo scenario.")
     args = parser.parse_args(argv)
-    run_ui_server(seed=args.seed, host=args.host, port=args.port, demo=args.demo)
+    run_ui_server(seed=args.seed, host=args.host, port=args.port)
 
 
 def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: SimulationState | None = None) -> dict[str, Any]:
