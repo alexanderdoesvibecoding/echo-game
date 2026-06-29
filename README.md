@@ -61,20 +61,18 @@ The UI is served by Python's standard-library HTTP server. There is no frontend 
 
 The browser dashboard has three main responsibilities:
 
-- Show current project position and operating-board tables.
+- Show current project position and a compact top-level job progress view.
 - Force completion of the day's decision cards before `End Day`.
 - Reveal the daily summary, final ECHO comparison, and player-vs-ECHO decision audit.
 
-The Operating Board tabs are:
+The main screen shows:
 
-- `Shops`: queue pressure, blocked work, utilization, idle time, shop risk, and active disruptions.
-- `Daily Calendar`: scheduled work for the current day, split across the three shifts.
-- `Jobs`: progress and risk for each top-level job, with drill-down into subjobs.
-- `Workcenters`: machines/stations for the selected shop. The shop selector appears only in this tab.
-- `Critical Path`: subjobs most likely to drive final completion timing.
-- `Risk Register`: active warnings, active disruptions, blocked subjobs, and chained event sources.
+- Project-position metrics with a jobs popover.
+- Inline daily decision cards.
+- End-of-day summary with the submarine assembly puzzle.
+- Final ECHO benchmark comparison and decision audit after the run ends.
 
-Daily decisions appear as a modal. The modal can be dismissed so the main board remains inspectable, but all of the day's questions must be submitted before the day can advance.
+All of the day's questions must be submitted before the day can advance.
 
 ## Simulation Concepts
 
@@ -160,7 +158,7 @@ Daily decisions also affect the chain:
 - Expediting, rerouting, protecting critical work, resequencing, and pulling work forward reduce related future risk.
 - Waiting, deferring, or holding sequence can add later follow-on risks.
 
-The Risk Register shows a `Source` column for chained risks so downstream disruptions can be traced back to earlier events.
+Chained risks retain their source event id internally so downstream disruptions can be traced back to earlier events.
 
 ## Architecture
 
@@ -217,12 +215,8 @@ Returns the inline browser UI.
 Returns the complete UI state payload:
 
 - Metrics snapshot
-- Shops
-- Daily calendar
-- Jobs and subjobs
-- Workcenters grouped by shop
-- Critical path rows
-- Risk register rows
+- Compact top-level job rows
+- Critical path preview rows
 - Current daily decision cards and fixed daily progress
 - Last daily summary
 - Final reveal, when the run is over

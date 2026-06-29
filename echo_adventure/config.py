@@ -158,8 +158,6 @@ class GameConfig:
     echo_choice_lookahead_days: int = 0
     echo_choice_projection_limit: int = 0
     seed: int | None = None
-    use_color: bool = True
-    debug: bool = False
 
     @property
     def deadline_shift(self) -> int:
@@ -171,8 +169,6 @@ class GameConfig:
         cls,
         preset: str,
         seed: int | None = None,
-        use_color: bool = True,
-        debug: bool = False,
     ) -> "GameConfig":
         """Return a config built from one editable game preset."""
         if preset == "demo":
@@ -180,14 +176,9 @@ class GameConfig:
         values = GAME_PRESETS.get(preset)
         if values is None:
             raise ValueError(f"Unknown game preset: {preset}")
-        config = cls(seed=seed, use_color=use_color, debug=debug, **values.to_config_kwargs())
+        config = cls(seed=seed, **values.to_config_kwargs())
         _validate_config(preset, config)
         return config
-
-    @classmethod
-    def demo(cls, seed: int | None = None, use_color: bool = True, debug: bool = False) -> "GameConfig":
-        """Return the normal single-preset scenario for legacy callers."""
-        return cls.for_preset("normal", seed=seed, use_color=use_color, debug=debug)
 
 
 def resolve_seed(seed: int | None) -> int:

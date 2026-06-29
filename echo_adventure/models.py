@@ -62,13 +62,6 @@ class PuzzlePiece:
     estimated_completion_shift: int = 0
     completed: bool = False
 
-    @property
-    def percent_complete(self) -> float:
-        """Return completion as a 0.0-1.0 fraction for UI/progress bars."""
-        if self.total_job_count == 0:
-            return 0.0
-        return self.completed_job_count / self.total_job_count
-
 
 @dataclass
 class Job:
@@ -225,9 +218,7 @@ class CampaignDecisionGraph:
     root_card_ids: list[str] = field(default_factory=list)
     card_ids: list[str] = field(default_factory=list)
     cards_by_day: dict[int, list[str]] = field(default_factory=dict)
-    roots_by_day: dict[int, list[str]] = field(default_factory=dict)
     event_card_ids_by_day: dict[int, list[str]] = field(default_factory=dict)
-    daily_decision_counts: dict[int, int] = field(default_factory=dict)
     max_campaign_nodes: int = 0
     max_active_cards_per_day: int = 0
     max_future_unlocks_per_choice: int = 0
@@ -268,8 +259,6 @@ class Scenario:
     deadline_shift: int
     decision_cards: dict[str, DecisionCard] = field(default_factory=dict)
     campaign_decision_graph: CampaignDecisionGraph = field(default_factory=CampaignDecisionGraph)
-    daily_decision_roots: dict[int, list[str]] = field(default_factory=dict)
-    daily_decision_counts: dict[int, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -287,8 +276,6 @@ class SimulationState:
     event_timeline: list[Event]
     decision_cards: dict[str, DecisionCard] = field(default_factory=dict)
     campaign_decision_graph: CampaignDecisionGraph = field(default_factory=CampaignDecisionGraph)
-    daily_decision_roots: dict[int, list[str]] = field(default_factory=dict)
-    daily_decision_counts: dict[int, int] = field(default_factory=dict)
     unlocked_decision_card_ids: set[str] = field(default_factory=set)
     completed_decision_card_ids: set[str] = field(default_factory=set)
     campaign_branch_tags: set[str] = field(default_factory=set)

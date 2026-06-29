@@ -94,11 +94,6 @@ INDEX_HTML = r"""<!doctype html>
       color: #5dd9e0;
     }
 
-    html[data-theme="dark"] .badge.progress {
-      background: #2b2548;
-      color: #c8bcff;
-    }
-
     html[data-theme="dark"] table,
     html[data-theme="dark"] th,
     html[data-theme="dark"] td {
@@ -461,8 +456,6 @@ INDEX_HTML = r"""<!doctype html>
       background: #fbfcf9;
     }
     tr:last-child td { border-bottom: none; }
-    .table-wrap { max-height: 520px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
-
     .badge {
       display: inline-flex;
       align-items: center;
@@ -478,21 +471,6 @@ INDEX_HTML = r"""<!doctype html>
     .badge.warn { background: #fbf0da; color: var(--amber); }
     .badge.danger { background: #f8e4e4; color: var(--red); }
     .badge.info { background: #e7f1f1; color: var(--teal-dark); }
-    .badge.progress { background: #ece8f8; color: var(--violet); }
-
-    .link-button {
-      appearance: none;
-      border: none;
-      background: none;
-      color: var(--teal-dark);
-      text-decoration: underline;
-      cursor: pointer;
-      padding: 0;
-      font: inherit;
-    }
-    .link-button:hover {
-      color: var(--primary);
-    }
 
     .decision {
       border: 1px solid var(--line);
@@ -529,9 +507,6 @@ INDEX_HTML = r"""<!doctype html>
       gap: 8px;
       justify-content: flex-end;
       padding: 2px 10px 10px;
-    }
-    .decision-modal {
-      max-width: 680px;
     }
     .modal-titlebar {
       display: flex;
@@ -851,16 +826,6 @@ INDEX_HTML = r"""<!doctype html>
       background: #252d38;
       border-color: #3a4352;
     }
-    .rework-flag {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      margin-left: 6px;
-      border-radius: 50%;
-      background: var(--red);
-      box-shadow: 0 0 0 2px rgba(179, 58, 58, 0.14);
-      vertical-align: middle;
-    }
     .info-icon {
       display: inline-flex;
       align-items: center;
@@ -1013,20 +978,6 @@ INDEX_HTML = r"""<!doctype html>
     </div>
   </div>
 
-  <div id="decisionModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="decisionModalTitle">
-    <div class="modal decision-modal">
-      <div class="modal-titlebar">
-        <div>
-          <h1 id="decisionModalTitle">Campaign Decisions</h1>
-          <div class="subtle" id="decisionModalSubtitle"></div>
-        </div>
-        <button id="closeDecisionBtn" class="icon-button" title="Dismiss decisions" onclick="dismissDecisionModal()">×</button>
-      </div>
-      <div class="modal-body" id="decisionModalBody"></div>
-      <div class="modal-footer" id="decisionModalFooter"></div>
-    </div>
-  </div>
-
   <div id="newRunModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="newRunModalTitle">
     <div class="modal">
       <div class="modal-titlebar">
@@ -1054,14 +1005,10 @@ INDEX_HTML = r"""<!doctype html>
     // Client-side modal state is intentionally local. The server remains the
     // source of truth for the run, decisions, and day advancement rules.
     let welcomeModalVisible = false;
-    let decisionModalVisible = false;
     let newRunModalVisible = false;
     let settingsMenuOpen = false;
-    let finalModalDismissed = false;
-    let dismissedDecisionKey = null;
 
     const $ = (id) => document.getElementById(id);
-    const fmtPct = (value) => `${Math.round((value || 0) * 100)}%`;
     const fmtNum = (value) => Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
 
     async function api(path, options = {}) {
@@ -1116,11 +1063,8 @@ INDEX_HTML = r"""<!doctype html>
           body: JSON.stringify({})
         });
         pendingChoice = null;
-        dismissedDecisionKey = null;
-        decisionModalVisible = false;
         welcomeModalVisible = true;
         newRunModalVisible = false;
-        finalModalDismissed = false;
         showNewRunError("");
         showError("");
         render();
@@ -1140,8 +1084,6 @@ INDEX_HTML = r"""<!doctype html>
           body: JSON.stringify({ cardId, choiceId })
         });
         pendingChoice = null;
-        dismissedDecisionKey = null;
-        decisionModalVisible = false;
         showError("");
         if (renderAfter) {
           render();
@@ -1160,7 +1102,7 @@ INDEX_HTML = r"""<!doctype html>
       // The button should already be disabled until all decisions are complete,
       // but this guard keeps direct console calls and stale UI state honest.
       if (!readyToAdvance()) {
-        openDecisionModal();
+        document.getElementById("dailyDecisionSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
         return;
       }
       try {
@@ -1170,15 +1112,10 @@ INDEX_HTML = r"""<!doctype html>
         if (nextState.finalReveal) {
           state = nextState;
           pendingAdvanceState = null;
-          finalModalVisible = false;
-          finalModalDismissed = true;
           modalVisible = false;
         } else {
           modalVisible = true;
-          finalModalVisible = false;
         }
-        decisionModalVisible = false;
-        pieceModalVisible = false;
         render();
       } catch (error) {
         showError(error.message);
@@ -1198,35 +1135,12 @@ INDEX_HTML = r"""<!doctype html>
     // These flags are purely presentation state. The authoritative simulation
     // state always comes from the server payload in `state`.
     let modalVisible = false;
-    let finalModalVisible = false;
-    let pieceModalVisible = false;
-    let activePieceId = null;
     let pendingChoice = null;
-
-    function openPieceModal(pieceId) {
-      activePieceId = pieceId;
-      modalVisible = false;
-      finalModalVisible = false;
-      decisionModalVisible = false;
-      pieceModalVisible = true;
-      render();
-    }
-
-    function closePieceModal() {
-      pieceModalVisible = false;
-      render();
-    }
-
-    function closeFinalModal() {
-      finalModalVisible = false;
-      finalModalDismissed = true;
-      render();
-    }
 
     function render() {
       if (!state) return;
       $("dayBadge").textContent = `Day ${state.day}`;
-      $("projectedText").textContent = `Projected completion: ${state.overview.projectedCompletion}`;
+      $("projectedText").textContent = `Projected completion: ${state.projectedCompletion}`;
 
       renderMetrics();
       renderDecisions();
@@ -1234,13 +1148,9 @@ INDEX_HTML = r"""<!doctype html>
       renderSummary();
       renderSummaryModal();
       renderFinal();
-      renderPieceModal();
       renderWelcomeModal();
       renderNewRunModal();
       renderSettingsMenu();
-      maybeAutoOpenDecisionModal();
-      renderDecisionModal();
-      renderFinalModal();
     }
 
     function decisionProgress() {
@@ -1253,32 +1163,6 @@ INDEX_HTML = r"""<!doctype html>
     function readyToAdvance() {
       const progress = decisionProgress();
       return Boolean(state && !state.gameOver && (progress.total === 0 || progress.completed === progress.total));
-    }
-
-    function decisionPromptKey() {
-      if (!state) return "";
-      const nextCard = state.decisions.find(card => !card.selectedChoice);
-      // A dismissed decision modal should stay dismissed only until the next
-      // unresolved card appears or the day's completion state changes.
-      const progress = decisionProgress();
-      return `${state.day}:${progress.completed}:${progress.visibleCards}:${nextCard ? nextCard.id : "complete"}`;
-    }
-
-    function maybeAutoOpenDecisionModal() {
-      // Daily decisions are rendered inline in the main page.
-      return;
-    }
-
-    function openDecisionModal() {
-      if (!state || state.gameOver) return;
-      decisionModalVisible = false;
-      document.getElementById("dailyDecisionSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-
-    function dismissDecisionModal() {
-      dismissedDecisionKey = decisionPromptKey();
-      decisionModalVisible = false;
-      renderDecisionModal();
     }
 
     async function submitDecision(cardId, advanceAfter = false) {
@@ -1297,7 +1181,6 @@ INDEX_HTML = r"""<!doctype html>
     function selectPendingChoice(choiceId) {
       pendingChoice = choiceId;
       renderInlineDecisions();
-      renderDecisionModal();
     }
 
     function renderWelcomeModal() {
@@ -1330,8 +1213,6 @@ INDEX_HTML = r"""<!doctype html>
     function closeWelcomeModal() {
       welcomeModalVisible = false;
       renderWelcomeModal();
-      maybeAutoOpenDecisionModal();
-      renderDecisionModal();
     }
 
     function toggleSettingsMenu() {
@@ -1642,65 +1523,6 @@ INDEX_HTML = r"""<!doctype html>
       body.scrollTop = 0;
     }
 
-    function renderFinalModal() {
-      const final = state.finalReveal;
-      const overlay = document.getElementById("finalModalOverlay");
-      const body = document.getElementById("finalModalBody");
-      const notes = document.getElementById("finalModalNotes");
-      if (!overlay || !body || !notes) return;
-      if (!final || !finalModalVisible) {
-        overlay.classList.remove("active");
-        return;
-      }
-      overlay.classList.add("active");
-      const p = final.player;
-      const a = final.automated;
-      const review = final.review || {};
-      body.innerHTML = `
-        <div class="callout">
-          <strong>${escapeHtml(review.headline || "Final review")}</strong>
-        </div>
-        <table>
-          <tbody>
-            <tr><td>Final score</td><td>${Number(p.finalScore || 0).toFixed(2)}</td><td>${Number(a.finalScore || 0).toFixed(2)}</td></tr>
-            <tr><td>Deadline met</td><td>${p.deadlineMet ? "Yes" : "No"}</td><td>${a.deadlineMet ? "Yes" : "No"}</td></tr>
-            <tr><td>Project completed</td><td>${p.finalItemCompleted ? "Yes" : "No"}</td><td>${a.finalItemCompleted ? "Yes" : "No"}</td></tr>
-            <tr><td>Completion</td><td>${p.completion || "Not complete"}</td><td>${a.completion || "Not complete"}</td></tr>
-            <tr><td>Jobs complete</td><td>${p.piecesCompleted}</td><td>${a.piecesCompleted}</td></tr>
-            <tr><td>Subjobs completed</td><td>${p.jobsCompleted}</td><td>${a.jobsCompleted}</td></tr>
-            <tr><td>Subjobs behind schedule</td><td>${p.jobsBehindSchedule}</td><td>${a.jobsBehindSchedule}</td></tr>
-            <tr><td>Subjobs late</td><td>${p.jobsLate}</td><td>${a.jobsLate}</td></tr>
-            <tr><td>Idle time</td><td>${p.idleTime}</td><td>${a.idleTime}</td></tr>
-            <tr><td>Reschedules</td><td>${p.reschedules}</td><td>${a.reschedules}</td></tr>
-            <tr><td>Schedule risk</td><td>${Math.round(p.scheduleRisk)}</td><td>${Math.round(a.scheduleRisk)}</td></tr>
-            <tr><td>Strategic path signature</td><td>${Number(p.decisionPathDifferentiator || 0).toFixed(2)}</td><td>${Number(a.decisionPathDifferentiator || 0).toFixed(2)}</td></tr>
-          </tbody>
-        </table>
-        <h3>Subjobs Complete By Question</h3>
-        ${renderCompletionChart(final.completionHistory)}
-      `;
-      body.scrollTop = 0;
-      notes.innerHTML = (review.reasons || final.explanation || [])
-        .map(note => `<li>${escapeHtml(note)}</li>`)
-        .join("") || "<li>No final review notes recorded.</li>";
-      const audit = document.getElementById("finalModalAudit");
-      const auditRows = (final.decisionAudit || []).slice(0, 12).map(row => `
-        <tr>
-          <td>Day ${row.day}</td>
-          <td>${escapeHtml(row.playerChoice)}</td>
-          <td>${escapeHtml(row.echoChoice)}</td>
-          <td>${row.matched ? "Matched" : "Different"}</td>
-        </tr>
-      `).join("");
-      if (audit) audit.innerHTML = `
-        <h3>Decision Audit</h3>
-        <table>
-          <thead><tr><th>Day</th><th>Player</th><th>ECHO</th><th>Result</th></tr></thead>
-          <tbody>${auditRows || `<tr><td colspan="4">No decisions recorded</td></tr>`}</tbody>
-        </table>
-      `;
-    }
-
     function renderCompletionChart(history) {
       const questions = Array.isArray(history?.questions)
         ? history.questions
@@ -1764,67 +1586,6 @@ INDEX_HTML = r"""<!doctype html>
           </div>
         </div>
       `;
-    }
-
-    function renderPieceModal() {
-      const overlay = document.getElementById("pieceModalOverlay");
-      const body = document.getElementById("pieceModalBody");
-      if (!overlay || !body) return;
-      const piece = state.pieces.find(item => item.id === activePieceId);
-      if (!piece || !pieceModalVisible) {
-        overlay.classList.remove("active");
-        return;
-      }
-      overlay.classList.add("active");
-      const blockedCount = piece.jobs.filter(job => job.blocked).length;
-      const criticalCount = piece.jobs.filter(job => job.critical).length;
-      body.innerHTML = `
-        <div style="margin-bottom: 16px;">
-          <h3>${escapeHtml(piece.name)}</h3>
-          <p class="subtle">${escapeHtml(piece.displayId || piece.id)}</p>
-          <table>
-            <tbody>
-              <tr><td>Status</td><td>${escapeHtml(pieceStatusLabel(piece.status))}</td></tr>
-              <tr><td>Progress</td><td>${fmtPct(piece.progress)}</td></tr>
-              <tr><td>Subjobs complete</td><td>${piece.completed}/${piece.total}</td></tr>
-              <tr><td>Subjobs blocked</td><td>${blockedCount}</td></tr>
-              <tr><td>Critical subjobs</td><td>${criticalCount}</td></tr>
-              <tr><td>Due date</td><td>${escapeHtml(piece.dueDate)}</td></tr>
-              <tr><td>Risk</td><td>${Math.round(piece.risk)}</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <h4>Subjobs</h4>
-        <table>
-          <thead>
-            <tr>
-              <th>Subjob</th>
-              <th>Status</th>
-              <th>Shop</th>
-              <th>Workcenter</th>
-              <th>Capability</th>
-              <th>Remaining</th>
-              <th>Due</th>
-              <th>Blocked</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${piece.jobs.map(job => `
-              <tr>
-                <td>${jobLabel(job.id, job.rework)}</td>
-                <td>${escapeHtml(job.status)}</td>
-                <td>${escapeHtml(job.shop)}</td>
-                <td>${escapeHtml(job.workcenter)}</td>
-                <td>${escapeHtml(job.capability)}</td>
-                <td>${escapeHtml(job.remaining)}</td>
-                <td>${escapeHtml(job.due)}</td>
-                <td>${job.blocked ? "Yes" : ""}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      `;
-      body.scrollTop = 0;
     }
 
     function renderMetrics() {
@@ -1972,62 +1733,6 @@ INDEX_HTML = r"""<!doctype html>
       `;
     }
 
-    function renderDecisionModal() {
-      const overlay = $("decisionModalOverlay");
-      const subtitle = $("decisionModalSubtitle");
-      const body = $("decisionModalBody");
-      const footer = $("decisionModalFooter");
-      if (!overlay || !subtitle || !body || !footer) return;
-
-      if (!state || !decisionModalVisible || state.gameOver) {
-        overlay.classList.remove("active");
-        return;
-      }
-
-      const progressState = decisionProgress();
-      const nextCard = state.decisions.find(card => !card.selectedChoice);
-      overlay.classList.add("active");
-      subtitle.textContent = `${progressState.completed}/${progressState.total} campaign decisions complete`;
-
-      if (nextCard) {
-        // Only one open card is shown at a time. Submitting it asks the server
-        // for the updated state, which may expose the next required card.
-        const isFinalDecision = progressState.total > 0 && progressState.completed + 1 >= progressState.total;
-        const submitLabel = isFinalDecision ? "End Day" : "Submit";
-        body.innerHTML = `
-          <div class="decision">
-            <div class="decision-head">
-              <div class="decision-title">
-                <div>
-                  <h2>${escapeHtml(nextCard.title)}</h2>
-                  <div class="subtle">${escapeHtml(nextCard.type)} | ${escapeHtml(decisionUrgencyLabel(nextCard.severity))}</div>
-                </div>
-                <span class="badge warn">Open</span>
-              </div>
-              <p>${escapeHtml(nextCard.description)}</p>
-            </div>
-            ${nextCard.choices.map(choice => `
-              <button class="choice ${pendingChoice === choice.id ? "selected" : ""}" onclick="pendingChoice='${choice.id}';renderDecisionModal()">
-                <strong>${escapeHtml(choice.label)}</strong>
-                <small>${escapeHtml(choice.description)}</small>
-              </button>
-            `).join("")}
-          </div>
-        `;
-        footer.innerHTML = `
-          <button onclick="dismissDecisionModal()">Close</button>
-          <button ${!pendingChoice ? "disabled" : ""} class="primary" onclick="submitDecision('${nextCard.id}', ${isFinalDecision})">${submitLabel}</button>
-        `;
-        return;
-      }
-
-      body.innerHTML = "";
-      footer.innerHTML = `
-        <button onclick="dismissDecisionModal()">Close</button>
-        <button class="primary" onclick="prepareAdvanceDay()">End Day</button>
-      `;
-    }
-
     function renderSummary() {
       const summary = state.lastSummary;
       $("summarySection").classList.toggle("hidden", !summary);
@@ -2153,47 +1858,12 @@ INDEX_HTML = r"""<!doctype html>
       `;
     }
 
-    function table(el, headers, rows) {
-      el.innerHTML = `
-        <thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
-        <tbody>${rows.length ? rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${headers.length}">No rows</td></tr>`}</tbody>
-      `;
-    }
-
-    function progressCell(value, status = "") {
-      const tone = status === "Complete" ? "good" : status === "Not Started" ? "muted" : status === "Blocked" || status === "At Risk" ? "warn" : "info";
-      return `<div>${fmtPct(value)}</div><div class="progress"><div class="bar ${tone}" style="width:${Math.max(0, Math.min(1, value)) * 100}%"></div></div>`;
-    }
-
-    function badge(value, tone) {
-      return `<span class="badge ${tone || ""}">${escapeHtml(String(value))}</span>`;
-    }
-
-    function pieceStatusLabel(status) {
-      return status;
-    }
-
-    function pieceStatusTone(status) {
-      if (status === "Complete") return "good";
-      if (status === "In Progress") return "progress";
-      if (status === "At Risk" || status === "Blocked") return "warn";
-      return "info";
-    }
-
     function decisionUrgencyLabel(severity) {
       if (severity >= 5) return "Severe urgency";
       if (severity >= 4) return "High urgency";
       if (severity >= 3) return "Elevated urgency";
       if (severity >= 2) return "Moderate urgency";
       return "Low urgency";
-    }
-
-    function jobLabel(value, hasRework) {
-      const label = escapeHtml(String(value || "-"));
-      if (!hasRework || label === "-") return label;
-      // Rework is a visual flag, not a separate table column, so dense boards
-      // can still be scanned without widening every job table.
-      return `${label}<span class="rework-flag" title="Rework required or completed" aria-label="Rework"></span>`;
     }
 
     function escapeHtml(value) {
@@ -2203,10 +1873,7 @@ INDEX_HTML = r"""<!doctype html>
     $("settingsMenuBtn").addEventListener("click", toggleSettingsMenu);
     $("openNewRunModalBtn").addEventListener("click", openNewRunModal);
     document.addEventListener("click", (e) => {
-      const finalOverlay = document.getElementById("finalModalOverlay");
-      const pieceOverlay = document.getElementById("pieceModalOverlay");
       const welcomeOverlay = document.getElementById("welcomeModalOverlay");
-      const decisionOverlay = document.getElementById("decisionModalOverlay");
       const newRunOverlay = document.getElementById("newRunModalOverlay");
       const settingsWrap = document.querySelector(".settings-wrap");
       if (settingsWrap && !settingsWrap.contains(e.target)) {
@@ -2215,36 +1882,11 @@ INDEX_HTML = r"""<!doctype html>
       if (e.target && e.target.id === "closeWelcomeBtn") {
         closeWelcomeModal();
       }
-      if (e.target && e.target.id === "closeDecisionBtn") {
-        dismissDecisionModal();
-      }
       if (e.target && e.target.id === "closeNewRunModalBtn") {
         closeNewRunModal();
       }
-      if (e.target && e.target.id === "closeModalBtn") {
-        if (pendingAdvanceState) {
-          commitAdvanceDay();
-        }
-      }
-      if (e.target && e.target.id === "closeFinalBtn") {
-        closeFinalModal();
-      }
-      if (e.target && e.target.id === "closePieceModalBtn") {
-        pieceModalVisible = false;
-        render();
-      }
-      if (finalOverlay && e.target === finalOverlay) {
-        closeFinalModal();
-      }
-      if (pieceOverlay && e.target === pieceOverlay) {
-        pieceModalVisible = false;
-        render();
-      }
       if (welcomeOverlay && e.target === welcomeOverlay) {
         closeWelcomeModal();
-      }
-      if (decisionOverlay && e.target === decisionOverlay) {
-        dismissDecisionModal();
       }
       if (newRunOverlay && e.target === newRunOverlay) {
         closeNewRunModal();
@@ -2287,28 +1929,6 @@ INDEX_HTML = r"""<!doctype html>
       <div class="modal-body" id="summaryModalBody"></div>
       <div class="modal-footer">
         <button id="modalAdvanceBtn" class="primary" onclick="commitAdvanceDay()">Advance Day</button>
-      </div>
-    </div>
-  </div>
-  <!-- Final-run modal (centered) -->
-  <div id="finalModalOverlay" class="modal-overlay" role="dialog" aria-modal="true">
-    <div class="modal">
-      <div class="modal-body" id="finalModalBody"></div>
-      <div>
-        <h3>Outcome Drivers</h3>
-        <ul class="notes" id="finalModalNotes"></ul>
-      </div>
-      <div id="finalModalAudit"></div>
-      <div class="modal-footer">
-        <button id="closeFinalBtn" class="primary" onclick="closeFinalModal()">Close</button>
-      </div>
-    </div>
-  </div>
-  <div id="pieceModalOverlay" class="modal-overlay" role="dialog" aria-modal="true">
-    <div class="modal">
-      <div class="modal-body" id="pieceModalBody"></div>
-      <div class="modal-footer">
-        <button id="closePieceModalBtn" class="primary" onclick="closePieceModal()">Close</button>
       </div>
     </div>
   </div>

@@ -90,12 +90,7 @@ def generate_scenario(config: GameConfig) -> Scenario:
         jobs=copy.deepcopy(scenario.jobs),
         event_timeline=copy.deepcopy(scenario.event_timeline),
     )
-    (
-        scenario.decision_cards,
-        scenario.campaign_decision_graph,
-        scenario.daily_decision_roots,
-        scenario.daily_decision_counts,
-    ) = generate_campaign_decision_graph(graph_state, config)
+    scenario.decision_cards, scenario.campaign_decision_graph = generate_campaign_decision_graph(graph_state, config)
     return scenario
 
 

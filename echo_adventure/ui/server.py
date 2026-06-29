@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import json
-import math
 import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -19,7 +17,7 @@ from ..decisions import (
     decision_progress,
 )
 from ..echo import apply_echo_decisions_for_day, select_echo_choice_for_state
-from ..enums import JobStatus, TargetType, WorkCenterStatus
+from ..enums import JobStatus
 from ..metrics import (
     calculate_final_score,
     calculate_snapshot,
@@ -27,7 +25,7 @@ from ..metrics import (
     score_decision_path_differentiator,
     update_state_metrics,
 )
-from ..models import DecisionCard, DecisionChoice, DecisionProgress, Event, MetricSnapshot, PuzzlePiece, SimulationState
+from ..models import DecisionCard, DecisionChoice, DecisionProgress, MetricSnapshot, PuzzlePiece, SimulationState
 from ..scenario_generator import generate_scenario
 from ..schedulers.automated import AutomatedScheduler
 from ..schedulers.manual import ManualScheduler
@@ -55,8 +53,7 @@ class GameSession:
         # Resolve random seeds immediately so the UI can always display and
         # replay the exact generated scenario.
         self.seed = resolve_seed(seed)
-        self.mode = "normal"
-        self.config = GameConfig.for_preset(self.mode, seed=self.seed)
+        self.config = GameConfig.for_preset("normal", seed=self.seed)
         # Both schedulers share a scenario but mutate independent state copies.
         self.scenario = generate_scenario(self.config)
         self.player_state = initialize_state(self.scenario, self.config.shifts_per_day)
@@ -87,22 +84,12 @@ class GameSession:
             # frontend is plain JavaScript, so it benefits from data shaped
             # close to the rows and panels it renders.
             payload: dict[str, Any] = {
-                "seed": self.seed,
-                "mode": self.mode,
-                "scenarioId": self.scenario.scenario_id,
                 "gameOver": game_over,
                 "day": self.player_state.current_day,
-                "shift": self.player_state.current_shift,
-                "shiftLabel": day_shift(max(1, self.player_state.current_shift), self.config.shifts_per_day),
-                "deadlineLabel": day_shift(self.player_state.deadline_shift, self.config.shifts_per_day),
+                "projectedCompletion": day_shift(snapshot.projected_completion_shift, self.config.shifts_per_day),
                 "snapshot": _snapshot_payload(snapshot, self.config.shifts_per_day),
-                "overview": self._overview(snapshot),
-                "shops": self._shops_payload(),
-                "dailyCalendar": self._daily_calendar_payload(),
                 "pieces": self._pieces_payload(),
-                "workcenters": self._workcenters_payload(),
                 "criticalPath": self._critical_path_payload(),
-                "risks": self._risk_payload(),
                 "decisions": [_card_payload(card, self.applied_choices.get(card.id)) for card in self.current_cards],
                 "decisionProgress": _decision_progress_payload(
                     decision_progress(self.player_state, self.player_state.current_day, self.applied_choices)
@@ -200,275 +187,39 @@ class GameSession:
             apply_echo_decisions_for_day(self.automated_state, self.config, self.echo_completed_days)
             advance_day(self.automated_state, self.automated_scheduler)
 
-    def _overview(self, snapshot: MetricSnapshot) -> dict[str, Any]:
-        """Build the compact header/overview payload for the dashboard."""
-        # Active and warning counts are pulled from event ids tracked on state;
-        # the event objects contain the display text and severity details.
-        active = [event for event in self.player_state.event_timeline if event.id in self.player_state.active_events]
-        warnings = [event for event in self.player_state.event_timeline if event.id in self.player_state.known_warnings]
-        bottlenecks = self.player_state.get_bottleneck_shops(3)
-        return {
-            "activeDisruptions": len(active),
-            "knownWarnings": len(warnings),
-            "bottlenecks": [shop.name for shop in bottlenecks],
-            "projectedCompletion": day_shift(snapshot.projected_completion_shift, self.config.shifts_per_day),
-            "finalComplete": self.player_state.final_item_completed,
-            "completion": day_shift(self.player_state.completion_shift or 0, self.config.shifts_per_day)
-            if self.player_state.completion_shift
-            else None,
-        }
-
-    def _shops_payload(self) -> list[dict[str, Any]]:
-        """Return one row per shop for the Shops operating-board table."""
-        return [
-            {
-                "id": shop.id,
-                "name": shop.name,
-                "active": len(shop.active_job_ids),
-                "queued": len(shop.queued_job_ids),
-                "blocked": len(shop.blocked_job_ids),
-                "completed": len(shop.completed_job_ids),
-                "idle": shop.idle_time,
-                "risk": round(shop.risk_score, 1),
-                "highestRiskPiece": _highest_risk_piece(self.player_state, shop.id),
-                "bottleneck": len(shop.queued_job_ids) + len(shop.blocked_job_ids) >= 5,
-                "event": _shop_event_label(self.player_state, shop.id),
-            }
-            for shop in self.player_state.shops.values()
-        ]
-
     def _pieces_payload(self) -> list[dict[str, Any]]:
-        """Return top-level job rows plus nested subjob rows for drill-down modals."""
+        """Return the compact top-level job rows rendered by the current UI."""
         pieces = []
-        # Highest-risk jobs are listed first in the payload; the browser later
-        # sorts by internal id for the default table, but risk ordering is still
-        # useful to callers and future views.
-        for piece in sorted(self.player_state.pieces.values(), key=lambda item: (-item.risk_score, item.id)):
-            blocked = sum(1 for job_id in piece.job_ids if self.player_state.jobs[job_id].is_blocked)
-            critical = any(self.player_state.jobs[job_id].critical_path for job_id in piece.job_ids)
+        for piece in sorted(self.player_state.pieces.values(), key=lambda item: item.id):
             due_shift = _piece_due_shift(self.player_state, piece)
             projected_shift = _piece_projected_completion_shift(self.player_state, piece)
             completion_shift = _piece_completion_shift(self.player_state, piece)
             finish_shift = completion_shift or projected_shift
-            finish_delta = due_shift - finish_shift
-            piece_jobs: list[dict[str, Any]] = []
-            for job_id in piece.job_ids:
-                job = self.player_state.jobs[job_id]
-                # Resolve display names here so the frontend does not need to
-                # join subjobs back to shops/workcenters.
-                wc = self.player_state.workcenters.get(job.assigned_workcenter_id) if job.assigned_workcenter_id else None
-                shop = self.player_state.shops.get(job.shop_id)
-                piece_jobs.append(
-                    {
-                        "id": job.id,
-                        "status": job.status.value,
-                        "shop": shop.name if shop else job.shop_id,
-                        "workcenter": wc.id if wc else "-",
-                        "capability": job.required_capability,
-                        "remaining": job.remaining_duration_shifts,
-                        "planned": job.planned_duration,
-                        "due": day_shift(job.due_shift, self.config.shifts_per_day),
-                        "blocked": job.is_blocked,
-                        "blockReason": job.block_reason or "",
-                        "critical": job.critical_path,
-                        "rework": job.rework_count > 0 or job.status == JobStatus.REWORK_REQUIRED,
-                    }
-                )
             pieces.append(
                 {
                     "id": piece.id,
                     "displayId": _piece_display_id(piece.id),
-                    "name": piece.name,
-                    "status": piece.status.value,
                     "completed": piece.completed_job_count,
                     "total": piece.total_job_count,
-                    "progress": round(piece.percent_complete, 3),
-                    "blocked": blocked,
-                    "critical": critical,
-                    "subjobsRemaining": max(0, piece.total_job_count - piece.completed_job_count),
                     "dueDate": day_shift(due_shift, self.config.shifts_per_day),
                     "projectedCompletion": day_shift(finish_shift, self.config.shifts_per_day),
-                    "finishDelta": finish_delta,
-                    "finishDeltaLabel": _piece_finish_delta_label(finish_delta, completion_shift is not None),
-                    "risk": round(piece.risk_score, 1),
-                    "jobs": piece_jobs,
                 }
             )
         return pieces
 
-    def _workcenters_payload(self) -> dict[str, list[dict[str, Any]]]:
-        """Return workcenter rows grouped by shop id for the Workcenters tab."""
-        grouped: dict[str, list[dict[str, Any]]] = {}
-        for shop in self.player_state.shops.values():
-            rows = []
-            for wc_id in shop.workcenter_ids:
-                wc = self.player_state.workcenters[wc_id]
-                current = wc.current_job_id
-                current_job = self.player_state.jobs.get(current) if current else None
-                next_job = self.player_state.jobs.get(wc.queue[0]) if wc.queue else None
-                # Rework flags are calculated for current/next subjobs separately
-                # so the UI can add a compact red marker next to subjob ids.
-                rows.append(
-                    {
-                        "id": wc.id,
-                        "name": wc.name,
-                        "status": wc.status.value,
-                        "current": current or "-",
-                        "currentRework": bool(
-                            current_job
-                            and (current_job.rework_count > 0 or current_job.status == JobStatus.REWORK_REQUIRED)
-                        ),
-                        "remaining": current_job.remaining_duration_shifts if current_job else "-",
-                        "queue": len(wc.queue),
-                        "next": wc.queue[0] if wc.queue else "-",
-                        "nextRework": bool(
-                            next_job and (next_job.rework_count > 0 or next_job.status == JobStatus.REWORK_REQUIRED)
-                        ),
-                        "capability": ", ".join(cap.replace("_", " ") for cap in wc.capabilities[:2]),
-                        "down": wc.downtime_remaining or "-",
-                    }
-                )
-            grouped[shop.id] = rows
-        return grouped
-
-    def _daily_calendar_payload(self) -> dict[str, Any]:
-        """Return a non-mutating preview of jobs scheduled across today's shifts."""
-        preview = copy.deepcopy(self.player_state)
-        update_state_metrics(preview)
-        known_events = [
-            event
-            for event in preview.event_timeline
-            if event.id in preview.known_warnings or event.id in preview.active_events
-        ]
-        ManualScheduler().plan_day(preview, known_events)
-
-        day = preview.current_day
-        day_start_shift = (day - 1) * self.config.shifts_per_day
-        shifts: list[dict[str, Any]] = [
-            {
-                "index": shift_index + 1,
-                "label": f"Shift {shift_index + 1}",
-                "dayLabel": day_shift(day_start_shift + shift_index + 1, self.config.shifts_per_day),
-                "jobs": [],
-            }
-            for shift_index in range(self.config.shifts_per_day)
-        ]
-        active_by_wc: dict[str, str | None] = {}
-        remaining_by_wc: dict[str, int] = {}
-        status_by_wc: dict[str, str] = {}
-        queues_by_wc = {wc.id: list(wc.queue) for wc in preview.workcenters.values()}
-
-        for wc in preview.workcenters.values():
-            if wc.current_job_id and wc.current_job_id in preview.jobs and wc.status == WorkCenterStatus.BUSY:
-                active_by_wc[wc.id] = wc.current_job_id
-                remaining_by_wc[wc.id] = max(1, preview.jobs[wc.current_job_id].remaining_duration_shifts)
-                status_by_wc[wc.id] = "Running"
-            else:
-                active_by_wc[wc.id] = None
-                remaining_by_wc[wc.id] = 0
-                status_by_wc[wc.id] = ""
-
-        for shift in shifts:
-            for shop in preview.shops.values():
-                for wc_id in shop.workcenter_ids:
-                    wc = preview.workcenters[wc_id]
-                    job_id = active_by_wc[wc.id]
-                    if job_id is None:
-                        if wc.status not in {WorkCenterStatus.AVAILABLE, WorkCenterStatus.IDLE}:
-                            continue
-                        job_id = _next_calendar_job(preview, wc, queues_by_wc[wc.id])
-                        if job_id is None:
-                            continue
-                        active_by_wc[wc.id] = job_id
-                        remaining_by_wc[wc.id] = _calendar_duration(preview.jobs[job_id], wc)
-                        status_by_wc[wc.id] = "Scheduled"
-
-                    job = preview.jobs[job_id]
-                    shift["jobs"].append(
-                        _calendar_job_payload(
-                            preview,
-                            job,
-                            wc,
-                            shop.name,
-                            status_by_wc[wc.id],
-                            remaining_by_wc[wc.id],
-                        )
-                    )
-                    remaining_by_wc[wc.id] = max(0, remaining_by_wc[wc.id] - 1)
-                    if remaining_by_wc[wc.id] == 0:
-                        active_by_wc[wc.id] = None
-                        status_by_wc[wc.id] = ""
-
-        return {
-            "day": day,
-            "label": f"Day {day}",
-            "shifts": shifts,
-        }
-
     def _critical_path_payload(self) -> list[dict[str, Any]]:
-        """Return critical-path rows capped for a readable dashboard table."""
+        """Return critical-path rows used by the welcome preview."""
         rows = []
         for job in self.player_state.get_critical_path_jobs()[:18]:
-            wc = self.player_state.workcenters.get(job.assigned_workcenter_id) if job.assigned_workcenter_id else None
             shop = self.player_state.shops.get(job.shop_id)
-            # Slack is recalculated for display from current shift and remaining
-            # work so it reflects choices/events made earlier in the same day.
             slack = job.due_shift - self.player_state.current_shift - max(0, job.remaining_duration_shifts)
             rows.append(
                 {
                     "id": job.id,
                     "shop": shop.name if shop else job.shop_id,
-                    "workcenter": wc.id if wc else "-",
                     "remaining": job.remaining_duration_shifts,
                     "slack": slack,
-                    "block": job.block_reason or "-",
                     "impact": _piece_display_id(job.piece_id),
-                    "risk": round(job.risk_score, 1),
-                    "rework": job.rework_count > 0 or job.status == JobStatus.REWORK_REQUIRED,
-                }
-            )
-        return rows
-
-    def _risk_payload(self) -> list[dict[str, Any]]:
-        """Return active warnings/disruptions plus blocked subjobs for risk review."""
-        rows = []
-        for event in self.player_state.event_timeline:
-            if event.id not in self.player_state.active_events and event.id not in self.player_state.known_warnings:
-                continue
-            # Source identifies event-chain ancestry. It is "-" for base
-            # timeline events and an event id for follow-on/cascade events.
-            status = "Active" if event.id in self.player_state.active_events else "Warning"
-            shifts = max(0, event.end_shift - self.player_state.current_shift) if status == "Active" else max(0, event.start_shift - self.player_state.current_shift)
-            rows.append(
-                {
-                    "status": status,
-                    "id": event.id,
-                    "type": event.type.value,
-                    "affected": _event_target_name(self.player_state, event),
-                    "severity": event.severity,
-                    "shifts": shifts,
-                    "response": _response_category(event.type.value),
-                    "source": event.parent_event_id or "-",
-                    "rework": bool(
-                        event.target_id in self.player_state.jobs
-                        and self.player_state.jobs[event.target_id].rework_count > 0
-                    ),
-                }
-            )
-        for job in self.player_state.get_blocked_jobs()[:12]:
-            # Blocked subjobs are shown alongside events because they require the
-            # same scheduling attention even when they are not event objects.
-            rows.append(
-                {
-                    "status": "Blocked",
-                    "id": job.id,
-                    "type": "Subjob block",
-                    "affected": _piece_display_id(job.piece_id),
-                    "severity": round(job.risk_score, 1),
-                    "shifts": "-",
-                    "response": "mitigation recommended",
-                    "source": "-",
-                    "rework": job.rework_count > 0 or job.status == JobStatus.REWORK_REQUIRED,
                 }
             )
         return rows
@@ -484,19 +235,11 @@ class GameSession:
                 continue
 
             shop = self.player_state.shops.get(job.shop_id)
-            wc = (
-                self.player_state.workcenters.get(job.assigned_workcenter_id)
-                if job.assigned_workcenter_id
-                else None
-            )
-
             past_due.append(
                 {
                     "id": job.id,
                     "piece": _piece_display_id(job.piece_id),
                     "shop": shop.name if shop else job.shop_id,
-                    "workcenter": wc.id if wc else "-",
-                    "status": job.status.value,
                     "due": day_shift(job.due_shift, self.config.shifts_per_day),
                     "daysLate": max(
                         1,
@@ -504,8 +247,6 @@ class GameSession:
                         // self.config.shifts_per_day,
                     ),
                     "remaining": job.remaining_duration_shifts,
-                    "critical": job.critical_path,
-                    "rework": job.rework_count > 0 or job.status == JobStatus.REWORK_REQUIRED,
                 }
             )
 
@@ -513,7 +254,6 @@ class GameSession:
             past_due,
             key=lambda row: (
                 -row["daysLate"],
-                -int(row["critical"]),
                 row["piece"],
                 row["id"],
             ),
@@ -1022,121 +762,11 @@ def _choice_payload(choice: DecisionChoice) -> dict[str, Any]:
     }
 
 
-def _next_calendar_job(state: SimulationState, wc, queue: list[str]) -> str | None:
-    """Pop the next queue job that could actually start on this workcenter."""
-    while queue:
-        job_id = queue.pop(0)
-        if job_id not in state.jobs:
-            continue
-        job = state.jobs[job_id]
-        if job.status in {JobStatus.COMPLETE, JobStatus.CANCELLED}:
-            continue
-        if job.block_reason or not state.is_dependency_complete(job_id):
-            continue
-        if job.required_capability not in wc.capabilities:
-            continue
-        return job_id
-    return None
-
-
-def _calendar_duration(job, wc) -> int:
-    """Estimate how many shifts a queued job will occupy on the chosen workcenter."""
-    if job.started_once:
-        return max(1, job.remaining_duration_shifts)
-    duration = max(1, math.ceil(job.planned_duration / max(0.2, wc.efficiency)))
-    if wc.id != job.candidate_workcenter_ids[0]:
-        duration += 1
-    return duration
-
-
-def _calendar_job_payload(
-    state: SimulationState,
-    job,
-    wc,
-    shop_name: str,
-    status: str,
-    remaining: int,
-) -> dict[str, Any]:
-    """Convert one scheduled subjob occurrence into a daily calendar card."""
-    piece = state.pieces.get(job.piece_id)
-    return {
-        "id": job.id,
-        "piece": _piece_display_id(job.piece_id),
-        "pieceName": piece.name if piece else "Project",
-        "shop": shop_name,
-        "workcenter": wc.id,
-        "workcenterName": wc.name,
-        "capability": job.required_capability.replace("_", " "),
-        "status": status,
-        "remaining": max(1, remaining),
-        "due": day_shift(job.due_shift, state.shifts_per_day),
-        "late": state.current_shift > job.due_shift,
-        "critical": job.critical_path,
-        "risk": round(job.risk_score, 1),
-        "rework": job.rework_count > 0 or job.status == JobStatus.REWORK_REQUIRED,
-    }
-
-
-def _highest_risk_piece(state: SimulationState, shop_id: str) -> str:
-    """Return a compact highest-risk job label for one shop row."""
-    piece_scores: dict[str, float] = {}
-    for job in state.jobs.values():
-        if job.shop_id == shop_id and job.piece_id in state.pieces and not job.is_complete:
-            piece_scores[job.piece_id] = max(piece_scores.get(job.piece_id, 0.0), job.risk_score)
-    if not piece_scores:
-        return "-"
-    piece_id = max(piece_scores, key=piece_scores.get)
-    return f"{_piece_display_id(piece_id)} ({piece_scores[piece_id]:.0f})"
-
-
 def _piece_display_id(piece_id: str) -> str:
     """Convert an internal piece id into the player-facing top-level job label."""
     suffix = piece_id.split("-")[-1] if piece_id else ""
     return f"Job {suffix}" if suffix else "Job"
 
-
-def _shop_event_label(state: SimulationState, shop_id: str) -> str:
-    """Return active event labels affecting a shop or its workcenters."""
-    labels = []
-    for event in state.event_timeline:
-        if event.id not in state.active_events:
-            continue
-        if event.target_id == shop_id:
-            labels.append(event.type.value)
-        elif event.target_id in state.workcenters and state.workcenters[event.target_id].shop_id == shop_id:
-            labels.append(event.type.value)
-    return ", ".join(labels[:2])
-
-
-def _event_target_name(state: SimulationState, event: Event) -> str:
-    """Resolve an event target id into a human-readable UI label."""
-    if event.target_type == TargetType.SHOP and event.target_id in state.shops:
-        return state.shops[event.target_id].name
-    if event.target_type == TargetType.WORKCENTER and event.target_id in state.workcenters:
-        return state.workcenters[event.target_id].name
-    if event.target_type == TargetType.PIECE and event.target_id in state.pieces:
-        return state.pieces[event.target_id].name
-    if event.target_type == TargetType.JOB and event.target_id in state.jobs:
-        return event.target_id
-    return event.target_id
-
-
-def _response_category(event_type: str) -> str:
-    """Map event display text to the broad response hint shown in risk rows."""
-    lower = event_type.lower()
-    if "weather" in lower or "facility" in lower:
-        return "pre-stage or shift unaffected work"
-    if "material" in lower or "supplier" in lower or "logistics" in lower:
-        return "resequence or expedite"
-    if "machine" in lower or "workcenter" in lower or "tooling" in lower:
-        return "reroute or protect critical path"
-    if "crew" in lower:
-        return "split capacity or protect critical subjobs"
-    if "rework" in lower:
-        return "contain quality impact"
-    if "inspection" in lower or "engineering" in lower or "certification" in lower:
-        return "mitigation recommended"
-    return "priority review"
 
 def _job_was_late(state: SimulationState, job) -> bool:
     """Return whether a subjob finished late or is currently past due."""
@@ -1210,16 +840,6 @@ def _job_queue_wait(state: SimulationState, job_id: str) -> int:
     if job_id in wc.queue:
         wait += wc.queue.index(job_id)
     return wait
-
-
-def _piece_finish_delta_label(delta: int, completed: bool) -> str:
-    """Return compact early/late wording for a top-level job finish estimate."""
-    prefix = "Finished" if completed else "Done"
-    if delta > 0:
-        return f"{prefix} {delta} shift(s) before due"
-    if delta < 0:
-        return f"{prefix} {abs(delta)} shift(s) after due"
-    return f"{prefix} on time"
 
 
 def _piece_completion_shift(state: SimulationState, piece: PuzzlePiece) -> int | None:

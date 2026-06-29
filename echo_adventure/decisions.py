@@ -102,7 +102,7 @@ _CHOICE_BRANCH_PROFILES: dict[str, tuple[str, tuple[str, ...]]] = {
 def generate_campaign_decision_graph(
     state: SimulationState,
     config: GameConfig,
-) -> tuple[dict[str, DecisionCard], CampaignDecisionGraph, dict[int, list[str]], dict[int, int]]:
+) -> tuple[dict[str, DecisionCard], CampaignDecisionGraph]:
     """Build one bounded campaign-wide decision graph at scenario creation.
 
     Every future route card is created here. During play, choices only unlock
@@ -143,7 +143,6 @@ def generate_campaign_decision_graph(
         cards[root.id] = root
         graph.root_card_ids.append(root.id)
         graph.cards_by_day.setdefault(1, []).append(root.id)
-        graph.roots_by_day.setdefault(1, []).append(root.id)
         if graph.campaign_root_card_id is None:
             graph.campaign_root_card_id = root.id
 
@@ -168,7 +167,6 @@ def generate_campaign_decision_graph(
             )
             cards[card.id] = card
             graph.cards_by_day.setdefault(day, []).append(card.id)
-            graph.roots_by_day.setdefault(day, []).append(card.id)
 
     _decorate_campaign_choices(cards, config)
     echo_score_memo: dict[str, float] = {}
@@ -185,22 +183,8 @@ def generate_campaign_decision_graph(
 
     graph.card_ids = sorted(cards)
     graph.cards_by_day = {day: ids for day, ids in sorted(graph.cards_by_day.items())}
-    graph.roots_by_day = {day: ids for day, ids in sorted(graph.roots_by_day.items())}
     graph.event_card_ids_by_day = {day: ids for day, ids in sorted(graph.event_card_ids_by_day.items())}
-    graph.daily_decision_counts = {
-        day: min(graph.max_active_cards_per_day, len(ids))
-        for day, ids in graph.cards_by_day.items()
-    }
-    return cards, graph, graph.roots_by_day, graph.daily_decision_counts
-
-
-def generate_decision_graph(
-    state: SimulationState,
-    config: GameConfig,
-) -> tuple[dict[str, DecisionCard], dict[int, list[str]], dict[int, int]]:
-    """Compatibility wrapper returning day indexes from the campaign graph."""
-    cards, _graph, roots_by_day, counts_by_day = generate_campaign_decision_graph(state, config)
-    return cards, roots_by_day, counts_by_day
+    return cards, graph
 
 
 def active_decision_cards(
@@ -209,9 +193,7 @@ def active_decision_cards(
     selected_choices: dict[str, str],
 ) -> list[DecisionCard]:
     """Return the currently visible campaign decision cards."""
-    if state.campaign_decision_graph.card_ids:
-        return active_campaign_decision_cards(state, day, selected_choices)
-    return _active_legacy_decision_cards(state, day, selected_choices)
+    return active_campaign_decision_cards(state, day, selected_choices)
 
 
 def active_campaign_decision_cards(
@@ -227,7 +209,7 @@ def active_campaign_decision_cards(
     candidate_ids = graph.cards_by_day.get(day) or [
         card_id for card_id, card in state.decision_cards.items() if card.day == day
     ]
-    limit = graph.max_active_cards_per_day or state.daily_decision_counts.get(day, 0) or len(candidate_ids)
+    limit = graph.max_active_cards_per_day or len(candidate_ids)
     cards = [
         card
         for card_id in candidate_ids
@@ -236,31 +218,6 @@ def active_campaign_decision_cards(
     ]
     cards.sort(key=lambda card: _campaign_active_sort_key(state, card))
     return cards[:limit] if limit > 0 else cards
-
-
-def _active_legacy_decision_cards(
-    state: SimulationState,
-    day: int,
-    selected_choices: dict[str, str],
-) -> list[DecisionCard]:
-    """Return visible cards for pre-campaign saves/tests."""
-    cards: list[DecisionCard] = []
-    question_limit = state.daily_decision_counts.get(day, 0)
-    for root_id in state.daily_decision_roots.get(day, []):
-        card_id: str | None = root_id
-        visited: set[str] = set()
-        while card_id and card_id not in visited and len(cards) < question_limit:
-            visited.add(card_id)
-            card = state.decision_cards.get(card_id)
-            if not card:
-                break
-            cards.append(card)
-            choice_id = selected_choices.get(card.id)
-            if not choice_id:
-                break
-            choice = next((candidate for candidate in card.choices if candidate.id == choice_id), None)
-            card_id = choice.next_card_id if choice else None
-    return cards
 
 
 def _campaign_card_available(
@@ -299,50 +256,15 @@ def decision_progress(
     selected_choices: dict[str, str],
 ) -> DecisionProgress:
     """Return progress through the day's fixed number of questions."""
-    if state.campaign_decision_graph.card_ids:
-        cards = active_campaign_decision_cards(state, day, selected_choices)
-        effective_choices = {**state.campaign_selected_choices, **selected_choices}
-        open_card_ids = [card.id for card in cards if card.id not in effective_choices]
-        answered = len(cards) - len(open_card_ids)
-        return DecisionProgress(
-            day=day,
-            total_questions=len(cards),
-            answered_questions=answered,
-            visible_cards=len(cards),
-            open_card_ids=open_card_ids,
-        )
-
-    total_questions = state.daily_decision_counts.get(day, len(state.daily_decision_roots.get(day, [])))
-    visible = 0
-    answered = 0
-    open_card_ids: list[str] = []
-
-    for root_id in state.daily_decision_roots.get(day, []):
-        card_id: str | None = root_id
-        visited: set[str] = set()
-        while card_id and card_id not in visited and visible < total_questions:
-            visited.add(card_id)
-            card = state.decision_cards.get(card_id)
-            if not card:
-                break
-            visible += 1
-            choice_id = selected_choices.get(card.id)
-            if not choice_id:
-                open_card_ids.append(card.id)
-                break
-            answered += 1
-            if answered >= total_questions:
-                break
-            choice = next((candidate for candidate in card.choices if candidate.id == choice_id), None)
-            if not choice or not choice.next_card_id or choice.next_card_id not in state.decision_cards:
-                break
-            card_id = choice.next_card_id
-
+    cards = active_campaign_decision_cards(state, day, selected_choices)
+    effective_choices = {**state.campaign_selected_choices, **selected_choices}
+    open_card_ids = [card.id for card in cards if card.id not in effective_choices]
+    answered = len(cards) - len(open_card_ids)
     return DecisionProgress(
         day=day,
-        total_questions=total_questions,
-        answered_questions=min(answered, total_questions),
-        visible_cards=visible,
+        total_questions=len(cards),
+        answered_questions=answered,
+        visible_cards=len(cards),
         open_card_ids=open_card_ids,
     )
 
@@ -851,71 +773,6 @@ def _prime_graph_state_for_day(state: SimulationState, day: int, config: GameCon
     update_state_metrics(state)
 
 
-def _attach_next_question_cards(
-    parent: DecisionCard,
-    cards: dict[str, DecisionCard],
-    day: int,
-    question_number: int,
-    total_questions: int,
-    question_templates: list[DecisionCard],
-) -> None:
-    """Create answer-specific next questions under a parent card."""
-    if question_number > total_questions:
-        return
-    template_index = question_number - 2
-    template = question_templates[template_index] if template_index < len(question_templates) else None
-    for choice in parent.choices:
-        child_id = f"DAY-{day:02d}-Q{question_number:02d}-{parent.id.split('-', 2)[-1]}-C{choice.id}"
-        child = _next_question_card(parent, choice, child_id, question_number, template)
-        choice.next_card_id = child.id
-        cards[child.id] = child
-        _attach_next_question_cards(child, cards, day, question_number + 1, total_questions, question_templates)
-
-
-def _next_question_card(
-    parent: DecisionCard,
-    parent_choice: DecisionChoice,
-    card_id: str,
-    question_number: int,
-    template: DecisionCard | None = None,
-) -> DecisionCard:
-    """Build the next daily decision selected by a previous answer."""
-    if template:
-        return DecisionCard(
-            id=card_id,
-            day=parent.day,
-            type=template.type,
-            title=f"Next: {template.title}",
-            description=f"You chose {parent_choice.label.lower()}. Now: {template.description}",
-            target_ids=list(template.target_ids),
-            severity=template.severity,
-            choices=_clone_choices(template.choices),
-            parent_card_id=parent.id,
-            parent_choice_id=parent_choice.id,
-        )
-
-    recommended = _recommended_effect_for_card(parent)
-    event_id = parent_choice.immediate_effects.get("event_id") or next(
-        (target_id for target_id in parent.target_ids if isinstance(target_id, str) and target_id.startswith("EVT-")),
-        None,
-    )
-    title = f"Next: {parent_choice.label}"
-    description = f"That move changes {parent.title.lower()}. Pick the next move."
-    choices = _next_question_choices(recommended, event_id, question_number)
-    return DecisionCard(
-        id=card_id,
-        day=parent.day,
-        type=parent.type,
-        title=title,
-        description=description,
-        target_ids=list(parent.target_ids),
-        severity=max(1, parent.severity - (1 if question_number > 2 else 0)),
-        choices=choices,
-        parent_card_id=parent.id,
-        parent_choice_id=parent_choice.id,
-    )
-
-
 def _clone_choices(choices: list[DecisionChoice]) -> list[DecisionChoice]:
     """Copy choice templates without carrying branch links between cards."""
     return [
@@ -935,94 +792,6 @@ def _clone_choices(choices: list[DecisionChoice]) -> list[DecisionChoice]:
         )
         for choice in choices
     ]
-
-
-def _next_question_choices(
-    recommended_effect: str,
-    event_id: str | None,
-    question_number: int,
-) -> list[DecisionChoice]:
-    """Return a compact set of choices for a next-question card."""
-    event_payload = {"event_id": event_id} if event_id else {}
-    risk_bonus = 1 if question_number > 2 else 0
-    recommended_label = _effect_label(recommended_effect)
-    return [
-        DecisionChoice(
-            id="1",
-            label=f"Do {recommended_label}",
-            description="Commit to this move today.",
-            immediate_effects={"type": recommended_effect, **event_payload},
-            risk_effect=-4 + risk_bonus,
-            reschedule_effect=1,
-        ),
-        DecisionChoice(
-            id="2",
-            label="Broaden it",
-            description="Apply the move to nearby work too.",
-            immediate_effects={"type": "pull_forward", **event_payload},
-            risk_effect=-3 + risk_bonus,
-            reschedule_effect=2,
-        ),
-        DecisionChoice(
-            id="3",
-            label="Keep it small",
-            description="Make the smallest queue change.",
-            immediate_effects={"type": "resequence", **event_payload},
-            risk_effect=-1 + risk_bonus,
-            reschedule_effect=1,
-        ),
-        DecisionChoice(
-            id="4",
-            label="Stand down",
-            description="Stop changing the plan today.",
-            immediate_effects={"type": "wait", **event_payload},
-            risk_effect=3 + question_number,
-            reschedule_effect=0,
-        ),
-    ]
-
-
-def _recommended_effect_for_card(card: DecisionCard) -> str:
-    """Choose the response ECHO should prefer for a card category."""
-    if card.type in {DecisionType.MACHINE_DOWN, DecisionType.ALTERNATE_ROUTING}:
-        return "reroute"
-    if card.type in {
-        DecisionType.MISSING_MATERIAL,
-        DecisionType.INSPECTION_DELAY,
-        DecisionType.ENGINEERING_HOLD,
-    }:
-        return "expedite_event"
-    if card.type in {DecisionType.BOTTLENECK, DecisionType.QUEUE_CONGESTION}:
-        return "split_capacity"
-    if card.type == DecisionType.IDLE_WORKCENTER:
-        return "pull_forward"
-    if card.type == DecisionType.ECHO_RECOMMENDATION:
-        return "echo_recommendation"
-    if card.type == DecisionType.UNEXPECTED_JOB:
-        return "prioritize_new_job"
-    if card.type == DecisionType.CRITICAL_PATH:
-        return "protect_critical"
-    if card.type in {DecisionType.IDLE_WORKCENTER, DecisionType.COMPLETION_READINESS}:
-        return "pull_forward"
-    return "resequence"
-
-
-def _effect_label(effect_type: str) -> str:
-    """Return short player-facing text for a decision effect."""
-    return {
-        "echo_recommendation": "ECHO's recommendation",
-        "expedite_event": "fix it now",
-        "protect_critical": "protect key work",
-        "reroute": "go around it",
-        "split_capacity": "split the load",
-        "pull_forward": "pull work forward",
-        "prioritize_new_job": "put the new job up front",
-        "backlog_new_job": "put the new job at the back",
-        "resequence": "change the queue",
-        "preempt": "bump lower work",
-        "defer": "push easy work back",
-        "wait": "hold steady",
-    }.get(effect_type, "the response")
 
 
 def _visible_events(state: SimulationState) -> list[Event]:
