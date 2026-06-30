@@ -88,6 +88,7 @@ class GameSession:
             # frontend is plain JavaScript, so it benefits from data shaped
             # close to the rows and panels it renders.
             payload: dict[str, Any] = {
+                "seed": self.seed,
                 "gameOver": game_over,
                 "day": self.player_state.current_day,
                 "shiftsPerDay": self.config.shifts_per_day,

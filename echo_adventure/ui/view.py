@@ -1171,6 +1171,8 @@ INDEX_HTML = r"""<!doctype html>
     let dayCycleAdvancing = false;
     let dayCycleShiftInFlight = false;
     let dayCycleCompletedShiftMarkers = new Set();
+    let dayDecisionThresholdKey = null;
+    let dayDecisionThresholds = [];
 
     const DAY_CYCLE_DURATION_MS = 28000;
     const DAY_CYCLE_TICK_MS = 220;
@@ -1349,6 +1351,8 @@ INDEX_HTML = r"""<!doctype html>
       dayCycleAdvancing = false;
       dayCycleShiftInFlight = false;
       dayCycleCompletedShiftMarkers = new Set();
+      dayDecisionThresholdKey = null;
+      dayDecisionThresholds = [];
     }
 
     function syncDayCycleForState() {
@@ -1366,9 +1370,12 @@ INDEX_HTML = r"""<!doctype html>
         dayCycleShiftInFlight = false;
         dayCycleCompletedShiftMarkers = completedShiftMarkersFromState();
         dayCycleProgress = Math.max(dayCycleProgress, (completedShiftCountFromState() / shiftsPerDay()) * 100);
+        dayDecisionThresholdKey = null;
+        dayDecisionThresholds = [];
         decisionModalVisible = false;
         decisionModalDismissedKey = null;
       }
+      syncDecisionThresholdsForState();
       ensureDayCycle();
     }
 
@@ -1389,7 +1396,74 @@ INDEX_HTML = r"""<!doctype html>
     function nextDecisionThreshold() {
       const progressState = decisionProgress();
       if (!progressState.total) return 100;
+      syncDecisionThresholdsForState();
+      const threshold = dayDecisionThresholds[progressState.completed];
+      if (Number.isFinite(threshold)) return threshold;
       return ((progressState.completed + 1) / (progressState.total + 1)) * 100;
+    }
+
+    function syncDecisionThresholdsForState() {
+      if (!state || state.gameOver) {
+        dayDecisionThresholdKey = null;
+        dayDecisionThresholds = [];
+        return;
+      }
+      const progressState = decisionProgress();
+      const cardIds = Array.isArray(state.decisions)
+        ? state.decisions.map(card => card.id).join("|")
+        : "";
+      const nextKey = `${state.seed ?? "seedless"}:${state.day}:${progressState.total}:${cardIds}`;
+      if (dayDecisionThresholdKey === nextKey) return;
+      dayDecisionThresholdKey = nextKey;
+      dayDecisionThresholds = buildDecisionThresholds(progressState.total, nextKey);
+    }
+
+    function buildDecisionThresholds(total, seedText) {
+      const count = Math.max(0, Math.floor(Number(total) || 0));
+      if (!count) return [];
+      const random = seededRandomFactory(seedText);
+      if (count === 1) {
+        return [randomBetween(random, 24, 76)];
+      }
+
+      const edgeBuffer = 7;
+      const minimumGap = count >= 5 ? 8 : 10;
+      const baseUsed = edgeBuffer * 2 + minimumGap * Math.max(0, count - 1);
+      const remaining = Math.max(0, 100 - baseUsed);
+      const weights = Array.from({ length: count + 1 }, () => 0.25 + random() * 1.5);
+      const weightTotal = weights.reduce((sum, weight) => sum + weight, 0) || 1;
+      const extras = weights.map(weight => remaining * (weight / weightTotal));
+      const thresholds = [];
+      let cursor = edgeBuffer + extras[0];
+
+      for (let index = 0; index < count; index += 1) {
+        if (index > 0) {
+          cursor += minimumGap + extras[index];
+        }
+        thresholds.push(Math.max(5, Math.min(94, Number(cursor.toFixed(1)))));
+      }
+      return thresholds;
+    }
+
+    function seededRandomFactory(seedText) {
+      let seed = 2166136261;
+      const text = String(seedText || "decision-thresholds");
+      for (let index = 0; index < text.length; index += 1) {
+        seed ^= text.charCodeAt(index);
+        seed = Math.imul(seed, 16777619);
+      }
+      seed >>>= 0;
+      return () => {
+        seed += 0x6D2B79F5;
+        let value = seed;
+        value = Math.imul(value ^ (value >>> 15), value | 1);
+        value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+        return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function randomBetween(random, minimum, maximum) {
+      return Number((minimum + random() * (maximum - minimum)).toFixed(1));
     }
 
     function nextDecisionIsDue() {
