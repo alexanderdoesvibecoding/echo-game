@@ -610,6 +610,34 @@ INDEX_HTML = r"""<!doctype html>
       padding: 12px;
       background: #fff;
     }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: minmax(360px, 1.25fr) minmax(280px, 0.75fr);
+      grid-template-areas:
+        "puzzle stats"
+        "past updates";
+      gap: 12px;
+      padding: 14px;
+      align-items: start;
+    }
+    .summary-puzzle-panel { grid-area: puzzle; }
+    .summary-stats-panel { grid-area: stats; }
+    .summary-past-due-panel { grid-area: past; }
+    .summary-updates-panel { grid-area: updates; }
+    .summary-puzzle-panel .submarine-puzzle {
+      margin-bottom: 0;
+    }
+    .summary-past-due-panel,
+    .summary-stats-panel {
+      min-width: 0;
+      overflow: hidden;
+    }
+    .summary-table-scroll {
+      overflow-x: auto;
+    }
+    .summary-past-due-panel table {
+      min-width: 620px;
+    }
     .completion-chart {
       display: grid;
       gap: 10px;
@@ -761,7 +789,6 @@ INDEX_HTML = r"""<!doctype html>
       text-anchor: middle;
       dominant-baseline: middle;
     }
-    .puzzle-legend,
     .puzzle-added {
       display: flex;
       flex-wrap: wrap;
@@ -771,18 +798,16 @@ INDEX_HTML = r"""<!doctype html>
       font-size: 12px;
       font-weight: 700;
     }
-    .legend-swatch {
-      width: 13px;
-      height: 13px;
-      border-radius: 3px;
-      border: 1px solid var(--line);
-      display: inline-block;
-    }
-    .legend-swatch.placed { background: #728481; }
-    .legend-swatch.waiting { background: #fbfaf4; }
-    .legend-swatch.slot { background: rgba(255, 255, 255, 0.48); border-style: dashed; }
     .puzzle-added .badge {
       border-radius: 6px;
+    }
+    .puzzle-added {
+      width: fit-content;
+      max-width: 100%;
+      padding: 7px 9px;
+      border: 1px solid rgba(22, 124, 120, 0.18);
+      border-radius: 8px;
+      background: rgba(22, 124, 120, 0.07);
     }
     html[data-theme="dark"] .puzzle-stage {
       background: linear-gradient(180deg, #17212a 0%, #111821 100%);
@@ -806,11 +831,9 @@ INDEX_HTML = r"""<!doctype html>
       fill: rgba(240, 243, 245, 0.14);
       stroke: rgba(240, 243, 245, 0.42);
     }
-    html[data-theme="dark"] .legend-swatch.waiting {
-      background: #252d38;
-    }
-    html[data-theme="dark"] .legend-swatch.slot {
-      background: rgba(37, 45, 56, 0.42);
+    html[data-theme="dark"] .puzzle-added {
+      border-color: rgba(93, 217, 224, 0.2);
+      background: rgba(93, 217, 224, 0.08);
     }
     .notes {
       margin: 0;
@@ -837,13 +860,21 @@ INDEX_HTML = r"""<!doctype html>
     @media (max-width: 1120px) {
       main { grid-template-columns: 1fr; }
       .metrics { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+      .summary-grid {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "puzzle"
+          "stats"
+          "past"
+          "updates";
+      }
     }
     @media (max-width: 680px) {
       .topbar { grid-template-columns: auto 1fr; }
       .controls { grid-column: 1 / -1; }
       .controls { justify-content: flex-start; }
       main { padding: 12px; }
-      .metrics, .split { grid-template-columns: 1fr; }
+      .metrics, .split, .summary-grid { grid-template-columns: 1fr; }
       table { min-width: 720px; }
     }
     /* Modal overlay for end-of-day summary */
@@ -870,6 +901,15 @@ INDEX_HTML = r"""<!doctype html>
     .modal .modal-body { max-height: 60vh; overflow: auto; margin-bottom: 12px; }
     .modal .modal-footer { display:flex; justify-content:flex-end; gap:8px; }
     .modal h3 { margin-top: 0; }
+    .summary-modal {
+      max-width: 1160px;
+    }
+    .summary-modal .modal-body {
+      max-height: 72vh;
+    }
+    .summary-modal .summary-grid {
+      padding: 0;
+    }
     .decision-modal {
       max-width: 720px;
     }
@@ -1022,7 +1062,6 @@ INDEX_HTML = r"""<!doctype html>
         <h1>Shipyard Scheduler Choose Your Own Adventure Game</h1>
         <div class="status-line">
           <span class="badge" id="dayBadge">Day</span>
-          <span class="badge warn" id="decisionProgress">Decisions Pending</span>
         </div>
       </div>
     </div>
@@ -1068,10 +1107,7 @@ INDEX_HTML = r"""<!doctype html>
 
       <section id="summarySection" class="hidden">
         <div class="section-head"><h2>End-of-Day Summary</h2></div>
-        <div class="split">
-          <div class="reveal-panel" id="summaryMetrics"></div>
-          <div class="reveal-panel"><h3>Updates</h3><ul class="notes" id="summaryNotes"></ul></div>
-        </div>
+        <div class="summary-grid" id="summaryGrid"></div>
       </section>
 
     </div>
@@ -1754,6 +1790,45 @@ INDEX_HTML = r"""<!doctype html>
       `;
     }
 
+    function renderSummaryStatsTable(summary, piecesTotal) {
+      return `
+        <table>
+          <tbody>
+            <tr><td>Subjobs completed today</td><td>${summary.completedToday}</td></tr>
+            <tr><td>Subjobs remaining</td><td>${summary.jobsRemaining}</td></tr>
+            <tr><td>Jobs complete</td><td>${summary.piecesCompleted}/${piecesTotal}</td></tr>
+            <tr><td>Subjobs behind schedule</td><td>${summary.jobsBehindSchedule}</td></tr>
+            <tr><td>Subjobs late</td><td>${summary.jobsLate}</td></tr>
+            <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
+            <tr><td>Projected completion</td><td>${summary.projectedCompletion}</td></tr>
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderSummaryGrid(summary, piecesTotal, puzzleInstanceId) {
+      const notesMarkup = (summary.notes || [])
+        .map(note => `<li>${escapeHtml(note)}</li>`)
+        .join("") || "<li>No notable notes recorded.</li>";
+      return `
+        <div class="reveal-panel summary-puzzle-panel">
+          ${renderSubmarinePuzzle(summary.puzzle, puzzleInstanceId)}
+        </div>
+        <div class="reveal-panel summary-stats-panel">
+          <h3>Stats</h3>
+          <div class="summary-table-scroll">${renderSummaryStatsTable(summary, piecesTotal)}</div>
+        </div>
+        <div class="reveal-panel summary-past-due-panel">
+          <h3>Past Due Subjobs</h3>
+          <div class="summary-table-scroll">${renderPastDueJobs(summary.pastDueJobs)}</div>
+        </div>
+        <div class="reveal-panel summary-updates-panel">
+          <h3>Updates</h3>
+          <ul class="notes">${notesMarkup}</ul>
+        </div>
+      `;
+    }
+
     function submarinePieceSlots(total) {
       if (total <= 0) return [];
       const n = (value) => Number(value).toFixed(1);
@@ -1859,14 +1934,14 @@ INDEX_HTML = r"""<!doctype html>
 
     function loosePiecePosition(index) {
       const positions = [
-        { x: 112, y: 64, angle: -10 },
-        { x: 260, y: 56, angle: 7 },
-        { x: 430, y: 62, angle: -5 },
-        { x: 610, y: 70, angle: 9 },
-        { x: 128, y: 356, angle: 8 },
-        { x: 300, y: 365, angle: -7 },
-        { x: 480, y: 360, angle: 6 },
-        { x: 650, y: 344, angle: -8 },
+        { x: 112, y: 92, angle: -10 },
+        { x: 260, y: 84, angle: 7 },
+        { x: 430, y: 90, angle: -5 },
+        { x: 610, y: 98, angle: 9 },
+        { x: 128, y: 390, angle: 8 },
+        { x: 300, y: 402, angle: -7 },
+        { x: 480, y: 398, angle: 6 },
+        { x: 650, y: 382, angle: -8 },
       ];
       if (index < positions.length) return positions[index];
       const extra = index - positions.length;
@@ -1874,7 +1949,7 @@ INDEX_HTML = r"""<!doctype html>
       const row = Math.floor(extra / 4);
       return {
         x: 120 + column * 170,
-        y: row % 2 === 0 ? 50 : 370,
+        y: row % 2 === 0 ? 50 : 398,
         angle: index % 2 === 0 ? -6 : 6,
       };
     }
@@ -1906,7 +1981,7 @@ INDEX_HTML = r"""<!doctype html>
 
       const total = tiles.length;
       const width = 800;
-      const height = 420;
+      const height = 500;
       const slots = submarinePieceSlots(total);
       const slotMarkup = slots.map((slot) => `
         <path class="puzzle-slot" d="${slot.path}">
@@ -1934,8 +2009,7 @@ INDEX_HTML = r"""<!doctype html>
       return `
         <div class="submarine-puzzle">
           <div class="puzzle-caption">
-            <strong>Submarine Assembly</strong>
-            <span>${puzzle.completed}/${puzzle.total} sections assembled; ${puzzle.completedToday} placed today</span>
+            <strong>Assembly</strong>
           </div>
           <div class="puzzle-stage">
             <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Submarine puzzle showing assembled and waiting sections">
@@ -1943,11 +2017,6 @@ INDEX_HTML = r"""<!doctype html>
               <g>${placedMarkup}</g>
               <g>${unplacedMarkup}</g>
             </svg>
-          </div>
-          <div class="puzzle-legend">
-            <span><span class="legend-swatch placed"></span> Assembled in submarine</span>
-            <span><span class="legend-swatch waiting"></span> Waiting outside</span>
-            <span><span class="legend-swatch slot"></span> Empty slot</span>
           </div>
           <div class="puzzle-added"><span>Placed today:</span>${placedMarkupToday}</div>
         </div>
@@ -1967,28 +2036,7 @@ INDEX_HTML = r"""<!doctype html>
       // The day has already been simulated on the server, but the summary modal
       // lets the player read consequences before committing that state locally.
       overlay.classList.add("active");
-      body.innerHTML = `
-        ${renderSubmarinePuzzle(summary.puzzle, "summary-modal")}
-        <table>
-          <tbody>
-            <tr><td>Subjobs completed today</td><td>${summary.completedToday}</td></tr>
-            <tr><td>Subjobs remaining</td><td>${summary.jobsRemaining}</td></tr>
-            <tr><td>Jobs complete</td><td>${summary.piecesCompleted}/${payload.pieces.length}</td></tr>
-            <tr><td>Subjobs behind schedule</td><td>${summary.jobsBehindSchedule}</td></tr>
-            <tr><td>Subjobs late</td><td>${summary.jobsLate}</td></tr>
-            <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
-            <tr><td>Projected completion</td><td>${summary.projectedCompletion}</td></tr>
-          </tbody>
-        </table>
-
-        <h3>Past Due Subjobs</h3>
-        ${renderPastDueJobs(summary.pastDueJobs)}
-
-        <h3>Updates</h3>
-        <ul class="notes">
-          ${(summary.notes || []).map(note => `<li>${escapeHtml(note)}</li>`).join("") || "<li>No notable notes recorded.</li>"}
-        </ul>
-      `;
+      body.innerHTML = `<div class="summary-grid">${renderSummaryGrid(summary, payload.pieces.length, "summary-modal")}</div>`;
       body.scrollTop = 0;
     }
 
@@ -2209,21 +2257,8 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function renderDecisions() {
-      const progressState = decisionProgress();
-      const decisionsPending = progressState.total > 0 && progressState.completed < progressState.total;
-      const progress = $("decisionProgress");
       const advanceBtn = $("advanceBtn");
-
-      if (state.gameOver) {
-        progress.textContent = "Run complete";
-        progress.className = "badge good";
-        if (advanceBtn) advanceBtn.disabled = true;
-        return;
-      }
-
-      progress.textContent = decisionsPending ? "Decisions Pending" : "Decisions Complete";
-      progress.className = `badge ${decisionsPending ? "warn" : "good"}`;
-      if (advanceBtn) advanceBtn.disabled = !readyToAdvance();
+      if (advanceBtn) advanceBtn.disabled = state.gameOver || !readyToAdvance();
     }
 
     function renderInlineDecisions() {
@@ -2368,25 +2403,7 @@ INDEX_HTML = r"""<!doctype html>
       const summary = state.lastSummary;
       $("summarySection").classList.toggle("hidden", !summary);
       if (!summary) return;
-      $("summaryMetrics").innerHTML = `
-        <h3>Day Result</h3>
-        ${renderSubmarinePuzzle(summary.puzzle, "summary-panel")}
-        <table>
-          <tbody>
-            <tr><td>Subjobs completed today</td><td>${summary.completedToday}</td></tr>
-            <tr><td>Subjobs remaining</td><td>${summary.jobsRemaining}</td></tr>
-            <tr><td>Jobs complete</td><td>${summary.piecesCompleted}/${state.pieces.length}</td></tr>
-            <tr><td>Subjobs behind schedule</td><td>${summary.jobsBehindSchedule}</td></tr>
-            <tr><td>Subjobs late</td><td>${summary.jobsLate}</td></tr>
-            <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
-            <tr><td>Projected completion</td><td>${summary.projectedCompletion}</td></tr>
-          </tbody>
-        </table>
-
-        <h3>Past Due Subjobs</h3>
-        ${renderPastDueJobs(summary.pastDueJobs)}
-      `;
-      $("summaryNotes").innerHTML = (summary.notes || []).map(note => `<li>${escapeHtml(note)}</li>`).join("") || "<li>No notable notes recorded.</li>";
+      $("summaryGrid").innerHTML = renderSummaryGrid(summary, state.pieces.length, "summary-panel");
     }
 
     function renderFinal() {
@@ -2562,7 +2579,7 @@ INDEX_HTML = r"""<!doctype html>
 
   <!-- End-of-day modal (centered) -->
   <div id="summaryModalOverlay" class="modal-overlay" role="dialog" aria-modal="true">
-    <div class="modal">
+    <div class="modal summary-modal">
       <h1>Daily Summary</h1>
       <div class="modal-body" id="summaryModalBody"></div>
       <div class="modal-footer">
