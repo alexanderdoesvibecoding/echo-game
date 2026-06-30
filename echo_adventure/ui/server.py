@@ -339,11 +339,12 @@ class GameSession:
     ) -> dict[str, Any]:
         """Return question-indexed cumulative subjob completion counts for the final chart."""
         total_jobs = max(len(self.player_state.jobs), len(self.automated_state.jobs))
-        total_questions = max(
-            1,
-            len(self.player_state.decision_history),
-            len(self.automated_state.decision_history),
+        player_question_count = sum(
+            1
+            for record in self.player_state.decision_history
+            if record.actor == "player"
         )
+        total_questions = max(1, player_question_count)
         questions = list(range(total_questions + 1))
 
         return {
@@ -352,7 +353,99 @@ class GameSession:
             "total": total_jobs,
             "player": self._completion_series(self.player_state, player_snapshot, total_questions, total_jobs),
             "automated": self._completion_series(self.automated_state, automated_snapshot, total_questions, total_jobs),
+            "decisionPoints": self._decision_chart_payload(),
         }
+
+    def _decision_chart_payload(self) -> list[dict[str, Any]]:
+        """Return per-question metadata for the final interactive chart."""
+        points: list[dict[str, Any]] = []
+        player_cumulative = 0.0
+        echo_cumulative = 0.0
+        player_records = [
+            record
+            for record in self.player_state.decision_history
+            if record.actor == "player"
+        ]
+
+        for sequence, record in enumerate(player_records, start=1):
+            card = self.player_state.decision_cards.get(record.card_id)
+            player_choice = _choice_by_id(card, record.choice_id)
+            echo_choice = _choice_by_id(card, record.echo_choice_id)
+            player_delta = float(player_choice.score_delta if player_choice else 0.0)
+            echo_delta = float(echo_choice.score_delta if echo_choice else 0.0)
+            player_cumulative = round(player_cumulative + player_delta, 4)
+            echo_cumulative = round(echo_cumulative + echo_delta, 4)
+            affected = self._decision_affected_payload(card)
+
+            points.append(
+                {
+                    "sequence": sequence,
+                    "label": f"Q{sequence}",
+                    "day": record.day,
+                    "questionId": record.card_id,
+                    "questionTitle": record.card_title,
+                    "questionText": card.description if card else record.card_title,
+                    "playerChoiceId": record.choice_id,
+                    "playerChoice": record.choice_label,
+                    "echoChoiceId": record.echo_choice_id,
+                    "echoChoice": record.echo_choice_label or "-",
+                    "playerDelta": round(player_delta, 2),
+                    "echoDelta": round(echo_delta, 2),
+                    "playerCumulativeScore": round(player_cumulative, 2),
+                    "echoCumulativeScore": round(echo_cumulative, 2),
+                    **affected,
+                }
+            )
+
+        return points
+
+    def _decision_affected_payload(self, card: DecisionCard | None) -> dict[str, Any]:
+        """Return the most specific visible job/subjob target for a card."""
+        empty = {
+            "affectedJobId": None,
+            "affectedSubjobId": None,
+            "affectedLabel": "-",
+        }
+        if not card:
+            return empty
+
+        for target_id in card.target_ids:
+            job = self.player_state.jobs.get(target_id)
+            if job:
+                return {
+                    "affectedJobId": job.piece_id,
+                    "affectedSubjobId": job.id,
+                    "affectedLabel": f"{_piece_display_id(job.piece_id)} / {job.id}",
+                }
+
+        for target_id in card.target_ids:
+            piece = self.player_state.pieces.get(target_id)
+            if piece:
+                return {
+                    "affectedJobId": piece.id,
+                    "affectedSubjobId": None,
+                    "affectedLabel": _piece_display_id(piece.id),
+                }
+
+        for target_id in card.target_ids:
+            shop = self.player_state.shops.get(target_id)
+            if shop:
+                return {
+                    "affectedJobId": None,
+                    "affectedSubjobId": None,
+                    "affectedLabel": f"Shop: {shop.name}",
+                }
+
+        for target_id in card.target_ids:
+            workcenter = self.player_state.workcenters.get(target_id)
+            if workcenter:
+                return {
+                    "affectedJobId": None,
+                    "affectedSubjobId": None,
+                    "affectedLabel": f"Workcenter: {workcenter.name}",
+                }
+
+        return empty
 
     def _completion_series(
         self,
@@ -715,6 +808,13 @@ def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: Simu
             }
         )
     return payload
+
+
+def _choice_by_id(card: DecisionCard | None, choice_id: str | None) -> DecisionChoice | None:
+    """Return a decision choice by id from an optional card."""
+    if not card or not choice_id:
+        return None
+    return next((choice for choice in card.choices if choice.id == choice_id), None)
 
 
 def _parse_optional_seed(value: Any) -> int | None:

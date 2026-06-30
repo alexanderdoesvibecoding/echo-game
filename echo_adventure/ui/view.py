@@ -120,6 +120,28 @@ INDEX_HTML = r"""<!doctype html>
       background: #1a2f1f;
     }
 
+    html[data-theme="dark"] .decision-prompt {
+      background: #252d38;
+      border-color: #3a4352;
+    }
+
+    html[data-theme="dark"] .decision-prompt p {
+      color: #f0f3f5;
+    }
+
+    html[data-theme="dark"] .day-progress-track {
+      background: #252d38;
+      border-color: #3a4352;
+    }
+
+    html[data-theme="dark"] .day-progress-fill {
+      background: #5dd9e0;
+    }
+
+    html[data-theme="dark"] .day-progress-fill.paused {
+      background: #f0ad4e;
+    }
+
     html[data-theme="dark"] .decision-head {
       border-color: #3a4352;
     }
@@ -349,12 +371,17 @@ INDEX_HTML = r"""<!doctype html>
       background: rgba(22, 124, 120, 0.08);
       font-size: 11px;
       font-weight: 760;
+      line-height: 1;
       white-space: nowrap;
     }
     .metric-hint::after {
-      content: "⌄";
-      font-size: 12px;
-      line-height: 1;
+      content: "";
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 5px solid currentColor;
+      flex: 0 0 auto;
     }
     .metric-popover {
       display: none;
@@ -499,7 +526,18 @@ INDEX_HTML = r"""<!doctype html>
       padding: 14px;
     }
     .inline-decisions .decision {
-      max-width: 820px;
+      width: 100%;
+    }
+    .decision-choices {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 8px;
+      padding: 10px;
+    }
+    .decision-choices .choice {
+      width: 100%;
+      min-height: 76px;
+      margin: 0;
     }
     .inline-decision-actions {
       display: flex;
@@ -507,6 +545,44 @@ INDEX_HTML = r"""<!doctype html>
       gap: 8px;
       justify-content: flex-end;
       padding: 2px 10px 10px;
+    }
+    .decision-status-panel {
+      display: grid;
+      gap: 10px;
+    }
+    .decision-status-panel .inline-decision-actions {
+      padding: 0;
+    }
+    .day-clock {
+      display: grid;
+      gap: 7px;
+    }
+    .day-clock-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .day-progress-track {
+      width: 100%;
+      height: 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #eef2ee;
+      overflow: hidden;
+    }
+    .day-progress-fill {
+      height: 100%;
+      width: 0;
+      border-radius: 999px;
+      background: var(--teal);
+      transition: width 180ms linear, background-color 180ms ease;
+    }
+    .day-progress-fill.paused {
+      background: var(--amber);
     }
     .modal-titlebar {
       display: flex;
@@ -540,7 +616,8 @@ INDEX_HTML = r"""<!doctype html>
     }
     .chart-frame {
       width: 100%;
-      overflow: hidden;
+      position: relative;
+      overflow: visible;
     }
     .chart-frame svg {
       display: block;
@@ -578,6 +655,39 @@ INDEX_HTML = r"""<!doctype html>
     }
     .chart-player { color: var(--teal); }
     .chart-echo { color: var(--violet); }
+    .chart-dot {
+      cursor: pointer;
+    }
+    .chart-dot:focus {
+      outline: none;
+      filter: drop-shadow(0 0 4px rgba(22, 124, 120, 0.32));
+    }
+    .chart-tooltip {
+      position: absolute;
+      z-index: 5;
+      display: none;
+      width: min(320px, calc(100vw - 64px));
+      padding: 10px 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--ink);
+      box-shadow: var(--shadow);
+      font-size: 12px;
+      line-height: 1.35;
+      pointer-events: none;
+    }
+    .chart-tooltip.active { display: block; }
+    .chart-tooltip strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 13px;
+    }
+    .chart-tooltip div { margin-top: 3px; }
+    html[data-theme="dark"] .chart-tooltip {
+      background: #1a202a;
+      border-color: #3a4352;
+    }
     .submarine-puzzle {
       display: grid;
       gap: 10px;
@@ -760,6 +870,36 @@ INDEX_HTML = r"""<!doctype html>
     .modal .modal-body { max-height: 60vh; overflow: auto; margin-bottom: 12px; }
     .modal .modal-footer { display:flex; justify-content:flex-end; gap:8px; }
     .modal h3 { margin-top: 0; }
+    .decision-modal {
+      max-width: 720px;
+    }
+    .decision-modal-meta {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+    }
+    .decision-modal-body {
+      display: grid;
+      gap: 10px;
+    }
+    .decision-prompt {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fbfcf9;
+    }
+    .decision-prompt p {
+      margin: 10px 0 0;
+      color: var(--ink);
+    }
+    .decision-modal-choices {
+      grid-template-columns: 1fr;
+      padding: 0;
+    }
+    .decision-modal-choices .choice {
+      min-height: 68px;
+    }
     .welcome-modal {
       max-width: 760px;
     }
@@ -899,7 +1039,7 @@ INDEX_HTML = r"""<!doctype html>
           </div>
         </div>
         <div class="split">
-          <div class="reveal-panel"><h3>Subjobs Complete Over Time</h3><div id="finalCompletionChart"></div></div>
+          <div class="reveal-panel"><h3>Decision Score Impact</h3><div id="finalCompletionChart"></div></div>
           <div class="reveal-panel"><h3>Metric Comparison</h3><table id="finalTable"></table></div>
           <div class="reveal-panel"><h3>Outcome Drivers</h3><ul class="notes" id="finalNotes"></ul></div>
           <div class="reveal-panel"><h3>Decision Audit</h3><table id="decisionAuditTable"></table></div>
@@ -1000,13 +1140,38 @@ INDEX_HTML = r"""<!doctype html>
     </div>
   </div>
 
+  <div id="decisionModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="decisionModalTitle">
+    <div class="modal decision-modal">
+      <div class="modal-titlebar">
+        <div>
+          <h1 id="decisionModalTitle">Daily Decision</h1>
+          <div class="decision-modal-meta" id="decisionModalMeta"></div>
+        </div>
+        <button id="closeDecisionModalBtn" class="icon-button" title="Close decision" onclick="closeDecisionModal()">×</button>
+      </div>
+      <div class="modal-body decision-modal-body" id="decisionModalBody"></div>
+      <div class="modal-footer" id="decisionModalFooter"></div>
+    </div>
+  </div>
+
   <script>
     let state = null;
     // Client-side modal state is intentionally local. The server remains the
     // source of truth for the run, decisions, and day advancement rules.
     let welcomeModalVisible = false;
     let newRunModalVisible = false;
+    let decisionModalVisible = false;
+    let decisionModalDismissedKey = null;
     let settingsMenuOpen = false;
+    let runCycleId = 0;
+    let dayCycleKey = null;
+    let dayCycleProgress = 0;
+    let dayCycleTimer = null;
+    let dayCycleLastTick = null;
+    let dayCycleAdvancing = false;
+
+    const DAY_CYCLE_DURATION_MS = 28000;
+    const DAY_CYCLE_TICK_MS = 220;
 
     const $ = (id) => document.getElementById(id);
     const fmtNum = (value) => Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -1052,6 +1217,7 @@ INDEX_HTML = r"""<!doctype html>
         showError("");
         render();
       } catch (error) {
+        dayCycleAdvancing = false;
         showError(error.message);
       }
     }
@@ -1062,7 +1228,11 @@ INDEX_HTML = r"""<!doctype html>
           method: "POST",
           body: JSON.stringify({})
         });
+        runCycleId += 1;
+        resetDayCycle();
         pendingChoice = null;
+        decisionModalVisible = false;
+        decisionModalDismissedKey = null;
         welcomeModalVisible = true;
         newRunModalVisible = false;
         showNewRunError("");
@@ -1084,6 +1254,8 @@ INDEX_HTML = r"""<!doctype html>
           body: JSON.stringify({ cardId, choiceId })
         });
         pendingChoice = null;
+        decisionModalVisible = false;
+        decisionModalDismissedKey = null;
         showError("");
         if (renderAfter) {
           render();
@@ -1102,6 +1274,7 @@ INDEX_HTML = r"""<!doctype html>
       // The button should already be disabled until all decisions are complete,
       // but this guard keeps direct console calls and stale UI state honest.
       if (!readyToAdvance()) {
+        dayCycleAdvancing = false;
         document.getElementById("dailyDecisionSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
         return;
       }
@@ -1139,6 +1312,7 @@ INDEX_HTML = r"""<!doctype html>
 
     function render() {
       if (!state) return;
+      syncDayCycleForState();
       $("dayBadge").textContent = `Day ${state.day}`;
       $("projectedText").textContent = `Projected completion: ${state.projectedCompletion}`;
 
@@ -1150,6 +1324,7 @@ INDEX_HTML = r"""<!doctype html>
       renderFinal();
       renderWelcomeModal();
       renderNewRunModal();
+      renderDecisionModal();
       renderSettingsMenu();
     }
 
@@ -1165,22 +1340,172 @@ INDEX_HTML = r"""<!doctype html>
       return Boolean(state && !state.gameOver && (progress.total === 0 || progress.completed === progress.total));
     }
 
-    async function submitDecision(cardId, advanceAfter = false) {
-      if (!pendingChoice) return;
-      const choiceId = pendingChoice;
-      const nextState = await choose(cardId, choiceId, !advanceAfter);
-      if (advanceAfter && nextState) {
-        if (readyToAdvance()) {
-          await prepareAdvanceDay();
-        } else {
+    function resetDayCycle() {
+      dayCycleKey = null;
+      dayCycleProgress = 0;
+      dayCycleLastTick = null;
+      dayCycleAdvancing = false;
+    }
+
+    function syncDayCycleForState() {
+      if (!state || state.gameOver) {
+        stopDayCycle();
+        return;
+      }
+
+      const nextKey = `${runCycleId}:${state.day}`;
+      if (dayCycleKey !== nextKey) {
+        dayCycleKey = nextKey;
+        dayCycleProgress = 0;
+        dayCycleLastTick = null;
+        dayCycleAdvancing = false;
+        decisionModalVisible = false;
+        decisionModalDismissedKey = null;
+      }
+      ensureDayCycle();
+    }
+
+    function ensureDayCycle() {
+      if (dayCycleTimer) return;
+      dayCycleLastTick = performance.now();
+      dayCycleTimer = window.setInterval(tickDayCycle, DAY_CYCLE_TICK_MS);
+    }
+
+    function stopDayCycle() {
+      if (dayCycleTimer) {
+        window.clearInterval(dayCycleTimer);
+        dayCycleTimer = null;
+      }
+      dayCycleLastTick = null;
+    }
+
+    function nextDecisionThreshold() {
+      const progressState = decisionProgress();
+      if (!progressState.total) return 100;
+      return ((progressState.completed + 1) / (progressState.total + 1)) * 100;
+    }
+
+    function nextDecisionIsDue() {
+      return Boolean(currentOpenDecisionCard() && dayCycleProgress >= nextDecisionThreshold());
+    }
+
+    function dayCycleBlocked() {
+      return !state
+        || state.gameOver
+        || welcomeModalVisible
+        || newRunModalVisible
+        || decisionModalVisible
+        || nextDecisionIsDue()
+        || (modalVisible && pendingAdvanceState);
+    }
+
+    function tickDayCycle() {
+      if (!state || state.gameOver) {
+        stopDayCycle();
+        return;
+      }
+
+      const now = performance.now();
+      const lastTick = dayCycleLastTick ?? now;
+      const elapsed = now - lastTick;
+      dayCycleLastTick = now;
+
+      if (!dayCycleBlocked()) {
+        dayCycleProgress = Math.min(100, dayCycleProgress + (elapsed / DAY_CYCLE_DURATION_MS) * 100);
+      }
+
+      if (nextDecisionIsDue()) {
+        const nextCard = currentOpenDecisionCard();
+        const key = decisionModalKey(nextCard);
+        if (nextCard && decisionModalDismissedKey !== key) {
+          if (decisionModalVisible) {
+            return;
+          }
+          decisionModalVisible = true;
           render();
+          return;
         }
       }
+
+      if (dayCycleProgress >= 100 && readyToAdvance() && !dayCycleAdvancing && !(modalVisible && pendingAdvanceState)) {
+        dayCycleAdvancing = true;
+        renderInlineDecisions();
+        prepareAdvanceDay();
+        return;
+      }
+
+      renderInlineDecisions();
+    }
+
+    function dayCyclePercent() {
+      return Math.max(0, Math.min(100, dayCycleProgress));
+    }
+
+    function renderDayClock(statusText, paused = false) {
+      const percent = dayCyclePercent();
+      return `
+        <div class="day-clock">
+          <div class="day-clock-row">
+            <span>${escapeHtml(statusText)}</span>
+            <span>${Math.round(percent)}%</span>
+          </div>
+          <div class="day-progress-track" aria-label="Day progress">
+            <div class="day-progress-fill ${paused ? "paused" : ""}" style="width:${percent}%"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function currentOpenDecisionCard() {
+      return Array.isArray(state?.decisions)
+        ? state.decisions.find(card => !card.selectedChoice) || null
+        : null;
+    }
+
+    function decisionModalKey(card) {
+      return state && card ? `${state.day}:${card.id}` : "";
+    }
+
+    function decisionModalBlocked() {
+      return !state
+        || state.gameOver
+        || welcomeModalVisible
+        || newRunModalVisible
+        || !nextDecisionIsDue()
+        || (modalVisible && pendingAdvanceState);
+    }
+
+    function openDecisionModal() {
+      const nextCard = currentOpenDecisionCard();
+      if (!nextCard) return;
+      if (!nextCard.choices.some(choice => choice.id === pendingChoice)) {
+        pendingChoice = null;
+      }
+      decisionModalDismissedKey = null;
+      decisionModalVisible = true;
+      renderDecisionModal();
+    }
+
+    function closeDecisionModal() {
+      const nextCard = currentOpenDecisionCard();
+      if (nextCard) {
+        decisionModalDismissedKey = decisionModalKey(nextCard);
+      }
+      decisionModalVisible = false;
+      renderInlineDecisions();
+      renderDecisionModal();
+    }
+
+    async function submitDecision(cardId) {
+      if (!pendingChoice) return;
+      const choiceId = pendingChoice;
+      await choose(cardId, choiceId);
     }
 
     function selectPendingChoice(choiceId) {
       pendingChoice = choiceId;
       renderInlineDecisions();
+      renderDecisionModal();
     }
 
     function renderWelcomeModal() {
@@ -1213,6 +1538,7 @@ INDEX_HTML = r"""<!doctype html>
     function closeWelcomeModal() {
       welcomeModalVisible = false;
       renderWelcomeModal();
+      renderDecisionModal();
     }
 
     function toggleSettingsMenu() {
@@ -1238,12 +1564,14 @@ INDEX_HTML = r"""<!doctype html>
       newRunModalVisible = true;
       showNewRunError("");
       renderNewRunModal();
+      renderDecisionModal();
     }
 
     function closeNewRunModal() {
       newRunModalVisible = false;
       showNewRunError("");
       renderNewRunModal();
+      renderDecisionModal();
     }
 
     function renderNewRunModal() {
@@ -1524,68 +1852,157 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     function renderCompletionChart(history) {
-      const questions = Array.isArray(history?.questions)
-        ? history.questions
-        : (Array.isArray(history?.days) ? history.days : []);
-      const player = Array.isArray(history?.player) ? history.player : [];
-      const echo = Array.isArray(history?.automated) ? history.automated : [];
-      const count = Math.min(questions.length, player.length, echo.length);
-      if (!count) return `<div class="subtle">No completion history recorded.</div>`;
+      const decisionPoints = Array.isArray(history?.decisionPoints) ? history.decisionPoints : [];
+      const count = decisionPoints.length;
+      if (!count) return `<div class="subtle">No decision score history recorded.</div>`;
 
       const width = 640;
       const height = 260;
-      const pad = { left: 44, right: 18, top: 18, bottom: 42 };
-      const maxCompleted = Math.max(1, Number(history?.total) || 0, ...player, ...echo);
-      const maxIndex = Math.max(1, count - 1);
+      const pad = { left: 54, right: 18, top: 18, bottom: 42 };
+      const formatImpact = (value) => {
+        const number = Number(value) || 0;
+        return `${number >= 0 ? "+" : ""}${number.toFixed(2)}`;
+      };
+      const playerImpact = decisionPoints.map(decisionPoint => Number(decisionPoint.playerDelta) || 0);
+      const echoImpact = decisionPoints.map(decisionPoint => Number(decisionPoint.echoDelta) || 0);
+      const rawMin = Math.min(0, ...playerImpact, ...echoImpact);
+      const rawMax = Math.max(0, ...playerImpact, ...echoImpact);
+      const scoreSpan = Math.max(1, rawMax - rawMin);
+      const minScore = rawMin - scoreSpan * 0.15;
+      const maxScore = rawMax + scoreSpan * 0.15;
       const plotWidth = width - pad.left - pad.right;
       const plotHeight = height - pad.top - pad.bottom;
       const point = (value, index) => {
-        const x = pad.left + (index / maxIndex) * plotWidth;
-        const y = pad.top + (1 - Math.max(0, Math.min(maxCompleted, value)) / maxCompleted) * plotHeight;
+        const x = count === 1 ? pad.left + plotWidth / 2 : pad.left + (index / (count - 1)) * plotWidth;
+        const y = pad.top + ((maxScore - value) / (maxScore - minScore)) * plotHeight;
         return [x, y];
       };
       const pathFor = (series) => series.slice(0, count).map((value, index) => {
         const [x, y] = point(Number(value) || 0, index);
         return `${index ? "L" : "M"} ${x.toFixed(1)} ${y.toFixed(1)}`;
       }).join(" ");
-      const yTicks = [...new Set([0, Math.round(maxCompleted / 2), maxCompleted])];
-      const xTicks = [...new Set([0, Math.floor(maxIndex / 2), maxIndex])];
+      const yTicks = rawMin === rawMax
+        ? [-1, 0, 1]
+        : [...new Set([rawMin, 0, rawMax].map(value => Number(value.toFixed(2))))].sort((a, b) => a - b);
+      const xTicks = count <= 3
+        ? Array.from({ length: count }, (_, index) => index)
+        : [...new Set([0, Math.floor((count - 1) / 2), count - 1])];
       const yGrid = yTicks.map(value => {
         const [, y] = point(value, 0);
         return `
           <line class="chart-grid" x1="${pad.left}" y1="${y.toFixed(1)}" x2="${(width - pad.right).toFixed(1)}" y2="${y.toFixed(1)}"></line>
-          <text class="chart-label" x="${pad.left - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">${value}</text>
+          <text class="chart-label" x="${pad.left - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">${formatImpact(value)}</text>
         `;
       }).join("");
       const xLabels = xTicks.map(index => {
         const [x] = point(0, index);
-        const question = questions[index] ?? index;
-        const label = question === 0 ? "Start" : `Question ${question}`;
+        const sequence = Number(decisionPoints[index]?.sequence || index + 1);
+        const label = `Q${sequence}`;
         return `<text class="chart-label" x="${x.toFixed(1)}" y="${height - 12}" text-anchor="middle">${escapeHtml(label)}</text>`;
       }).join("");
-      const [playerX, playerY] = point(Number(player[count - 1]) || 0, count - 1);
-      const [echoX, echoY] = point(Number(echo[count - 1]) || 0, count - 1);
+      const decisionAttrs = (decisionPoint, series) => `
+        tabindex="0"
+        data-series="${escapeHtml(series)}"
+        data-day="${escapeHtml(decisionPoint.day || "-")}"
+        data-question="${escapeHtml(decisionPoint.questionTitle || decisionPoint.questionText || decisionPoint.questionId || "-")}"
+        data-player-choice="${escapeHtml(decisionPoint.playerChoice || "-")}"
+        data-echo-choice="${escapeHtml(decisionPoint.echoChoice || "-")}"
+        data-player-impact="${escapeHtml(formatImpact(decisionPoint.playerDelta))}"
+        data-echo-impact="${escapeHtml(formatImpact(decisionPoint.echoDelta))}"
+        data-player-cumulative="${escapeHtml(formatImpact(decisionPoint.playerCumulativeScore))}"
+        data-echo-cumulative="${escapeHtml(formatImpact(decisionPoint.echoCumulativeScore))}"
+        data-affected="${escapeHtml(decisionPoint.affectedLabel || "-")}"
+        onmousemove="showDecisionChartTooltip(event, this)"
+        onmouseleave="hideDecisionChartTooltip()"
+        onfocus="showDecisionChartTooltip(event, this)"
+        onblur="hideDecisionChartTooltip()"
+      `;
+      const decisionMarker = (decisionPoint, series, index) => {
+        const values = series === "Player" ? playerImpact : echoImpact;
+        const value = Number(values[index]) || 0;
+        const [x, y] = point(value, index);
+        if (series === "Player") {
+          return `
+            <circle class="chart-dot chart-player-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.8" fill="var(--teal)" stroke="#fff" stroke-width="1.4" ${decisionAttrs(decisionPoint, series)}></circle>
+          `;
+        }
+        return `
+          <circle class="chart-dot chart-echo-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5.6" fill="var(--panel)" stroke="var(--violet)" stroke-width="2.2" ${decisionAttrs(decisionPoint, series)}></circle>
+        `;
+      };
 
       return `
         <div class="completion-chart">
           <div class="chart-legend">
-            <span class="chart-key chart-player"><span class="chart-swatch"></span>Your schedule</span>
-            <span class="chart-key chart-echo"><span class="chart-swatch"></span>ECHO benchmark</span>
+            <span class="chart-key chart-player"><span class="chart-swatch"></span>Your impact</span>
+            <span class="chart-key chart-echo"><span class="chart-swatch"></span>ECHO impact</span>
           </div>
           <div class="chart-frame">
-            <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Line chart comparing cumulative subjobs completed by player and ECHO by question">
+            <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Line chart comparing decision score impact by question for player and ECHO">
               ${yGrid}
               <line class="chart-axis" x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}"></line>
               <line class="chart-axis" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${height - pad.bottom}"></line>
               ${xLabels}
-              <path d="${pathFor(player)}" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-              <path d="${pathFor(echo)}" fill="none" stroke="var(--violet)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-              <circle cx="${playerX.toFixed(1)}" cy="${playerY.toFixed(1)}" r="4" fill="var(--teal)"></circle>
-              <circle cx="${echoX.toFixed(1)}" cy="${echoY.toFixed(1)}" r="4" fill="var(--violet)"></circle>
+              <path d="${pathFor(playerImpact)}" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path d="${pathFor(echoImpact)}" fill="none" stroke="var(--violet)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+              <g>${decisionPoints.map((decisionPoint, index) => decisionMarker(decisionPoint, "Player", index)).join("")}</g>
+              <g>${decisionPoints.map((decisionPoint, index) => decisionMarker(decisionPoint, "ECHO", index)).join("")}</g>
             </svg>
+            <div class="chart-tooltip" id="decisionChartTooltip"></div>
           </div>
         </div>
       `;
+    }
+
+    function showDecisionChartTooltip(event, marker) {
+      const tooltip = $("decisionChartTooltip");
+      if (!tooltip || !marker) return;
+      const data = marker.dataset;
+      tooltip.innerHTML = `
+        <strong>${escapeHtml(data.series || "Decision")} point</strong>
+        <div>Day ${escapeHtml(data.day || "-")}</div>
+        <div>Question: ${escapeHtml(data.question || "-")}</div>
+        <div>Player picked: ${escapeHtml(data.playerChoice || "-")}</div>
+        <div>ECHO picked: ${escapeHtml(data.echoChoice || "-")}</div>
+        <div>Player impact: ${escapeHtml(data.playerImpact || "+0.00")} (${escapeHtml(data.playerCumulative || "+0.00")} cumulative)</div>
+        <div>ECHO impact: ${escapeHtml(data.echoImpact || "+0.00")} (${escapeHtml(data.echoCumulative || "+0.00")} cumulative)</div>
+        <div>Job/Subjob: ${escapeHtml(data.affected || "-")}</div>
+      `;
+      tooltip.classList.add("active");
+      positionDecisionChartTooltip(event, marker, tooltip);
+    }
+
+    function positionDecisionChartTooltip(event, marker, tooltip) {
+      const frame = tooltip.parentElement;
+      if (!frame) return;
+      const frameRect = frame.getBoundingClientRect();
+      const markerRect = marker.getBoundingClientRect();
+      const clientX = Number.isFinite(event?.clientX) && event.clientX > 0
+        ? event.clientX
+        : markerRect.left + markerRect.width / 2;
+      const clientY = Number.isFinite(event?.clientY) && event.clientY > 0
+        ? event.clientY
+        : markerRect.top;
+      const tooltipWidth = tooltip.offsetWidth || 260;
+      const tooltipHeight = tooltip.offsetHeight || 120;
+      let left = clientX - frameRect.left + 12;
+      let top = clientY - frameRect.top - tooltipHeight - 10;
+
+      if (left + tooltipWidth > frameRect.width) {
+        left = Math.max(8, frameRect.width - tooltipWidth - 8);
+      }
+      if (top < 8) {
+        top = clientY - frameRect.top + 14;
+      }
+
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top = `${top}px`;
+    }
+
+    function hideDecisionChartTooltip() {
+      const tooltip = $("decisionChartTooltip");
+      if (!tooltip) return;
+      tooltip.classList.remove("active");
     }
 
     function renderMetrics() {
@@ -1675,6 +2092,12 @@ INDEX_HTML = r"""<!doctype html>
       const body = $("inlineDecisionBody");
       if (!subtitle || !body) return;
 
+      if (modalVisible && pendingAdvanceState) {
+        subtitle.textContent = "";
+        body.innerHTML = "";
+        return;
+      }
+
       if (!state || state.gameOver) {
         subtitle.textContent = "Run complete";
         body.innerHTML = `
@@ -1687,50 +2110,123 @@ INDEX_HTML = r"""<!doctype html>
       }
 
       const progressState = decisionProgress();
-      subtitle.textContent = `${progressState.completed}/${progressState.total} campaign decisions complete`;
-      const nextCard = state.decisions.find(card => !card.selectedChoice);
+      subtitle.textContent = `${progressState.completed}/${progressState.total} campaign decisions complete - Day ${Math.round(dayCyclePercent())}%`;
+      const nextCard = currentOpenDecisionCard();
 
       if (nextCard) {
         if (!nextCard.choices.some(choice => choice.id === pendingChoice)) {
           pendingChoice = null;
         }
-        const isFinalDecision = progressState.total > 0 && progressState.completed + 1 >= progressState.total;
-        const submitLabel = isFinalDecision ? "End Day" : "Submit";
+        const questionNumber = Math.min(progressState.total, progressState.completed + 1);
+        const decisionDue = nextDecisionIsDue();
+        const threshold = Math.round(nextDecisionThreshold());
+        const title = decisionDue ? "Decision Event" : "Day In Motion";
+        const badge = decisionDue ? `<span class="badge warn">Paused</span>` : `<span class="badge info">Rolling</span>`;
+        const status = decisionDue
+          ? `Paused for question ${questionNumber}`
+          : `Next decision near ${threshold}%`;
+        const detail = decisionDue
+          ? `${escapeHtml(nextCard.title)}`
+          : "Work is moving through the day. The next decision will interrupt automatically.";
         body.innerHTML = `
-          <div class="decision">
-            <div class="decision-head">
-              <div class="decision-title">
-                <div>
-                  <h2>${escapeHtml(nextCard.title)}</h2>
-                  <div class="subtle">${escapeHtml(nextCard.type)} | ${escapeHtml(decisionUrgencyLabel(nextCard.severity))}</div>
-                </div>
-                <span class="badge warn">Open</span>
+          <div class="reveal-panel decision-status-panel">
+            <div class="decision-title">
+              <div>
+                <h3>${title}</h3>
+                <div class="subtle">${detail}</div>
               </div>
-              <p>${escapeHtml(nextCard.description)}</p>
+              ${badge}
             </div>
-            ${nextCard.choices.map(choice => `
-              <button class="choice ${pendingChoice === choice.id ? "selected" : ""}" onclick="selectPendingChoice('${choice.id}')">
-                <strong>${escapeHtml(choice.label)}</strong>
-                <small>${escapeHtml(choice.description)}</small>
-              </button>
-            `).join("")}
-            <div class="inline-decision-actions">
-              <button ${!pendingChoice ? "disabled" : ""} class="primary" onclick="submitDecision('${nextCard.id}', ${isFinalDecision})">${submitLabel}</button>
-            </div>
+            ${renderDayClock(status, decisionDue)}
+            ${decisionDue ? `
+              <div class="inline-decision-actions">
+                <button class="primary" onclick="openDecisionModal()">Respond</button>
+              </div>
+            ` : ""}
           </div>
         `;
         return;
       }
 
-      const choices = (state.appliedChoices || []).map(note => `<li>${escapeHtml(note)}</li>`).join("");
+      const ending = dayCycleProgress >= 100 || dayCycleAdvancing;
+      const status = ending ? "Preparing daily summary" : "Finishing today's work";
       body.innerHTML = `
-        <div class="reveal-panel">
-          ${choices ? `<ul class="notes">${choices}</ul>` : ""}
-          <div class="inline-decision-actions">
-            <button class="primary" onclick="prepareAdvanceDay()">End Day</button>
+        <div class="reveal-panel decision-status-panel">
+          <div class="decision-title">
+            <div>
+              <h3>${ending ? "Day Complete" : "Day In Motion"}</h3>
+              <div class="subtle">${progressState.total ? "All scheduled decisions are answered." : "No campaign decisions are scheduled today."}</div>
+            </div>
+            <span class="badge good">${ending ? "Complete" : "Rolling"}</span>
           </div>
+          ${renderDayClock(status, ending)}
         </div>
       `;
+    }
+
+    function renderDecisionModal() {
+      const overlay = $("decisionModalOverlay");
+      const title = $("decisionModalTitle");
+      const meta = $("decisionModalMeta");
+      const body = $("decisionModalBody");
+      const footer = $("decisionModalFooter");
+      if (!overlay || !title || !meta || !body || !footer) return;
+
+      const nextCard = currentOpenDecisionCard();
+      const decisionDue = nextDecisionIsDue();
+      if (!nextCard || !decisionDue || decisionModalBlocked()) {
+        overlay.classList.remove("active");
+        decisionModalVisible = false;
+        if (!nextCard) {
+          decisionModalVisible = false;
+          decisionModalDismissedKey = null;
+        }
+        return;
+      }
+
+      if (!nextCard.choices.some(choice => choice.id === pendingChoice)) {
+        pendingChoice = null;
+      }
+
+      const cardKey = decisionModalKey(nextCard);
+      if (!decisionModalVisible && decisionModalDismissedKey !== cardKey) {
+        decisionModalVisible = true;
+      }
+
+      if (!decisionModalVisible) {
+        overlay.classList.remove("active");
+        return;
+      }
+
+      const progressState = decisionProgress();
+      const questionNumber = Math.min(progressState.total, progressState.completed + 1);
+
+      title.textContent = "Daily Decision";
+      meta.textContent = `Day ${state.day} | Question ${questionNumber} of ${progressState.total}`;
+      body.innerHTML = `
+        <div class="decision-prompt">
+          <div class="decision-title">
+            <div>
+              <h2>${escapeHtml(nextCard.title)}</h2>
+              <div class="subtle">${escapeHtml(nextCard.type)} | ${escapeHtml(decisionUrgencyLabel(nextCard.severity))}</div>
+            </div>
+            <span class="badge warn">Open</span>
+          </div>
+          <p>${escapeHtml(nextCard.description)}</p>
+        </div>
+        <div class="decision-choices decision-modal-choices">
+          ${nextCard.choices.map(choice => `
+            <button class="choice ${pendingChoice === choice.id ? "selected" : ""}" onclick="selectPendingChoice('${choice.id}')">
+              <strong>${escapeHtml(choice.label)}</strong>
+              <small>${escapeHtml(choice.description)}</small>
+            </button>
+          `).join("")}
+        </div>
+      `;
+      footer.innerHTML = `
+        <button ${!pendingChoice ? "disabled" : ""} class="primary" onclick="submitDecision('${nextCard.id}')">Submit</button>
+      `;
+      overlay.classList.add("active");
     }
 
     function renderSummary() {
@@ -1875,6 +2371,7 @@ INDEX_HTML = r"""<!doctype html>
     document.addEventListener("click", (e) => {
       const welcomeOverlay = document.getElementById("welcomeModalOverlay");
       const newRunOverlay = document.getElementById("newRunModalOverlay");
+      const decisionOverlay = document.getElementById("decisionModalOverlay");
       const settingsWrap = document.querySelector(".settings-wrap");
       if (settingsWrap && !settingsWrap.contains(e.target)) {
         closeSettingsMenu();
@@ -1885,11 +2382,17 @@ INDEX_HTML = r"""<!doctype html>
       if (e.target && e.target.id === "closeNewRunModalBtn") {
         closeNewRunModal();
       }
+      if (e.target && e.target.id === "closeDecisionModalBtn") {
+        closeDecisionModal();
+      }
       if (welcomeOverlay && e.target === welcomeOverlay) {
         closeWelcomeModal();
       }
       if (newRunOverlay && e.target === newRunOverlay) {
         closeNewRunModal();
+      }
+      if (decisionOverlay && e.target === decisionOverlay) {
+        closeDecisionModal();
       }
     });
 
