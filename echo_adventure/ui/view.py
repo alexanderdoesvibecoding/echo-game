@@ -1022,7 +1022,7 @@ INDEX_HTML = r"""<!doctype html>
         <h1>Shipyard Scheduler Choose Your Own Adventure Game</h1>
         <div class="status-line">
           <span class="badge" id="dayBadge">Day</span>
-          <span class="badge warn" id="decisionProgress">0/0 Campaign Decisions Complete</span>
+          <span class="badge warn" id="decisionProgress">Decisions Pending</span>
         </div>
       </div>
     </div>
@@ -1169,6 +1169,8 @@ INDEX_HTML = r"""<!doctype html>
     let dayCycleTimer = null;
     let dayCycleLastTick = null;
     let dayCycleAdvancing = false;
+    let dayCycleShiftInFlight = false;
+    let dayCycleCompletedShiftMarkers = new Set();
 
     const DAY_CYCLE_DURATION_MS = 28000;
     const DAY_CYCLE_TICK_MS = 220;
@@ -1345,6 +1347,8 @@ INDEX_HTML = r"""<!doctype html>
       dayCycleProgress = 0;
       dayCycleLastTick = null;
       dayCycleAdvancing = false;
+      dayCycleShiftInFlight = false;
+      dayCycleCompletedShiftMarkers = new Set();
     }
 
     function syncDayCycleForState() {
@@ -1359,6 +1363,9 @@ INDEX_HTML = r"""<!doctype html>
         dayCycleProgress = 0;
         dayCycleLastTick = null;
         dayCycleAdvancing = false;
+        dayCycleShiftInFlight = false;
+        dayCycleCompletedShiftMarkers = completedShiftMarkersFromState();
+        dayCycleProgress = Math.max(dayCycleProgress, (completedShiftCountFromState() / shiftsPerDay()) * 100);
         decisionModalVisible = false;
         decisionModalDismissedKey = null;
       }
@@ -1395,6 +1402,7 @@ INDEX_HTML = r"""<!doctype html>
         || welcomeModalVisible
         || newRunModalVisible
         || decisionModalVisible
+        || dayCycleShiftInFlight
         || nextDecisionIsDue()
         || (modalVisible && pendingAdvanceState);
     }
@@ -1427,7 +1435,13 @@ INDEX_HTML = r"""<!doctype html>
         }
       }
 
-      if (dayCycleProgress >= 100 && readyToAdvance() && !dayCycleAdvancing && !(modalVisible && pendingAdvanceState)) {
+      const shiftMarker = nextShiftMarkerDue();
+      if (shiftMarker && !dayCycleShiftInFlight && !(modalVisible && pendingAdvanceState)) {
+        advanceShift(shiftMarker);
+        return;
+      }
+
+      if (dayCycleProgress >= 100 && readyToAdvance() && !dayCycleAdvancing && !dayCycleShiftInFlight && !(modalVisible && pendingAdvanceState)) {
         dayCycleAdvancing = true;
         renderInlineDecisions();
         prepareAdvanceDay();
@@ -1439,6 +1453,59 @@ INDEX_HTML = r"""<!doctype html>
 
     function dayCyclePercent() {
       return Math.max(0, Math.min(100, dayCycleProgress));
+    }
+
+    function shiftsPerDay() {
+      return Math.max(1, Number(state?.shiftsPerDay || 3));
+    }
+
+    function nextShiftMarkerDue() {
+      const count = shiftsPerDay();
+      for (let marker = 1; marker < count; marker += 1) {
+        if (!dayCycleCompletedShiftMarkers.has(marker) && dayCycleProgress >= (marker / count) * 100) {
+          return marker;
+        }
+      }
+      return null;
+    }
+
+    function completedShiftMarkersFromState() {
+      const count = shiftsPerDay();
+      const completedInDay = completedShiftCountFromState();
+      const markers = new Set();
+      for (let marker = 1; marker <= Math.min(completedInDay, count - 1); marker += 1) {
+        markers.add(marker);
+      }
+      return markers;
+    }
+
+    function completedShiftCountFromState() {
+      return Math.max(0, Number(state?.snapshot?.shift || 0) % shiftsPerDay());
+    }
+
+    async function advanceShift(marker) {
+      dayCycleShiftInFlight = true;
+      dayCycleCompletedShiftMarkers.add(marker);
+      try {
+        const nextState = await api("/api/shift", { method: "POST", body: "{}" });
+        showError("");
+        if (nextState.finalReveal) {
+          state = nextState;
+          pendingAdvanceState = null;
+          modalVisible = false;
+        } else if (nextState.shiftAdvance?.dayComplete) {
+          pendingAdvanceState = nextState;
+          modalVisible = true;
+        } else {
+          state = nextState;
+        }
+        render();
+      } catch (error) {
+        dayCycleCompletedShiftMarkers.delete(marker);
+        showError(error.message);
+      } finally {
+        dayCycleShiftInFlight = false;
+      }
     }
 
     function renderDayClock(statusText, paused = false) {
@@ -2069,9 +2136,7 @@ INDEX_HTML = r"""<!doctype html>
 
     function renderDecisions() {
       const progressState = decisionProgress();
-      const chosenCount = progressState.completed;
-      const totalCount = progressState.total;
-      const remainingCount = Math.max(0, totalCount - chosenCount);
+      const decisionsPending = progressState.total > 0 && progressState.completed < progressState.total;
       const progress = $("decisionProgress");
       const advanceBtn = $("advanceBtn");
 
@@ -2082,8 +2147,8 @@ INDEX_HTML = r"""<!doctype html>
         return;
       }
 
-      progress.textContent = `${chosenCount}/${totalCount} Campaign Decisions Complete`;
-      progress.className = `badge ${remainingCount ? "warn" : "good"}`;
+      progress.textContent = decisionsPending ? "Decisions Pending" : "Decisions Complete";
+      progress.className = `badge ${decisionsPending ? "warn" : "good"}`;
       if (advanceBtn) advanceBtn.disabled = !readyToAdvance();
     }
 
@@ -2110,20 +2175,19 @@ INDEX_HTML = r"""<!doctype html>
       }
 
       const progressState = decisionProgress();
-      subtitle.textContent = `${progressState.completed}/${progressState.total} campaign decisions complete - Day ${Math.round(dayCyclePercent())}%`;
+      subtitle.textContent = `Day ${Math.round(dayCyclePercent())}%`;
       const nextCard = currentOpenDecisionCard();
 
       if (nextCard) {
         if (!nextCard.choices.some(choice => choice.id === pendingChoice)) {
           pendingChoice = null;
         }
-        const questionNumber = Math.min(progressState.total, progressState.completed + 1);
         const decisionDue = nextDecisionIsDue();
         const threshold = Math.round(nextDecisionThreshold());
         const title = decisionDue ? "Decision Event" : "Day In Motion";
         const badge = decisionDue ? `<span class="badge warn">Paused</span>` : `<span class="badge info">Rolling</span>`;
         const status = decisionDue
-          ? `Paused for question ${questionNumber}`
+          ? "Paused for decision"
           : `Next decision near ${threshold}%`;
         const detail = decisionDue
           ? `${escapeHtml(nextCard.title)}`
@@ -2198,11 +2262,8 @@ INDEX_HTML = r"""<!doctype html>
         return;
       }
 
-      const progressState = decisionProgress();
-      const questionNumber = Math.min(progressState.total, progressState.completed + 1);
-
       title.textContent = "Daily Decision";
-      meta.textContent = `Day ${state.day} | Question ${questionNumber} of ${progressState.total}`;
+      meta.textContent = `Day ${state.day}`;
       body.innerHTML = `
         <div class="decision-prompt">
           <div class="decision-title">

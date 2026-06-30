@@ -29,7 +29,7 @@ from ..models import DecisionCard, DecisionChoice, DecisionProgress, MetricSnaps
 from ..scenario_generator import generate_scenario
 from ..schedulers.automated import AutomatedScheduler
 from ..schedulers.manual import ManualScheduler
-from ..simulation import DayResult, advance_day, initialize_state
+from ..simulation import DayResult, advance_day, advance_shift as simulate_shift, initialize_state, prepare_day
 from .view import INDEX_HTML
 
 
@@ -69,6 +69,10 @@ class GameSession:
         self.echo_completed_days: set[int] = set()
         self.choice_notes: list[str] = []
         self.last_result: DayResult | None = None
+        self.day_start_snapshot: MetricSnapshot | None = None
+        self.day_completed_before: set[str] = set()
+        self.day_notes_start: int = 0
+        self.day_start_shift: int | None = None
         self._ensure_cards()
 
     def state_payload(self) -> dict[str, Any]:
@@ -86,6 +90,7 @@ class GameSession:
             payload: dict[str, Any] = {
                 "gameOver": game_over,
                 "day": self.player_state.current_day,
+                "shiftsPerDay": self.config.shifts_per_day,
                 "projectedCompletion": day_shift(snapshot.projected_completion_shift, self.config.shifts_per_day),
                 "snapshot": _snapshot_payload(snapshot, self.config.shifts_per_day),
                 "pieces": self._pieces_payload(),
@@ -123,15 +128,38 @@ class GameSession:
             # Decision effects can mutate current queues and future event
             # chains. The returned note is the human-readable audit trail.
             echo_choice = select_echo_choice_for_state(self.player_state, card, self.config, self.player_state.decision_cards)
+            notes_before = len(self.player_state.daily_notes)
             note = apply_choice(self.player_state, card, choice, actor="player", echo_choice=echo_choice)
+            if self.day_start_snapshot is not None:
+                del self.player_state.daily_notes[notes_before:]
             self.applied_choices[card.id] = choice.id
             comparison = "Matched ECHO." if choice.id == echo_choice.id else f"ECHO would choose {echo_choice.label}."
             self.choice_notes.append(f"{card.title}: {choice.label}. {comparison} {note}")
             self._ensure_cards()
             return {"note": note, "allDecisionsMade": self.ready_to_advance()}
 
+    def advance_shift(self) -> dict[str, Any]:
+        """Advance the player simulation by one in-game shift."""
+        with self.lock:
+            if self._game_over():
+                self._finish_automated()
+                return {"summary": self._summary_payload(), "gameOver": True}
+            self._ensure_cards()
+            self._advance_player_shift()
+            day_complete = self._player_day_complete()
+            if day_complete:
+                self._complete_player_day()
+            else:
+                self._ensure_cards()
+            return {
+                "summary": self._summary_payload(),
+                "gameOver": self._game_over(),
+                "dayComplete": day_complete,
+                "shift": self.player_state.current_shift,
+            }
+
     def advance_day(self) -> dict[str, Any]:
-        """Advance both player and benchmark simulations by one in-game day."""
+        """Advance both player and benchmark simulations through the current day."""
         with self.lock:
             if self._game_over():
                 self._finish_automated()
@@ -139,23 +167,78 @@ class GameSession:
             self._ensure_cards()
             if not self.ready_to_advance():
                 raise ValueError("Select a response for all decisions before advancing the day.")
-            # Daily notes are scoped to the just-advanced day. Choice notes are
-            # kept separately until the day is committed, then reset with cards.
-            self.player_state.daily_notes.clear()
-            self.last_result = advance_day(self.player_state, self.manual_scheduler)
-            # The automated scheduler advances silently alongside the player so
-            # it faces the same random event timeline.
-            apply_echo_decisions_for_day(self.automated_state, self.config, self.echo_completed_days)
-            advance_day(self.automated_state, self.automated_scheduler)
-            # A new day means fresh decision cards and no selected choices.
-            self.current_cards = []
-            self.applied_choices = {}
-            self.choice_notes = []
-            if self._game_over():
-                self._finish_automated()
-            else:
-                self._ensure_cards()
+            while not self._game_over():
+                self._advance_player_shift()
+                if self._player_day_complete():
+                    break
+            self._complete_player_day()
             return {"summary": self._summary_payload(), "gameOver": self._game_over()}
+
+    def _advance_player_shift(self) -> None:
+        """Run one shift for the player, preparing the day on the first shift."""
+        if self._game_over():
+            return
+        self._begin_player_day_if_needed()
+        if self._player_day_complete():
+            return
+        simulate_shift(self.player_state, self.manual_scheduler)
+
+    def _begin_player_day_if_needed(self) -> None:
+        """Prepare day-level scheduling state before the first shift runs."""
+        if self.day_start_snapshot is not None:
+            return
+        # Daily notes are scoped to simulated shift activity. Choice notes are
+        # kept separately until the day is committed, then reset with cards.
+        self.player_state.daily_notes.clear()
+        self.day_completed_before = set(self.player_state.completed_jobs)
+        self.day_notes_start = 0
+        self.day_start_shift = self.player_state.current_shift
+        self.day_start_snapshot = prepare_day(self.player_state, self.manual_scheduler)
+
+    def _player_day_complete(self) -> bool:
+        """Return whether the in-progress player day has finished."""
+        if self.day_start_snapshot is None or self.day_start_shift is None:
+            return False
+        return (
+            self.player_state.final_item_completed
+            or self.player_state.current_shift >= self.player_state.deadline_shift
+            or self.player_state.current_shift - self.day_start_shift >= self.player_state.shifts_per_day
+        )
+
+    def _complete_player_day(self) -> None:
+        """Finalize the current player day and advance the hidden benchmark."""
+        if self.day_start_snapshot is None:
+            return
+        update_state_metrics(self.player_state)
+        end_snapshot = calculate_snapshot(self.player_state)
+        completed_today = sorted(self.player_state.completed_jobs - self.day_completed_before)
+        notes = self.player_state.daily_notes[self.day_notes_start:]
+        self.last_result = DayResult(
+            completed_job_ids=completed_today,
+            notes=notes,
+            start_snapshot=self.day_start_snapshot,
+            end_snapshot=end_snapshot,
+        )
+        self._clear_day_progress()
+        # The automated scheduler advances silently alongside the player so
+        # it faces the same random event timeline.
+        apply_echo_decisions_for_day(self.automated_state, self.config, self.echo_completed_days)
+        advance_day(self.automated_state, self.automated_scheduler)
+        # A new day means fresh decision cards and no selected choices.
+        self.current_cards = []
+        self.applied_choices = {}
+        self.choice_notes = []
+        if self._game_over():
+            self._finish_automated()
+        else:
+            self._ensure_cards()
+
+    def _clear_day_progress(self) -> None:
+        """Reset in-progress day bookkeeping after a day summary is built."""
+        self.day_start_snapshot = None
+        self.day_completed_before = set()
+        self.day_notes_start = 0
+        self.day_start_shift = None
 
     def ready_to_advance(self) -> bool:
         """Return whether every current daily decision has a selected choice."""
@@ -708,6 +791,11 @@ class GameRequestHandler(BaseHTTPRequestHandler):
                 result = self.session.apply_choice(str(data.get("cardId", "")), str(data.get("choiceId", "")))
                 state = self.session.state_payload()
                 state["action"] = result
+                self._send_json(state)
+            elif parsed.path == "/api/shift":
+                result = self.session.advance_shift()
+                state = self.session.state_payload()
+                state["shiftAdvance"] = result
                 self._send_json(state)
             elif parsed.path == "/api/advance":
                 result = self.session.advance_day()

@@ -71,6 +71,16 @@ def advance_day(state: SimulationState, scheduler: Scheduler) -> DayResult:
     )
 
 
+def prepare_day(state: SimulationState, scheduler: Scheduler) -> MetricSnapshot:
+    """Run day-level planning and return the pre-shift snapshot."""
+    update_state_metrics(state)
+    start_snapshot = calculate_snapshot(state)
+    # Day-level planning can react to active disruptions and warnings before
+    # individual shift processing starts.
+    scheduler.plan_day(state, _known_events(state))
+    return start_snapshot
+
+
 def advance_shift(state: SimulationState, scheduler: Scheduler) -> None:
     """Advance one shift in event, planning, work, queue-aging order."""
     state.current_shift += 1

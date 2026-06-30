@@ -135,6 +135,29 @@ class ScenarioDueDateGenerationTests(unittest.TestCase):
         self.assertTrue(all(job.due_shift <= scenario.deadline_shift for job in scenario.jobs.values()))
 
 
+class ShiftProgressionPayloadTests(unittest.TestCase):
+    def test_live_snapshot_updates_by_shift_before_day_summary(self):
+        session = GameSession(seed=123)
+        initial = session.state_payload()
+
+        session.advance_shift()
+        shifted = session.state_payload()
+
+        self.assertEqual(shifted["snapshot"]["shift"], initial["snapshot"]["shift"] + 1)
+        self.assertEqual(shifted["day"], initial["day"])
+        self.assertIsNone(session.last_result)
+
+        while not session.ready_to_advance():
+            open_card = next(card for card in session.current_cards if card.id not in session.applied_choices)
+            session.apply_choice(open_card.id, open_card.choices[0].id)
+
+        session.advance_day()
+
+        self.assertIsNotNone(session.last_result)
+        self.assertEqual(session.last_result.start_snapshot.shift, initial["snapshot"]["shift"])
+        self.assertEqual(session.last_result.end_snapshot.shift, initial["snapshot"]["shift"] + session.config.shifts_per_day)
+
+
 def _due_date_test_config(total_days: int, seed: int) -> GameConfig:
     return GameConfig(
         total_days=total_days,
