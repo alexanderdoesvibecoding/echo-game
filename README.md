@@ -6,6 +6,19 @@ You play the manual scheduler for a fictional advanced manufacturing yard. Every
 
 The project is intentionally lightweight: Python standard library server, no frontend build step, no runtime dependencies declared in `pyproject.toml`, and all UI code served from a single HTML/CSS/JavaScript template.
 
+## Current Status
+
+The current project is a playable local browser prototype. It runs one in-memory game session per server process, has no persistence layer, and keeps the hidden ECHO benchmark private until the run ends.
+
+Recent changes since the previous README update:
+
+- The browser now runs each day on a client-side day clock instead of relying on manual shift clicks.
+- Shift snapshots update during the day, so jobs-complete and subjobs-complete metrics move before the end-of-day summary.
+- Daily decisions now appear as modal prompts at deterministic, seeded-random points in the day. The day clock pauses while a decision is due.
+- End-of-day review has been rebuilt around a summary modal with stats, past-due subjobs, update notes, and the submarine assembly puzzle. The player advances after reading it.
+- The final reveal now emphasizes decision score impact, metric comparison, outcome drivers, and the decision audit against ECHO.
+- The UI includes a settings menu for starting a new standard run and toggling light/dark mode. Seeded replay is still primarily handled through the CLI or JSON API.
+
 ## Quick Start
 
 Use Python 3.14 or newer.
@@ -52,7 +65,7 @@ Each run is a short scheduling campaign. The default `normal` preset is tuned fo
 - Short subjob durations
 - No random base disruptions in the default preset
 - No completion-time inspection rework in the default preset
-- 3 active decision cards per day
+- 3 to 4 generated daily decision candidates, with up to 3 active prompts surfaced
 
 The goal is to complete all top-level jobs before the deadline while balancing:
 
@@ -80,18 +93,18 @@ The browser UI presents a compact operating board for the current run.
 
 Each day:
 
-1. Review the project metrics, top-level job progress, and critical-path pressure.
-2. Answer the visible daily decision cards.
-3. Advance shifts one at a time, or advance the rest of the day once decisions are complete.
-4. Read the daily summary and puzzle progress.
-5. Continue until every job is finished or the deadline arrives.
+1. Review the welcome preview, project metrics, job progress, and critical-path pressure.
+2. Let the day clock roll while shift snapshots update the live metrics.
+3. When the clock pauses for a decision event, answer the modal prompt.
+4. After all scheduled decisions are answered and the day reaches the end, read the daily summary.
+5. Advance from the summary and continue until every job is finished or the deadline arrives.
 
-Daily decisions are prepared as part of a campaign decision graph at scenario creation time. Choices can unlock later questions, add branch tags, alter future risk, and mutate the live schedule. The UI shows the current day's exact question count, and the server rejects day advancement until all currently required decisions are answered.
+Daily decisions are prepared as part of a campaign decision graph at scenario creation time. Choices can unlock later questions, add branch tags, alter future risk, and mutate the live schedule. The server tracks current decision progress and rejects full-day advancement until all currently required decisions are answered. The browser surfaces one due decision at a time, using seeded-random timing thresholds so the same run remains replayable.
 
 At the end of the run, the final reveal compares your schedule to ECHO's hidden benchmark run. The reveal includes:
 
 - Player and ECHO final snapshots
-- Completion history over answered questions
+- Decision score impact over answered questions
 - Decision-by-decision audit
 - ECHO's preferred answer for each player decision
 - A short explanation of why the run was won or lost
@@ -107,18 +120,20 @@ Important UI pieces:
 - The server keeps one active session in memory.
 - Refreshing the page keeps the same server-side run.
 - Starting a new run from the UI replaces the process-wide session.
+- The browser keeps only presentation state such as modal visibility, day-clock progress, and theme preference.
 - There is no frontend package manager, bundler, or static asset pipeline.
 
 The main screen focuses on operational state rather than a marketing splash:
 
+- Welcome modal with critical-path preview
 - Project-position metrics
-- Jobs-complete popover
+- Jobs-complete popover and live subjobs-complete counter
 - Top-level job progress rows
-- Critical-path preview
-- Inline decision cards and decision modal
-- Shift and day advancement controls
-- End-of-day summary
-- Submarine assembly puzzle visualization
+- Day progress clock with automatic shift advancement
+- Inline decision status and timed decision modal
+- End-of-day summary modal and persistent summary panel
+- Past-due subjob table, update notes, and submarine assembly puzzle visualization
+- Settings menu for new game and light/dark mode
 - Final ECHO comparison and decision audit
 
 ## Core Concepts
@@ -173,6 +188,8 @@ Most top-level jobs are generated as short dependency chains. A subjob becomes s
 
 The simulation advances in shifts. A day is a fixed number of shifts from `GameConfig.shifts_per_day`, currently 3 in the normal preset.
 
+In the browser UI, the current day is presented as a short client-side clock. The UI calls `/api/shift` at shift markers so live metrics can update before the day closes. Once all required decisions are complete and the clock reaches the end, the UI calls `/api/advance` to finish the day, build the daily summary, and move the hidden ECHO benchmark forward.
+
 `advance_shift` performs one unit of work in this order:
 
 1. Increment the current shift.
@@ -184,7 +201,7 @@ The simulation advances in shifts. A day is a fixed number of shifts from `GameC
 7. Age queues.
 8. Refresh metrics again.
 
-`advance_day` plans the day, then processes up to one day's worth of shifts unless the project completes or the deadline is reached first.
+`advance_day` plans the day, then processes up to one day's worth of shifts unless the project completes or the deadline is reached first. `GameSession` wraps this with summary bookkeeping, active-card resets, and benchmark advancement.
 
 ### Events
 
@@ -286,7 +303,7 @@ Those profiles are flattened into `GameConfig`, which the rest of the simulation
 
 The currently named preset is:
 
-- `normal`: 8 days, 6 top-level jobs, 5 to 7 subjobs per top-level job, shorter durations, broad routing coverage, no random base events, no completion-time rework, and 3 active decision cards per day.
+- `normal`: 8 days, 6 top-level jobs, 5 to 7 subjobs per top-level job, shorter durations, broad routing coverage, no random base events, no completion-time rework, and 3 to 4 generated daily decision candidates with up to 3 active prompts surfaced.
 
 Important tuning principles:
 
@@ -331,17 +348,18 @@ Returns the inline browser UI.
 
 Returns the current run state. The payload includes:
 
+- Run seed
 - Game-over flag
 - Current day
 - Shifts per day
 - Projected completion
 - Metrics snapshot
-- Top-level job rows
+- Top-level job rows with completion, due, and projected finish data
 - Critical-path rows
 - Active decision cards
 - Decision progress
 - Recent applied-choice notes
-- Last daily summary
+- Last daily summary with stats, past-due jobs, puzzle tiles, and notes
 - Final reveal, once the run is over
 
 ### `POST /api/new`
@@ -375,7 +393,7 @@ The response includes the refreshed state plus an `action` object with the choic
 
 ### `POST /api/shift`
 
-Advances the player simulation by one shift.
+Advances the player simulation by one shift. The browser uses this automatically while the day clock is rolling.
 
 Request:
 
@@ -383,11 +401,11 @@ Request:
 {}
 ```
 
-The response includes the refreshed state plus a `shiftAdvance` object.
+The response includes the refreshed state plus a `shiftAdvance` object with the shift number, game-over flag, and whether the shift completed the day.
 
 ### `POST /api/advance`
 
-Advances the player simulation through the rest of the current day. The server rejects this request if required decisions are still unanswered.
+Advances the player simulation through the rest of the current day, creates the daily summary, and advances ECHO's hidden benchmark for the day. The server rejects this request if required decisions are still unanswered.
 
 Request:
 
@@ -511,13 +529,13 @@ Some generation changes can expose edge cases. Reproduce with a fixed seed, then
 python3 -m echo_adventure --seed 1
 ```
 
-### The day will not advance
+### The day clock is paused
 
-All visible decision cards must be answered before the server allows a full-day advance. Use the decision modal or inline decision card controls to finish the current day's required choices.
+The clock pauses when a decision is due or when the end-of-day summary is open. Answer the decision modal, or use `Advance Day` in the daily summary. The server also rejects `/api/advance` until all required decisions are answered.
 
 ### Shift advancement looks different from day advancement
 
-That is expected. `/api/shift` advances one shift and can update the live snapshot before an end-of-day summary exists. `/api/advance` finishes the current day and creates the daily summary.
+That is expected. `/api/shift` advances one shift and can update the live snapshot before an end-of-day summary exists. `/api/advance` finishes the current day, advances ECHO's daily benchmark state, and creates the daily summary.
 
 ### Tooltips overlap table text
 
