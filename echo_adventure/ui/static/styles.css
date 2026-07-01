@@ -899,6 +899,10 @@ html[data-theme="dark"] .puzzle-added {
 .summary-modal {
   max-width: 1160px;
 }
+.summary-modal > h1 {
+  margin: 0 0 18px;
+  line-height: 1.1;
+}
 .summary-modal .modal-body {
   max-height: 72vh;
 }
