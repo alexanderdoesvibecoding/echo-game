@@ -144,6 +144,15 @@ html[data-theme="dark"] .choice.selected {
   border-color: #5dd99f;
 }
 
+html[data-theme="dark"] .decision-icon {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+html[data-theme="dark"] .choice-icon {
+  background: #1a202a;
+  border-color: #3a4352;
+}
+
 html[data-theme="dark"] .modal {
   background: #1a202a;
   border-color: #3a4352;
@@ -491,6 +500,116 @@ tr:last-child td { border-bottom: none; }
 }
 .decision.done { border-color: #b8d8c2; background: #fbfffc; }
 .decision-title { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
+.decision-title-with-icon {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+.decision-title-copy {
+  min-width: 0;
+}
+.decision-icon {
+  --icon-bg: #e7f1f1;
+  --icon-fg: var(--teal-dark);
+  --icon-fill: #167c78;
+  --icon-alert-color: var(--red);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: var(--icon-bg);
+  color: var(--icon-fg);
+  overflow: hidden;
+}
+.decision-icon-small {
+  width: 38px;
+  height: 38px;
+}
+.decision-icon-medium {
+  width: 52px;
+  height: 52px;
+}
+.decision-icon-large {
+  width: 74px;
+  height: 74px;
+}
+.decision-icon-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.decision-icon .icon-bg {
+  fill: var(--icon-bg);
+}
+.decision-icon .icon-fill {
+  fill: var(--icon-fill);
+  stroke: var(--icon-fg);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.decision-icon .icon-line {
+  fill: none;
+  stroke: var(--icon-fg);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.decision-icon .icon-line-fill {
+  fill: var(--panel);
+  stroke: var(--icon-fg);
+  stroke-width: 2.6;
+}
+.decision-icon .icon-alert {
+  fill: none;
+  stroke: var(--icon-alert-color);
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.decision-icon .icon-alert-fill {
+  fill: var(--icon-alert-color);
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+.decision-icon.tone-red {
+  --icon-bg: #f8e4e4;
+  --icon-fg: #7f2020;
+  --icon-fill: #d86b6b;
+  --icon-alert-color: #b33a3a;
+}
+.decision-icon.tone-amber {
+  --icon-bg: #fbf0da;
+  --icon-fg: #7b4a05;
+  --icon-fill: #e3ad4f;
+  --icon-alert-color: #b33a3a;
+}
+.decision-icon.tone-blue {
+  --icon-bg: #e7f1f8;
+  --icon-fg: #215d7a;
+  --icon-fill: #8ec7e8;
+  --icon-alert-color: #2d6f8f;
+}
+.decision-icon.tone-green {
+  --icon-bg: #e7f3eb;
+  --icon-fg: #225b36;
+  --icon-fill: #80c795;
+  --icon-alert-color: #167c78;
+}
+.decision-icon.tone-violet {
+  --icon-bg: #ece8f8;
+  --icon-fg: #4c3c85;
+  --icon-fill: #a998dc;
+  --icon-alert-color: #6c5aa7;
+}
+.decision-icon.tone-teal {
+  --icon-bg: #e7f1f1;
+  --icon-fg: #0d5552;
+  --icon-fill: #65beb9;
+  --icon-alert-color: #167c78;
+}
 .choice {
   display: block;
   width: calc(100% - 20px);
@@ -503,6 +622,32 @@ tr:last-child td { border-bottom: none; }
 }
 .choice.selected { border-color: var(--green); background: #eef8f0; }
 .choice small { display: block; color: var(--muted); margin-top: 3px; }
+.choice-content {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+}
+.choice-icon {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcf9;
+  color: var(--teal-dark);
+}
+.choice-icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .inline-decisions {
   display: grid;
   gap: 12px;
@@ -858,6 +1003,17 @@ html[data-theme="dark"] .puzzle-added {
   .topbar { grid-template-columns: auto 1fr; }
   main { padding: 12px; }
   .metrics, .split, .summary-grid { grid-template-columns: 1fr; }
+  .decision-title-with-icon {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .decision-title-with-icon .badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .decision-icon-large {
+    width: 58px;
+    height: 58px;
+  }
   table { min-width: 720px; }
 }
 /* Modal overlay for end-of-day summary */

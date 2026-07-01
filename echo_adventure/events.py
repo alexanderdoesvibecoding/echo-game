@@ -313,12 +313,24 @@ def resolve_event(state: SimulationState, event: Event) -> None:
         if job_id not in state.jobs:
             continue
         job = state.jobs[job_id]
-        # Block reasons include the event id, so resolution only clears blocks
-        # caused by this event and leaves overlapping disruptions intact.
-        if job.status != JobStatus.COMPLETE and job.block_reason and event.id in job.block_reason:
-            job.block_reason = None
-            job.status = JobStatus.READY if state.is_dependency_complete(job.id) else JobStatus.NOT_READY
-            state.blocked_jobs.discard(job.id)
+        if job.status == JobStatus.COMPLETE:
+            continue
+
+        overlapping_event = _active_job_block_event_for(state, job_id)
+        if overlapping_event:
+            job.block_reason = _job_block_reason(overlapping_event)
+            job.status = JobStatus.BLOCKED
+            state.blocked_jobs.add(job_id)
+            continue
+
+        # Block reasons include the event id, so avoid clearing a reason that
+        # belongs to a different still-unresolved mechanism.
+        if job.block_reason and event.id not in job.block_reason:
+            continue
+
+        job.block_reason = None
+        job.status = JobStatus.READY if state.is_dependency_complete(job.id) else JobStatus.NOT_READY
+        state.blocked_jobs.discard(job.id)
 
     for wc_id in event.effects.get("workcenter_ids", []):
         if wc_id not in state.workcenters:
@@ -367,6 +379,22 @@ def _active_workcenter_event_for(state: SimulationState, wc_id: str) -> Event | 
     return max(candidates, key=lambda active_event: (active_event.end_shift, active_event.start_shift, active_event.id))
 
 
+def _active_job_block_event_for(state: SimulationState, job_id: str) -> Event | None:
+    """Return another active event that still blocks the job."""
+    candidates = [
+        active_event
+        for active_event in state.event_timeline
+        if active_event.started
+        and not active_event.resolved
+        and job_id in active_event.effects.get("blocked_job_ids", [])
+    ]
+
+    if not candidates:
+        return None
+
+    return max(candidates, key=lambda active_event: (active_event.end_shift, active_event.start_shift, active_event.id))
+
+
 def _workcenter_status_for_event(event: Event) -> WorkCenterStatus:
     """Return the workcenter status produced by a workcenter-disruption event."""
     if event.type in {EventType.MACHINE_DOWN, EventType.TOOLING_DAMAGE}:
@@ -400,7 +428,7 @@ def _block_jobs(state: SimulationState, event: Event, job_ids: Iterable[str], re
             continue
         state.remove_job_from_queues(job_id)
         job.status = JobStatus.BLOCKED
-        job.block_reason = f"{event.id}: {reason}"
+        job.block_reason = _job_block_reason(event, reason)
         affected.append(job_id)
         state.blocked_jobs.add(job_id)
         if job.assigned_workcenter_id:
@@ -409,6 +437,11 @@ def _block_jobs(state: SimulationState, event: Event, job_ids: Iterable[str], re
                 wc.current_job_id = None
                 wc.status = WorkCenterStatus.AVAILABLE
     event.effects.setdefault("blocked_job_ids", []).extend(affected)
+
+
+def _job_block_reason(event: Event, reason: str | None = None) -> str:
+    """Return the stored block reason for a job-blocking event."""
+    return f"{event.id}: {reason or event.type.value}"
 
 
 def _set_workcenters_down(

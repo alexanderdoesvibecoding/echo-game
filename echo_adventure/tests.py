@@ -6,10 +6,12 @@ from unittest.mock import patch
 from echo_adventure import echo as echo_policy
 from echo_adventure.config import GameConfig
 from echo_adventure.decisions import select_echo_choice
-from echo_adventure.enums import DecisionType, EventType, JobStatus
+from echo_adventure.enums import DecisionType, EventType, JobStatus, TargetType
+from echo_adventure.events import apply_event_start, resolve_event
 from echo_adventure.metrics import update_state_metrics
-from echo_adventure.models import DecisionCard, DecisionChoice
+from echo_adventure.models import DecisionCard, DecisionChoice, Event
 from echo_adventure.scenario_generator import generate_scenario
+from echo_adventure.simulation import initialize_state
 from echo_adventure.ui.server import STATIC_ASSETS, GameSession, SessionStore
 from echo_adventure.ui.view import INDEX_HTML
 
@@ -230,6 +232,53 @@ class ScenarioDueDateGenerationTests(unittest.TestCase):
         self.assertTrue(all(1 <= due_day <= 15 for due_day in due_days.values()))
         self.assertTrue(any(due_day < 15 for due_day in due_days.values()))
         self.assertTrue(all(job.due_shift <= scenario.deadline_shift for job in scenario.jobs.values()))
+
+
+class EventResolutionTests(unittest.TestCase):
+    def test_overlapping_job_blocks_keep_job_blocked_until_all_resolve(self):
+        config = _due_date_test_config(total_days=8, seed=2468)
+        state = initialize_state(generate_scenario(config), config.shifts_per_day)
+        job = next(job for job in state.jobs.values() if not job.dependency_ids)
+        first_event = Event(
+            id="EVT-A",
+            type=EventType.MISSING_MATERIAL,
+            target_type=TargetType.JOB,
+            target_id=job.id,
+            start_shift=1,
+            duration_shifts=5,
+            severity=1,
+            has_advance_warning=False,
+            warning_shift=None,
+            description="First blocker",
+        )
+        second_event = Event(
+            id="EVT-B",
+            type=EventType.INSPECTION_DELAY,
+            target_type=TargetType.JOB,
+            target_id=job.id,
+            start_shift=2,
+            duration_shifts=5,
+            severity=1,
+            has_advance_warning=False,
+            warning_shift=None,
+            description="Second blocker",
+        )
+        state.event_timeline.extend([first_event, second_event])
+
+        apply_event_start(state, first_event)
+        apply_event_start(state, second_event)
+        self.assertEqual(job.status, JobStatus.BLOCKED)
+        self.assertIn(second_event.id, job.block_reason or "")
+
+        resolve_event(state, second_event)
+        self.assertEqual(job.status, JobStatus.BLOCKED)
+        self.assertIn(first_event.id, job.block_reason or "")
+        self.assertIn(job.id, state.blocked_jobs)
+
+        resolve_event(state, first_event)
+        self.assertEqual(job.status, JobStatus.READY)
+        self.assertIsNone(job.block_reason)
+        self.assertNotIn(job.id, state.blocked_jobs)
 
 
 class ShiftProgressionPayloadTests(unittest.TestCase):
