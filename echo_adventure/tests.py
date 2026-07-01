@@ -1,3 +1,4 @@
+from dataclasses import replace
 import threading
 import unittest
 from unittest.mock import patch
@@ -5,7 +6,7 @@ from unittest.mock import patch
 from echo_adventure import echo as echo_policy
 from echo_adventure.config import GameConfig
 from echo_adventure.decisions import select_echo_choice
-from echo_adventure.enums import DecisionType, JobStatus
+from echo_adventure.enums import DecisionType, EventType, JobStatus
 from echo_adventure.metrics import update_state_metrics
 from echo_adventure.models import DecisionCard, DecisionChoice
 from echo_adventure.scenario_generator import generate_scenario
@@ -193,6 +194,22 @@ class SessionStoreOwnershipTests(unittest.TestCase):
 
 
 class ScenarioDueDateGenerationTests(unittest.TestCase):
+    def test_extra_quality_rework_events_do_not_require_base_events(self):
+        config = replace(
+            _due_date_test_config(total_days=8, seed=2468),
+            min_extra_quality_rework_events=2,
+            max_extra_quality_rework_events=2,
+        )
+
+        scenario = generate_scenario(config)
+        rework_events = [
+            event
+            for event in scenario.event_timeline
+            if event.type == EventType.QUALITY_REWORK
+        ]
+
+        self.assertEqual(len(rework_events), 2)
+
     def test_piece_due_dates_spread_across_configured_total_days(self):
         scenario = generate_scenario(_due_date_test_config(total_days=8, seed=2468))
         due_days = _piece_due_days(scenario, shifts_per_day=3)
@@ -308,7 +325,6 @@ def _due_date_test_config(total_days: int, seed: int) -> GameConfig:
         max_decisions_per_day=1,
         max_active_decision_cards_per_day=1,
         max_campaign_decision_nodes=40,
-        max_campaign_branch_depth=2,
         max_future_unlocks_per_choice=1,
         max_branch_variants_per_day=2,
         seed=seed,

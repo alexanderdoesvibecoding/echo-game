@@ -88,11 +88,10 @@ class Job:
     started_once: bool = False
     completed_shift: int | None = None
     queue_time: int = 0
-    original_duration_shifts: int = 0
     rework_count: int = 0
 
     planned_completion_rework_shifts: int = 0
-    completion_rework_consumed: bool=False
+    completion_rework_consumed: bool = False
 
     @property
     def planned_duration(self) -> int:
@@ -149,8 +148,6 @@ class DecisionChoice:
     next_card_id: str | None = None
     future_unlock_card_ids: list[str] = field(default_factory=list)
     branch_tags_added: list[str] = field(default_factory=list)
-    branch_tags_removed: list[str] = field(default_factory=list)
-    branch_key: str | None = None
     score_delta: float = 0.0
 
 
@@ -167,14 +164,8 @@ class DecisionCard:
     severity: int
     choices: list[DecisionChoice]
     echo_choice_id: str | None = None
-    parent_card_id: str | None = None
-    parent_choice_id: str | None = None
-    child_card_ids: list[str] = field(default_factory=list)
-    future_unlock_card_ids: list[str] = field(default_factory=list)
     required_tags: list[str] = field(default_factory=list)
     excluded_tags: list[str] = field(default_factory=list)
-    branch_tags: list[str] = field(default_factory=list)
-    branch_key: str | None = None
     campaign_priority: int = 100
 
 
@@ -214,14 +205,10 @@ class CampaignDecisionGraph:
     unlocked card ids; it does not create future cards.
     """
 
-    campaign_root_card_id: str | None = None
     root_card_ids: list[str] = field(default_factory=list)
-    card_ids: list[str] = field(default_factory=list)
     cards_by_day: dict[int, list[str]] = field(default_factory=dict)
     event_card_ids_by_day: dict[int, list[str]] = field(default_factory=dict)
-    max_campaign_nodes: int = 0
     max_active_cards_per_day: int = 0
-    max_future_unlocks_per_choice: int = 0
 
 
 @dataclass
@@ -254,7 +241,6 @@ class Scenario:
     workcenters: dict[str, WorkCenter]
     pieces: dict[str, PuzzlePiece]
     jobs: dict[str, Job]
-    dependencies: dict[str, list[str]]
     event_timeline: list[Event]
     deadline_shift: int
     decision_cards: dict[str, DecisionCard] = field(default_factory=dict)
@@ -277,7 +263,6 @@ class SimulationState:
     decision_cards: dict[str, DecisionCard] = field(default_factory=dict)
     campaign_decision_graph: CampaignDecisionGraph = field(default_factory=CampaignDecisionGraph)
     unlocked_decision_card_ids: set[str] = field(default_factory=set)
-    completed_decision_card_ids: set[str] = field(default_factory=set)
     campaign_branch_tags: set[str] = field(default_factory=set)
     campaign_branch_tag_order: dict[str, int] = field(default_factory=dict)
     campaign_selected_choices: dict[str, str] = field(default_factory=dict)
@@ -289,7 +274,6 @@ class SimulationState:
     known_warnings: list[str] = field(default_factory=list)
     completed_jobs: set[str] = field(default_factory=set)
     blocked_jobs: set[str] = field(default_factory=set)
-    scheduled_jobs: set[str] = field(default_factory=set)
     reschedule_count: int = 0
     metric_history: list[MetricSnapshot] = field(default_factory=list)
     final_item_completed: bool = False
@@ -320,7 +304,6 @@ class SimulationState:
                 JobStatus.COMPLETE,
                 JobStatus.RUNNING,
                 JobStatus.QUEUED,
-                JobStatus.CANCELLED,
             }:
                 continue
             if job.block_reason:
@@ -434,7 +417,6 @@ class SimulationState:
                 wc.queue.insert(0, job_id)
             else:
                 wc.queue.append(job_id)
-        self.scheduled_jobs.add(job_id)
         return True
 
     def preempt_current_job(self, workcenter_id: str, incoming_job_id: str) -> bool:

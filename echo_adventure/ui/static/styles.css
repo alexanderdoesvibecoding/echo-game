@@ -133,10 +133,6 @@ html[data-theme="dark"] .day-progress-fill.paused {
   background: #f0ad4e;
 }
 
-html[data-theme="dark"] .decision-head {
-  border-color: #3a4352;
-}
-
 html[data-theme="dark"] .choice {
   background: #252d38;
   border-color: #3a4352;
@@ -214,7 +210,6 @@ h1 { font-size: 20px; font-weight: 760; }
 h2 { font-size: 15px; font-weight: 760; }
 h3 { font-size: 13px; font-weight: 760; color: var(--muted); text-transform: uppercase; }
 .subtle { color: var(--muted); }
-.controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center; }
 .settings-wrap { position: relative; }
 .settings-button {
   width: 38px;
@@ -451,8 +446,6 @@ html[data-theme="dark"] .metric-popover th {
 .bar.warn { background: var(--amber); }
 .bar.danger { background: var(--red); }
 .bar.good { background: var(--green); }
-.bar.info { background: var(--teal); }
-.bar.muted { background: var(--line); }
 
 table {
   width: 100%;
@@ -497,7 +490,6 @@ tr:last-child td { border-bottom: none; }
   overflow: hidden;
 }
 .decision.done { border-color: #b8d8c2; background: #fbfffc; }
-.decision-head { padding: 11px; border-bottom: 1px solid var(--line); }
 .decision-title { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
 .choice {
   display: block;
@@ -786,20 +778,18 @@ html[data-theme="dark"] .chart-tooltip {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-.puzzle-added .badge {
-  border-radius: 6px;
-}
-.puzzle-added {
   width: fit-content;
   max-width: 100%;
   padding: 7px 9px;
   border: 1px solid rgba(22, 124, 120, 0.18);
   border-radius: 8px;
   background: rgba(22, 124, 120, 0.07);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.puzzle-added .badge {
+  border-radius: 6px;
 }
 html[data-theme="dark"] .puzzle-stage {
   background: linear-gradient(180deg, #17212a 0%, #111821 100%);
@@ -866,8 +856,6 @@ html[data-theme="dark"] .puzzle-added {
 }
 @media (max-width: 680px) {
   .topbar { grid-template-columns: auto 1fr; }
-  .controls { grid-column: 1 / -1; }
-  .controls { justify-content: flex-start; }
   main { padding: 12px; }
   .metrics, .split, .summary-grid { grid-template-columns: 1fr; }
   table { min-width: 720px; }

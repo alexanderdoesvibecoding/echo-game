@@ -13,9 +13,6 @@ class WorkCenterStatus(str, Enum):
     DOWN = "Down"
     BLOCKED = "Blocked"
     IDLE = "Idle"
-    WAITING_ON_MATERIAL = "Waiting on material"
-    WAITING_ON_INSPECTION = "Waiting on inspection"
-    WAITING_ON_ENGINEERING = "Waiting on engineering"
     WEATHER_IMPACTED = "Weather impacted"
 
 
@@ -25,14 +22,11 @@ class JobStatus(str, Enum):
     NOT_READY = "Not Ready"
     READY = "Ready"
     QUEUED = "Queued"
-    SCHEDULED = "Scheduled"
     RUNNING = "Running"
     PAUSED = "Paused"
     BLOCKED = "Blocked"
     COMPLETE = "Complete"
-    LATE = "Late"
     REWORK_REQUIRED = "Rework Required"
-    CANCELLED = "Cancelled / Superseded"
 
 
 class PieceStatus(str, Enum):

@@ -53,7 +53,6 @@ class DecisionProfile:
     min_decisions_per_day: int = 3
     max_decisions_per_day: int = 5
     max_campaign_decision_nodes: int = 900
-    max_campaign_branch_depth: int = 4
     max_future_unlocks_per_choice: int = 4
     max_active_decision_cards_per_day: int = 5
     max_branch_variants_per_day: int = 12
@@ -151,7 +150,6 @@ class GameConfig:
     min_completion_rework_shifts: int = 1
     max_completion_rework_shifts: int = 3
     max_campaign_decision_nodes: int = 900
-    max_campaign_branch_depth: int = 4
     max_future_unlocks_per_choice: int = 4
     max_active_decision_cards_per_day: int = 5
     max_branch_variants_per_day: int = 12
@@ -219,7 +217,6 @@ def _validate_config(preset: str, config: GameConfig) -> None:
         "min_completion_rework_shifts",
         "max_completion_rework_shifts",
         "max_campaign_decision_nodes",
-        "max_campaign_branch_depth",
         "max_future_unlocks_per_choice",
         "max_active_decision_cards_per_day",
         "max_branch_variants_per_day",

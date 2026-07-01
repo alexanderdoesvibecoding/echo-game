@@ -55,34 +55,39 @@ def generate_event_timeline(
     deadline = config.deadline_shift
     all_jobs = list(jobs.values())
     timeline: list[Event] = []
-    event_count = rng.randint(config.min_base_events, config.max_base_events)
+    base_event_count = rng.randint(config.min_base_events, config.max_base_events)
     extra_rework_count = rng.randint(
         config.min_extra_quality_rework_events,
         config.max_extra_quality_rework_events,
     )
-    if event_count <= 0:
+    if base_event_count <= 0 and extra_rework_count <= 0:
         return timeline
-    if event_count < len(EVENT_SEQUENCE):
-        event_types = rng.sample(EVENT_SEQUENCE, k=event_count)
+    if base_event_count < len(EVENT_SEQUENCE):
+        event_types = rng.sample(EVENT_SEQUENCE, k=base_event_count)
     else:
-        filler_count = max(0, event_count - len(EVENT_SEQUENCE) - extra_rework_count)
+        filler_count = max(0, base_event_count - len(EVENT_SEQUENCE))
         # The full-game catalog guarantees broad variety, then extra/filler
         # events create enough density that a player cannot absorb everything.
         event_types = (
             EVENT_SEQUENCE
-            + [EventType.QUALITY_REWORK for _ in range(extra_rework_count)]
             + [rng.choice(EVENT_SEQUENCE) for _ in range(filler_count)]
         )
+    event_types.extend(EventType.QUALITY_REWORK for _ in range(extra_rework_count))
     rng.shuffle(event_types)
     if rng.random() < ECHO_RECOMMENDATION_PROBABILITY:
         event_types.append(EventType.ECHO_RECOMMENDATION)
         rng.shuffle(event_types)
 
-    # Force at least one early warning for weather and one for delayed material.
-    if event_types and EventType.WEATHER not in event_types:
-        event_types[0] = EventType.WEATHER
-    if len(event_types) > 1 and EventType.DELAYED_MATERIAL not in event_types:
-        event_types[1] = EventType.DELAYED_MATERIAL
+    # Force early warning variety without overwriting explicit extra rework.
+    replaceable_indexes = [
+        index
+        for index, event_type in enumerate(event_types)
+        if event_type != EventType.QUALITY_REWORK
+    ]
+    if replaceable_indexes and EventType.WEATHER not in event_types:
+        event_types[replaceable_indexes[0]] = EventType.WEATHER
+    if len(replaceable_indexes) > 1 and EventType.DELAYED_MATERIAL not in event_types:
+        event_types[replaceable_indexes[1]] = EventType.DELAYED_MATERIAL
 
     for index, event_type in enumerate(event_types, start=1):
         latest_start = deadline - 5
@@ -553,7 +558,6 @@ def insert_unexpected_job(state: SimulationState, event: Event, prioritize: bool
             priority=max(10, priority - job_index * 2),
             due_shift=due_shift,
             risk_score=float(18 + event.severity * 4),
-            original_duration_shifts=duration,
         )
         if previous_job_id and previous_job_id in state.jobs:
             state.jobs[previous_job_id].dependent_job_ids.append(job_id)
@@ -697,7 +701,6 @@ def _create_follow_on_job(
         priority=priority,
         due_shift=min(state.deadline_shift - 1, state.current_shift + 5),
         risk_score=event.severity * 4,
-        original_duration_shifts=duration,
     )
     state.jobs[job.id] = job
     piece.job_ids.append(job.id)

@@ -111,9 +111,7 @@ def generate_campaign_decision_graph(
     """
     cards: dict[str, DecisionCard] = {}
     graph = CampaignDecisionGraph(
-        max_campaign_nodes=config.max_campaign_decision_nodes,
         max_active_cards_per_day=min(config.max_active_decision_cards_per_day, config.max_decisions_per_day),
-        max_future_unlocks_per_choice=config.max_future_unlocks_per_choice,
     )
     day_templates: dict[int, list[DecisionCard]] = {}
 
@@ -143,8 +141,6 @@ def generate_campaign_decision_graph(
         cards[root.id] = root
         graph.root_card_ids.append(root.id)
         graph.cards_by_day.setdefault(1, []).append(root.id)
-        if graph.campaign_root_card_id is None:
-            graph.campaign_root_card_id = root.id
 
     route_tags = list(_CAMPAIGN_ROUTE_THEMES)[: config.max_branch_variants_per_day]
     for day in range(2, config.total_days + 1):
@@ -161,8 +157,6 @@ def generate_campaign_decision_graph(
                 title_prefix=theme_title,
                 description_prefix=theme_description,
                 required_tags=[tag],
-                branch_tags=[tag],
-                branch_key=tag,
                 campaign_priority=20 + index,
             )
             cards[card.id] = card
@@ -172,16 +166,7 @@ def generate_campaign_decision_graph(
     echo_score_memo: dict[str, float] = {}
     for card in cards.values():
         card.echo_choice_id = select_echo_choice(card, cards, echo_score_memo).id
-        card.future_unlock_card_ids = sorted(
-            {
-                future_id
-                for choice in card.choices
-                for future_id in choice.future_unlock_card_ids
-                if future_id in cards
-            }
-        )
 
-    graph.card_ids = sorted(cards)
     graph.cards_by_day = {day: ids for day, ids in sorted(graph.cards_by_day.items())}
     graph.event_card_ids_by_day = {day: ids for day, ids in sorted(graph.event_card_ids_by_day.items())}
     return cards, graph
@@ -203,7 +188,6 @@ def active_campaign_decision_cards(
 ) -> list[DecisionCard]:
     """Select prebuilt campaign graph nodes for today's active branch."""
     graph = state.campaign_decision_graph
-    effective_choices = {**state.campaign_selected_choices, **selected_choices}
     scheduled_events = set(graph.event_card_ids_by_day.get(day, []))
     unlocked = set(state.unlocked_decision_card_ids) | set(graph.root_card_ids) | scheduled_events
     candidate_ids = graph.cards_by_day.get(day) or [
@@ -214,7 +198,7 @@ def active_campaign_decision_cards(
         card
         for card_id in candidate_ids
         if (card := state.decision_cards.get(card_id))
-        and _campaign_card_available(card, state, unlocked, effective_choices)
+        and _campaign_card_available(card, state, unlocked)
     ]
     cards.sort(key=lambda card: _campaign_active_sort_key(state, card))
     return cards[:limit] if limit > 0 else cards
@@ -224,7 +208,6 @@ def _campaign_card_available(
     card: DecisionCard,
     state: SimulationState,
     unlocked: set[str],
-    selected_choices: dict[str, str],
 ) -> bool:
     """Return whether a prebuilt campaign node belongs to the active route."""
     if card.id not in unlocked:
@@ -233,8 +216,6 @@ def _campaign_card_available(
         return False
     if any(tag in state.campaign_branch_tags for tag in card.excluded_tags):
         return False
-    if card.parent_card_id:
-        return selected_choices.get(card.parent_card_id) == card.parent_choice_id
     return True
 
 
@@ -487,14 +468,8 @@ def _renumber_decision_cards(cards: list[DecisionCard], day: int) -> list[Decisi
                 severity=card.severity,
                 choices=_clone_choices(card.choices),
                 echo_choice_id=card.echo_choice_id,
-                parent_card_id=card.parent_card_id,
-                parent_choice_id=card.parent_choice_id,
-                child_card_ids=list(card.child_card_ids),
-                future_unlock_card_ids=list(card.future_unlock_card_ids),
                 required_tags=list(card.required_tags),
                 excluded_tags=list(card.excluded_tags),
-                branch_tags=list(card.branch_tags),
-                branch_key=card.branch_key,
                 campaign_priority=card.campaign_priority,
             )
         )
@@ -509,8 +484,6 @@ def _campaign_clone_card(
     description_prefix: str,
     required_tags: list[str] | None = None,
     excluded_tags: list[str] | None = None,
-    branch_tags: list[str] | None = None,
-    branch_key: str | None = None,
     campaign_priority: int = 100,
 ) -> DecisionCard:
     """Clone a generated operational template into a campaign graph node."""
@@ -524,13 +497,8 @@ def _campaign_clone_card(
         severity=template.severity,
         choices=_clone_choices(template.choices),
         echo_choice_id=template.echo_choice_id,
-        parent_card_id=template.parent_card_id,
-        parent_choice_id=template.parent_choice_id,
-        child_card_ids=[],
         required_tags=list(required_tags or []),
         excluded_tags=list(excluded_tags or []),
-        branch_tags=list(branch_tags or []),
-        branch_key=branch_key,
         campaign_priority=campaign_priority,
     )
 
@@ -545,8 +513,7 @@ def _decorate_campaign_choices(cards: dict[str, DecisionCard], config: GameConfi
     available_card_ids = set(cards)
     for card in cards.values():
         for choice in card.choices:
-            branch_key, tags = project_choice_branch_state(choice)
-            choice.branch_key = branch_key
+            _, tags = project_choice_branch_state(choice)
             choice.branch_tags_added = tags
             choice.future_unlock_card_ids = _future_unlock_card_ids_for_choice(
                 choice_day=card.day,
@@ -656,11 +623,7 @@ def _decision_rng(state: SimulationState, day: int, config: GameConfig) -> rando
 
 def apply_campaign_choice(state: SimulationState, card: DecisionCard, choice: DecisionChoice) -> None:
     """Persist branch state changes from one campaign graph choice."""
-    state.completed_decision_card_ids.add(card.id)
     state.campaign_selected_choices[card.id] = choice.id
-    for tag in choice.branch_tags_removed:
-        state.campaign_branch_tags.discard(tag)
-        state.campaign_branch_tag_order.pop(tag, None)
     next_order = len(state.campaign_branch_tag_order)
     for tag in choice.branch_tags_added:
         if tag not in state.campaign_branch_tag_order:
@@ -786,8 +749,6 @@ def _clone_choices(choices: list[DecisionChoice]) -> list[DecisionChoice]:
             next_card_id=choice.next_card_id,
             future_unlock_card_ids=list(choice.future_unlock_card_ids),
             branch_tags_added=list(choice.branch_tags_added),
-            branch_tags_removed=list(choice.branch_tags_removed),
-            branch_key=choice.branch_key,
             score_delta=choice.score_delta,
         )
         for choice in choices
@@ -828,8 +789,6 @@ def _job_state_phrase(state: SimulationState, job: Job) -> str:
         return "running"
     if job.status == JobStatus.QUEUED:
         return "queued"
-    if job.status == JobStatus.SCHEDULED:
-        return "scheduled"
     if job.status == JobStatus.READY:
         return "ready"
     if not state.is_dependency_complete(job.id):
@@ -882,7 +841,7 @@ def _event_context(state: SimulationState, event: Event, status: str) -> str:
 
     has_critical = any(job.critical_path for job in jobs)
     has_blocked = any(job.is_blocked for job in jobs)
-    has_ready = any(job.status in {JobStatus.READY, JobStatus.QUEUED, JobStatus.SCHEDULED} for job in jobs)
+    has_ready = any(job.status in {JobStatus.READY, JobStatus.QUEUED} for job in jobs)
     context: list[str] = [f"This hits {timing}"]
     if has_critical:
         context.append("near key work")
@@ -1571,7 +1530,6 @@ def _prepare_urgent_job(job: Job) -> bool:
     changed = False
     if not job.started_once and job.base_duration_shifts > 1:
         job.base_duration_shifts -= 1
-        job.original_duration_shifts = max(1, job.original_duration_shifts - 1)
         changed = True
     if job.remaining_duration_shifts > 1:
         job.remaining_duration_shifts -= 1
@@ -1743,7 +1701,7 @@ def _use_echo_recommendation(state: SimulationState, card: DecisionCard) -> str:
     pulled_note = _pull_forward_unaffected(state, card)
     accelerated = 0
     for job in state.get_critical_path_jobs()[:4]:
-        if job.status in {JobStatus.QUEUED, JobStatus.READY, JobStatus.SCHEDULED} and job.remaining_duration_shifts > 1:
+        if job.status in {JobStatus.QUEUED, JobStatus.READY} and job.remaining_duration_shifts > 1:
             job.remaining_duration_shifts -= 1
             accelerated += 1
     return f"ECHO recommendation worked: {protected_note} {pulled_note} Accelerated {accelerated} critical subjob(s)."

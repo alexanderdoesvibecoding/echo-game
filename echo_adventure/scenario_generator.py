@@ -65,7 +65,6 @@ def generate_scenario(config: GameConfig) -> Scenario:
     shops, workcenters = _generate_shops_and_workcenters(config, rng)
     pieces, jobs = _generate_pieces_and_jobs(config, rng, shops, workcenters)
     _assign_planned_completion_rework(config, rng, jobs)
-    dependencies = {job.id: list(job.dependency_ids) for job in jobs.values()}
     events = generate_event_timeline(rng, config, shops, workcenters, pieces, jobs)
     scenario = Scenario(
         scenario_id=f"SCN-{seed % 1_000_000:06d}",
@@ -74,7 +73,6 @@ def generate_scenario(config: GameConfig) -> Scenario:
         workcenters=workcenters,
         pieces=pieces,
         jobs=jobs,
-        dependencies=dependencies,
         event_timeline=events,
         deadline_shift=config.deadline_shift,
     )
@@ -215,7 +213,7 @@ def _generate_pieces_and_jobs(
     pieces: dict[str, PuzzlePiece] = {}
     jobs: dict[str, Job] = {}
     shop_ids = list(shops.keys())
-    piece_due_days = _assign_piece_due_days(config, rng, config.piece_count)
+    piece_due_days = _assign_piece_due_days(config, config.piece_count)
     for piece_index in range(1, config.piece_count + 1):
         piece_id = f"PIECE-{piece_index:02d}"
         piece_due_shift = _day_to_due_shift(piece_due_days[piece_index], config)
@@ -271,7 +269,6 @@ def _generate_pieces_and_jobs(
                 priority=rng.randint(35, 75),
                 due_shift=piece_due_shift,
                 risk_score=float(rng.randint(8, 30)),
-                original_duration_shifts=duration,
             )
             jobs[job_id] = job
             for dep_id in dependencies:
@@ -291,11 +288,10 @@ def _generate_pieces_and_jobs(
     return pieces, jobs
 
 
-def _assign_piece_due_days(config: GameConfig, rng: random.Random, piece_count: int) -> dict[int, int]:
+def _assign_piece_due_days(config: GameConfig, piece_count: int) -> dict[int, int]:
     """Return a monotonic spread of piece indexes to day-based due dates.
 
-    The rng argument keeps future jitter tied to the scenario seed; the current
-    spread is intentionally stable so piece due dates stay easy to read.
+    The spread is intentionally stable so piece due dates stay easy to read.
     """
     if piece_count <= 0:
         return {}
