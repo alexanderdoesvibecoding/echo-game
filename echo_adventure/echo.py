@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import math
 
 from .config import GameConfig
@@ -13,6 +14,9 @@ from .models import DecisionCard, DecisionChoice, Event, Job, SimulationState
 from .schedulers.automated import AutomatedScheduler
 from .schedulers.base import downstream_count
 from .simulation import advance_day
+
+
+logger = logging.getLogger(__name__)
 
 
 def apply_echo_decisions_for_day(
@@ -82,9 +86,22 @@ def _forecast_choice_objective(
     projected = copy.deepcopy(state)
     projected_card = projected.decision_cards.get(card.id)
     if not projected_card:
+        logger.warning(
+            "ECHO forecast skipped because card %s was missing from projected state for day %s, seed %s.",
+            card.id,
+            state.current_day,
+            state.seed,
+        )
         return _failed_forecast_objective(heuristic_score)
     projected_choice = next((candidate for candidate in projected_card.choices if candidate.id == choice.id), None)
     if not projected_choice:
+        logger.warning(
+            "ECHO forecast skipped because choice %s on card %s was missing from projected state for day %s, seed %s.",
+            choice.id,
+            card.id,
+            state.current_day,
+            state.seed,
+        )
         return _failed_forecast_objective(heuristic_score)
 
     try:
@@ -102,6 +119,13 @@ def _forecast_choice_objective(
             advance_day(projected, scheduler)
             days_advanced += 1
     except Exception:
+        logger.exception(
+            "ECHO forecast failed for card %s choice %s on day %s, seed %s; falling back to heuristic score.",
+            card.id,
+            choice.id,
+            state.current_day,
+            state.seed,
+        )
         return _failed_forecast_objective(heuristic_score)
 
     snapshot = calculate_snapshot(projected)

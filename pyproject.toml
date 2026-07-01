@@ -9,6 +9,9 @@ dependencies = []
 echo-adventure = "echo_adventure.app:main"
 echo-adventure-ui = "echo_adventure.ui.server:main"
 
+[tool.setuptools.package-data]
+"echo_adventure.ui" = ["static/*.html", "static/*.css", "static/*.js"]
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

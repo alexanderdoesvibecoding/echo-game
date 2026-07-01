@@ -30,7 +30,13 @@ from ..scenario_generator import generate_scenario
 from ..schedulers.automated import AutomatedScheduler
 from ..schedulers.manual import ManualScheduler
 from ..simulation import DayResult, advance_day, advance_shift as simulate_shift, initialize_state, prepare_day
-from .view import INDEX_HTML
+from .view import INDEX_HTML, STATIC_DIR
+
+
+STATIC_ASSETS = {
+    "/static/app.js": ("application/javascript; charset=utf-8", STATIC_DIR / "app.js"),
+    "/static/styles.css": ("text/css; charset=utf-8", STATIC_DIR / "styles.css"),
+}
 
 
 # GameSession is the stateful bridge between stateless HTTP requests and the
@@ -69,6 +75,8 @@ class GameSession:
         self.echo_completed_days: set[int] = set()
         self.choice_notes: list[str] = []
         self.last_result: DayResult | None = None
+        self.last_summary_past_due_jobs: list[dict[str, Any]] | None = None
+        self.last_summary_puzzle: dict[str, Any] | None = None
         self.day_start_snapshot: MetricSnapshot | None = None
         self.day_completed_before: set[str] = set()
         self.day_notes_start: int = 0
@@ -220,6 +228,8 @@ class GameSession:
             start_snapshot=self.day_start_snapshot,
             end_snapshot=end_snapshot,
         )
+        self.last_summary_past_due_jobs = self._past_due_jobs_payload()
+        self.last_summary_puzzle = self._build_summary_puzzle_payload()
         self._clear_day_progress()
         # The automated scheduler advances silently alongside the player so
         # it faces the same random event timeline.
@@ -358,13 +368,25 @@ class GameSession:
             "idleTime": snapshot.idle_time,
             "risk": round(snapshot.schedule_risk, 1),
             "projectedCompletion": day_shift(snapshot.projected_completion_shift, self.config.shifts_per_day),
-            "pastDueJobs": self._past_due_jobs_payload(),
+            "pastDueJobs": self._summary_past_due_jobs_payload(),
             "puzzle": self._summary_puzzle_payload(),
             "notes": self.last_result.notes[-10:],
         }
 
+    def _summary_past_due_jobs_payload(self) -> list[dict[str, Any]]:
+        """Return frozen past-due subjob rows for the latest daily summary."""
+        if self.last_summary_past_due_jobs is not None:
+            return self.last_summary_past_due_jobs
+        return self._past_due_jobs_payload()
+
     def _summary_puzzle_payload(self) -> dict[str, Any]:
         """Return submarine puzzle tiles for the latest daily summary."""
+        if self.last_summary_puzzle is not None:
+            return self.last_summary_puzzle
+        return self._build_summary_puzzle_payload()
+
+    def _build_summary_puzzle_payload(self) -> dict[str, Any]:
+        """Build submarine puzzle tiles at the moment a daily summary is created."""
         if not self.last_result:
             return {"day": self.player_state.current_day, "total": 0, "completed": 0, "completedToday": 0, "tiles": []}
 
@@ -758,12 +780,50 @@ class GameSession:
         ]
 
 
+class SessionStore:
+    """Thread-safe owner for the one active browser game session."""
+
+    def __init__(self, seed: int | None = None) -> None:
+        self.lock = threading.RLock()
+        self.session = GameSession(seed=seed)
+
+    def state_payload(self) -> dict[str, Any]:
+        with self.lock:
+            return self.session.state_payload()
+
+    def new_session_payload(self, seed: int | None = None) -> dict[str, Any]:
+        with self.lock:
+            self.session = GameSession(seed=seed)
+            return self.session.state_payload()
+
+    def choice_payload(self, card_id: str, choice_id: str) -> dict[str, Any]:
+        with self.lock:
+            result = self.session.apply_choice(card_id, choice_id)
+            state = self.session.state_payload()
+            state["action"] = result
+            return state
+
+    def shift_payload(self) -> dict[str, Any]:
+        with self.lock:
+            result = self.session.advance_shift()
+            state = self.session.state_payload()
+            state["shiftAdvance"] = result
+            return state
+
+    def advance_payload(self) -> dict[str, Any]:
+        with self.lock:
+            result = self.session.advance_day()
+            state = self.session.state_payload()
+            state["advance"] = result
+            return state
+
+
 class GameRequestHandler(BaseHTTPRequestHandler):
     """Small JSON/HTML request handler for the local-only browser app."""
 
-    # The dynamically-created subclass in run_ui_server attaches a GameSession
-    # here so every request handler instance shares the same current run.
-    session: GameSession
+    # The dynamically-created subclass in run_ui_server attaches a SessionStore
+    # here so every request handler instance shares one locked session owner.
+    session_store: SessionStore
 
     def do_GET(self) -> None:
         """Serve the shell HTML or the current JSON state."""
@@ -771,7 +831,9 @@ class GameRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/":
             self._send_html(INDEX_HTML)
         elif parsed.path == "/api/state":
-            self._send_json(self.session.state_payload())
+            self._send_json(self.session_store.state_payload())
+        elif parsed.path in STATIC_ASSETS:
+            self._send_static(parsed.path)
         else:
             self._send_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
 
@@ -783,26 +845,16 @@ class GameRequestHandler(BaseHTTPRequestHandler):
             # create/read a run, apply decisions, then advance days.
             if parsed.path == "/api/new":
                 data = self._read_json()
-                type(self).session = GameSession(
-                    seed=_parse_optional_seed(data.get("seed")),
-                )
-                self._send_json(type(self).session.state_payload())
+                self._send_json(self.session_store.new_session_payload(seed=_parse_optional_seed(data.get("seed"))))
             elif parsed.path == "/api/choice":
                 data = self._read_json()
-                result = self.session.apply_choice(str(data.get("cardId", "")), str(data.get("choiceId", "")))
-                state = self.session.state_payload()
-                state["action"] = result
-                self._send_json(state)
+                self._send_json(
+                    self.session_store.choice_payload(str(data.get("cardId", "")), str(data.get("choiceId", "")))
+                )
             elif parsed.path == "/api/shift":
-                result = self.session.advance_shift()
-                state = self.session.state_payload()
-                state["shiftAdvance"] = result
-                self._send_json(state)
+                self._send_json(self.session_store.shift_payload())
             elif parsed.path == "/api/advance":
-                result = self.session.advance_day()
-                state = self.session.state_payload()
-                state["advance"] = result
-                self._send_json(state)
+                self._send_json(self.session_store.advance_payload())
             else:
                 self._send_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
         except ValueError as exc:
@@ -841,13 +893,23 @@ class GameRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_static(self, path: str) -> None:
+        """Send a known static browser asset."""
+        content_type, asset_path = STATIC_ASSETS[path]
+        body = asset_path.read_bytes()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("content-type", content_type)
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
 
 def run_ui_server(seed: int | None = None, host: str = "127.0.0.1", port: int = 8765) -> None:
     """Start the local browser UI server."""
-    # A fresh handler subclass lets us attach a mutable class-level session
+    # A fresh handler subclass lets us attach a mutable class-level session owner
     # without modifying BaseHTTPRequestHandler itself.
     handler = type("SessionHandler", (GameRequestHandler,), {})
-    handler.session = GameSession(seed=seed)
+    handler.session_store = SessionStore(seed=seed)
     server = ThreadingHTTPServer((host, port), handler)
     url = f"http://{host}:{port}"
     print(f"ECHO Adventure UI running at {url} (normal mode)")

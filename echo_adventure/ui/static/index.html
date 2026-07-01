@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shipyard Scheduler Choose Your Own Adventure Game</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <div class="topbar">
+      <div class="settings-wrap">
+        <button id="settingsMenuBtn" class="settings-button" title="Settings" aria-label="Settings menu" aria-expanded="false">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div id="settingsPanel" class="settings-panel">
+          <button id="openNewRunModalBtn">New Game</button>
+          <button id="themeMenuBtn">Light/Dark Mode</button>
+        </div>
+      </div>
+      <div>
+        <h1>Shipyard Scheduler Choose Your Own Adventure Game</h1>
+        <div class="status-line">
+          <span class="badge" id="dayBadge">Day</span>
+        </div>
+      </div>
+    </div>
+    <div id="error" class="error hidden"></div>
+  </header>
+
+  <main>
+    <div class="grid">
+      <section id="finalSection" class="hidden">
+        <div class="section-head">
+          <div>
+            <h2>Final Operational Comparison</h2>
+            <div class="subtle">The silent benchmark is revealed only after the run ends.</div>
+          </div>
+        </div>
+        <div class="split">
+          <div class="reveal-panel"><h3>Decision Score Impact</h3><div id="finalCompletionChart"></div></div>
+          <div class="reveal-panel"><h3>Metric Comparison</h3><table id="finalTable"></table></div>
+          <div class="reveal-panel"><h3>Outcome Drivers</h3><ul class="notes" id="finalNotes"></ul></div>
+          <div class="reveal-panel"><h3>Decision Audit</h3><table id="decisionAuditTable"></table></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <div>
+            <h2>Project Position</h2>
+            <div class="subtle" id="projectedText">Projected completion</div>
+          </div>
+        </div>
+        <div class="metrics" id="metrics"></div>
+      </section>
+
+      <section id="dailyDecisionSection">
+        <div class="section-head">
+          <div>
+            <h2>Daily Decisions</h2>
+          </div>
+        </div>
+        <div class="inline-decisions" id="inlineDecisionBody"></div>
+      </section>
+
+      <section id="summarySection" class="hidden">
+        <div class="section-head"><h2>End-of-Day Summary</h2></div>
+        <div class="summary-grid" id="summaryGrid"></div>
+      </section>
+
+    </div>
+
+  </main>
+
+  <div id="welcomeModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="welcomeModalTitle">
+    <div class="modal welcome-modal">
+      <h1 id="welcomeModalTitle">Welcome</h1>
+      <div class="welcome-copy">
+        <div class="welcome-visual" aria-label="Submarine">
+          <svg viewBox="0 0 720 250" role="img" aria-label="Submarine underway">
+            <defs>
+              <linearGradient id="welcomeSubBody" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#24a19c"></stop>
+                <stop offset="100%" stop-color="#0d5552"></stop>
+              </linearGradient>
+            </defs>
+
+            <path d="M 60 135 L 85 135 M 50 100 L 60 135 L 50 170" fill="none" stroke="#0d5552" stroke-width="8" stroke-linecap="round"></path>
+            <path d="M 110 105 L 75 90 L 85 135 Z" fill="#146b67"></path>
+            <path d="M 110 165 L 75 180 L 85 135 Z" fill="#146b67"></path>
+            <path d="M 80 135 C 80 80, 160 85, 350 85 C 560 85, 660 100, 660 135 C 660 170, 560 185, 350 185 C 160 185, 80 190, 80 135 Z" fill="url(#welcomeSubBody)"></path>
+            <path d="M 300 86 L 310 35 L 380 35 L 390 86 Z" fill="#146b67"></path>
+            <path d="M 330 35 L 330 15 L 340 15 M 360 35 L 360 20" fill="none" stroke="#0d5552" stroke-width="5" stroke-linecap="round"></path>
+            <path d="M 140 105 C 260 100, 480 100, 620 115" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="4" stroke-linecap="round"></path>
+            <g fill="#dff6f4" stroke="#0b4542" stroke-width="4">
+              <circle cx="200" cy="135" r="14"></circle>
+              <circle cx="260" cy="135" r="14"></circle>
+              <circle cx="460" cy="135" r="14"></circle>
+              <circle cx="520" cy="135" r="14"></circle>
+            </g>
+          </svg>
+        </div>
+        <p class="welcome-blurb" id="welcomeBlurb">Your job is to get these jobs done on time. Each decision you make can risk or reward other jobs.</p>
+        <div class="welcome-critical">
+          <h3>Critical Path Jobs</h3>
+          <ul class="welcome-critical-list" id="welcomeCriticalPath"></ul>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="closeWelcomeBtn" class="primary" onclick="closeWelcomeModal()">Start</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="newRunModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="newRunModalTitle">
+    <div class="modal">
+      <div class="modal-titlebar">
+        <div>
+          <h1 id="newRunModalTitle">New Game</h1>
+          <div class="subtle">Start a fresh run with the standard scenario.</div>
+        </div>
+        <button id="closeNewRunModalBtn" class="icon-button" title="Close new run settings" onclick="closeNewRunModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-form">
+          <p class="subtle">FILLER TEXT (DON'T TOUCH YET)</p>
+          <div id="newRunError" class="modal-error hidden"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button onclick="closeNewRunModal()">Cancel</button>
+        <button class="primary" onclick="startNewRun()">Start Game</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="decisionModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="decisionModalTitle">
+    <div class="modal decision-modal">
+      <div class="modal-titlebar">
+        <div>
+          <h1 id="decisionModalTitle">Daily Decision</h1>
+          <div class="decision-modal-meta" id="decisionModalMeta"></div>
+        </div>
+        <button id="closeDecisionModalBtn" class="icon-button" title="Close decision" onclick="closeDecisionModal()">×</button>
+      </div>
+      <div class="modal-body decision-modal-body" id="decisionModalBody"></div>
+      <div class="modal-footer" id="decisionModalFooter"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+
+  <!-- End-of-day modal (centered) -->
+  <div id="summaryModalOverlay" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal summary-modal">
+      <h1>Daily Summary</h1>
+      <div class="modal-body" id="summaryModalBody"></div>
+      <div class="modal-footer">
+        <button id="modalAdvanceBtn" class="primary" onclick="commitAdvanceDay()">Advance Day</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
