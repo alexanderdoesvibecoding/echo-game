@@ -9,7 +9,7 @@ dependencies = []
 echo-adventure = "echo_adventure.app:main"
 
 [tool.setuptools.package-data]
-"echo_adventure.ui" = ["static/*.html", "static/*.css", "static/*.js"]
+"echo_adventure.ui" = ["*.html", "*.css", "*.js"]
 
 [build-system]
 requires = ["setuptools>=68"]

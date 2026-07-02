@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .ui.server import main
+from .api.server import main
 
 
 __all__ = ["main"]

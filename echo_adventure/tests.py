@@ -12,8 +12,8 @@ from echo_adventure.metrics import update_state_metrics
 from echo_adventure.models import DecisionCard, DecisionChoice, Event
 from echo_adventure.scenario_generator import generate_scenario
 from echo_adventure.simulation import initialize_state
-from echo_adventure.ui.server import STATIC_ASSETS, GameSession, SessionStore
-from echo_adventure.ui.view import INDEX_HTML
+from echo_adventure.api.server import STATIC_ASSETS, GameSession, SessionStore
+from echo_adventure.api.view import INDEX_HTML
 
 
 class DeterministicDecisionGenerationTests(unittest.TestCase):
@@ -112,8 +112,8 @@ class EchoForecastLoggingTests(unittest.TestCase):
 
 class StaticViewAssetTests(unittest.TestCase):
     def test_index_html_references_external_static_assets(self):
-        self.assertIn('/static/styles.css', INDEX_HTML)
-        self.assertIn('/static/app.js', INDEX_HTML)
+        self.assertIn('/ui/styles.css', INDEX_HTML)
+        self.assertIn('/ui/app.js', INDEX_HTML)
         self.assertNotIn('<style>', INDEX_HTML)
         self.assertNotIn('\n  <script>\n', INDEX_HTML)
         for _, asset_path in STATIC_ASSETS.values():

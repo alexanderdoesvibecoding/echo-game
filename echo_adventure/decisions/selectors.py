@@ -25,7 +25,11 @@ def _event_by_id(state: SimulationState, event_id: str | None) -> Event | None:
         return None
     return next((event for event in state.event_timeline if event.id == event_id), None)
 
-def _jobs_for_card(state: SimulationState, card: DecisionCard) -> list[Job]:
+def _jobs_for_card(
+    state: SimulationState,
+    card: DecisionCard,
+    fallback_limit: int = 5,
+) -> list[Job]:
     """Expand a card's targets into concrete affected jobs."""
     jobs: list[Job] = []
     for target_id in card.target_ids:
@@ -44,10 +48,10 @@ def _jobs_for_card(state: SimulationState, card: DecisionCard) -> list[Job]:
             if event:
                 jobs.extend(_jobs_for_event(state, event))
     if not jobs:
-        jobs = state.get_critical_path_jobs()[:5] or state.get_ready_jobs()[:5]
+        jobs = state.get_critical_path_jobs()[:fallback_limit] or state.get_ready_jobs()[:fallback_limit]
     live_jobs = list({job.id: job for job in jobs if not job.is_complete}.values())
     if not live_jobs:
-        live_jobs = state.get_critical_path_jobs()[:5] or state.get_ready_jobs()[:5]
+        live_jobs = state.get_critical_path_jobs()[:fallback_limit] or state.get_ready_jobs()[:fallback_limit]
     return sorted(
         live_jobs,
         key=lambda job: (job.critical_path, job.risk_score, job.priority),

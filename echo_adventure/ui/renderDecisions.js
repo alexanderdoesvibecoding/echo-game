@@ -432,9 +432,8 @@ export function renderInlineDecisions() {
       : "Work is moving through the day.";
     body.innerHTML = `
       <div class="reveal-panel decision-status-panel">
-        <div class="decision-title decision-title-with-icon">
-          ${renderDecisionIcon(nextCard, decisionDue ? "medium" : "small")}
-          <div class="decision-title-copy">
+        <div class="decision-title">
+          <div>
             <h3>${title}</h3>
             <div class="subtle">${detail}</div>
           </div>

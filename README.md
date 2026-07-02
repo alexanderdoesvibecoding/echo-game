@@ -14,7 +14,7 @@ The project is intentionally lightweight:
 
 ## Current State
 
-The app is a playable local browser prototype. It has no persistence layer, no authentication, and no multi-user session model. Refreshing the browser keeps the current server-side run; starting a new game replaces the process-wide session.
+The app is a playable local browser prototype. It has no persistence layer, no authentication, and no multi-user session model. Refreshing the browser keeps the current server-side run; starting a new game replaces the process-wide session. Fixed-seed replay is available from the CLI and JSON API; the visible New Game modal currently starts a fresh standard run with a generated seed.
 
 The default `normal` preset is tuned as a short focused campaign:
 
@@ -32,7 +32,7 @@ Random base disruptions, extra quality rework events, completion-time rework, an
 
 ## Quick Start
 
-Use Python 3.14 or newer.
+The package metadata currently requires Python 3.14 or newer.
 
 ```bash
 python3 -m echo_adventure
@@ -87,21 +87,24 @@ The final reveal includes:
 - Decision-by-decision audit
 - ECHO's preferred answer for each player decision
 
-## Browser UI
+## Browser UI And API
 
-The browser app lives under `echo_adventure/ui/` and is served by `ThreadingHTTPServer`.
+The backend API lives under `echo_adventure/api/`. The frontend browser assets live under `echo_adventure/ui/`. They are still served together by one local `ThreadingHTTPServer` process.
 
-Important UI files:
+Important backend files:
 
-- `echo_adventure/ui/server.py` owns the local HTTP API request/response plumbing.
-- `echo_adventure/ui/session.py` owns `GameSession` and `SessionStore`.
-- `echo_adventure/ui/payloads.py` builds state, summary, chart, and final reveal payloads.
-- `echo_adventure/ui/review.py` builds final win/loss explanation text.
-- `echo_adventure/ui/view.py` loads the static HTML shell.
-- `echo_adventure/ui/static/index.html` contains the browser markup.
-- `echo_adventure/ui/static/styles.css` contains the UI styles and theme rules.
-- `echo_adventure/ui/static/app.js` is the browser ES module entrypoint.
-- `echo_adventure/ui/static/*.js` modules split API calls, UI state, day clock, modals, and renderers without a build step.
+- `echo_adventure/api/server.py` owns the local HTTP API request/response plumbing and static asset serving.
+- `echo_adventure/api/session.py` owns `GameSession` and `SessionStore`.
+- `echo_adventure/api/payloads.py` builds state, summary, chart, and final reveal payloads.
+- `echo_adventure/api/review.py` builds final win/loss explanation text.
+- `echo_adventure/api/view.py` locates and loads the frontend HTML shell.
+
+Important frontend files:
+
+- `echo_adventure/ui/index.html` contains the browser markup.
+- `echo_adventure/ui/styles.css` contains the UI styles and theme rules.
+- `echo_adventure/ui/app.js` is the browser ES module entrypoint.
+- `echo_adventure/ui/*.js` modules split API calls, UI state, day clock, modals, and renderers without a build step.
 
 The server is the rule authority. The browser stores only presentation state such as modal visibility, day-clock progress, pending choice selection, and theme preference.
 
@@ -184,7 +187,7 @@ The benchmark run uses the same generated scenario as the player, but a separate
 ECHO decision selection has two layers:
 
 - Static campaign-tree scoring reads reachable downstream decision paths so a choice with a bad hidden tail can be avoided.
-- Live-board forecasting projects each current choice through the remaining run with the automated scheduler, then ranks outcomes by completion, completion shift, final score, remaining jobs, lateness, reschedules, idle time, and risk.
+- Live-board forecasting expands each card through the same shared target selectors used by player-side decision effects, projects each current choice through the remaining run with the automated scheduler, then ranks outcomes by completion, completion shift, final score, remaining jobs, lateness, reschedules, idle time, and risk.
 
 Relevant ECHO knobs in `GameConfig`:
 
@@ -210,29 +213,29 @@ echo_adventure/
     cards.py             Decision-card factories, templates, and text
     effects.py           Choice application and effect handlers
     scoring.py           Static ECHO choice and path scoring
-    selectors.py         Jobs, events, targets, and workcenters affected by cards
-  echo.py                Hidden ECHO decision policy and benchmark decision flow
+    selectors.py         Shared target expansion for decision effects and ECHO scoring
+  echo.py                Hidden ECHO decision policy, live forecasts, and benchmark decision flow
   metrics.py             Snapshots, final score, risk, critical path, status refresh
   schedulers/
     base.py              Shared scheduler interface and helper functions
     manual.py            Player-side scheduler behavior
     automated.py         Hidden ECHO benchmark scheduler
-  ui/
-    server.py            Local HTTP routing and request/response plumbing
+  api/
+    server.py            Local HTTP routing, JSON API, and static asset serving
     session.py           GameSession and SessionStore
     payloads.py          State, summary, chart, and final reveal payloads
     review.py            Final win/loss explanation text
-    view.py              Static HTML loader
-    static/
-      index.html         Browser shell
-      styles.css         Styles and theme rules
-      app.js             Browser ES module entrypoint
-      api.js             Fetch helper
-      state.js           Client presentation state
-      dayClock.js        Day clock and automatic shift advancement
-      render*.js         Metrics, decisions, summary, and final reveal renderers
-      modals.js          Modal and theme controls
-      html.js            DOM and escaping helpers
+    view.py              Frontend HTML loader
+  ui/
+    index.html           Browser shell
+    styles.css           Styles and theme rules
+    app.js               Browser ES module entrypoint
+    api.js               Fetch helper
+    state.js             Client presentation state
+    dayClock.js          Day clock and automatic shift advancement
+    render*.js           Metrics, decisions, summary, and final reveal renderers
+    modals.js            Modal and theme controls
+    html.js              DOM and escaping helpers
   tests.py               unittest coverage for decision, scenario, and UI payload logic
 ```
 
@@ -378,25 +381,25 @@ The response includes the refreshed state plus an `advance` object.
 
 ## Development
 
-Run a compile check:
+Run a quiet compile check:
 
 ```bash
-python3 -m compileall echo_adventure main.py
+python3 -m compileall -q echo_adventure main.py
 ```
 
 Run the unit tests:
 
 ```bash
-python3 -m unittest discover
+python3 -m unittest echo_adventure.tests
 ```
 
-The tests currently live in `echo_adventure/tests.py` and use the standard-library `unittest` runner.
+The tests currently live in `echo_adventure/tests.py` and use the standard-library `unittest` runner. `python3 -m unittest discover` also finds the same suite from the repository root.
 
 Current coverage focuses on:
 
 - ECHO static choice scoring through reachable downstream decision trees
 - ECHO forecast error logging and heuristic fallback
-- Static HTML references to external CSS and JavaScript assets
+- HTML references to external CSS and JavaScript assets
 - Final decision-chart payload shape
 - Empty decision-chart payload behavior
 - Thread-safe session replacement while an action is in flight
@@ -470,7 +473,7 @@ PY
 
 ### `python` is not found
 
-Use `python3`. This project expects Python 3.14 or newer.
+Use `python3`. The package metadata currently requires Python 3.14 or newer.
 
 ```bash
 python3 --version
@@ -478,7 +481,7 @@ python3 --version
 
 ### The browser shows old UI
 
-Restart the UI server. `echo_adventure/ui/view.py` reads `static/index.html` at import time, and the server serves the browser ES modules plus `static/styles.css` as known static assets.
+Restart the UI server. `echo_adventure/api/view.py` reads `echo_adventure/ui/index.html` at import time, and the server serves the browser ES modules plus `ui/styles.css` as known frontend assets.
 
 ### Port 8765 is already in use
 

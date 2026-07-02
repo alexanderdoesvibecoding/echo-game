@@ -16,7 +16,6 @@ from .selectors import (
     _event_by_id,
     _events_related,
     _jobs_for_card,
-    _jobs_for_event,
     _piece_id_for_event,
 )
 

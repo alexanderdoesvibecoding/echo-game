@@ -8,7 +8,11 @@ import math
 
 from .config import GameConfig
 from .decisions import active_decision_cards, apply_choice, score_echo_choice, select_echo_choice
-from .enums import DecisionType, EventType, JobStatus, TargetType, WorkCenterStatus
+from .decisions.selectors import (
+    _event_by_id,
+    _jobs_for_card,
+)
+from .enums import DecisionType, EventType, WorkCenterStatus
 from .metrics import calculate_final_score, calculate_snapshot, update_state_metrics
 from .models import DecisionCard, DecisionChoice, Event, Job, SimulationState
 from .schedulers.automated import AutomatedScheduler
@@ -205,7 +209,7 @@ def _live_operational_score(
 ) -> float:
     """Return a low-is-good live-board score for one choice."""
     effect_type = str(choice.immediate_effects.get("type", "note"))
-    jobs = _jobs_for_card(state, card)
+    jobs = _jobs_for_card(state, card, fallback_limit=6)
     event = _event_for_choice(state, choice) or _event_for_card(state, card)
     score = choice.risk_effect * 10.0 + choice.reschedule_effect * 3.0
 
@@ -252,56 +256,6 @@ def _live_operational_score(
         score -= 5.0
 
     return score
-
-
-def _jobs_for_card(state: SimulationState, card: DecisionCard) -> list[Job]:
-    """Expand a decision card into affected jobs without mutating state."""
-    jobs: list[Job] = []
-    for target_id in card.target_ids:
-        if target_id in state.jobs:
-            jobs.append(state.jobs[target_id])
-        elif target_id in state.shops:
-            jobs.extend(
-                job
-                for job in state.jobs.values()
-                if job.shop_id == target_id and not job.is_complete and job.status != JobStatus.RUNNING
-            )
-        elif target_id in state.pieces:
-            jobs.extend(state.jobs[job_id] for job_id in state.pieces[target_id].job_ids if job_id in state.jobs)
-        elif target_id.startswith("EVT-"):
-            event = _event_by_id(state, target_id)
-            if event:
-                jobs.extend(_jobs_for_event(state, event))
-    if not jobs:
-        jobs = state.get_critical_path_jobs()[:6] or state.get_ready_jobs()[:6]
-    live_jobs = list({job.id: job for job in jobs if not job.is_complete}.values())
-    if not live_jobs:
-        live_jobs = state.get_critical_path_jobs()[:6] or state.get_ready_jobs()[:6]
-    return sorted(
-        live_jobs,
-        key=lambda job: (job.critical_path, job.risk_score, job.priority),
-        reverse=True,
-    )
-
-
-def _jobs_for_event(state: SimulationState, event: Event) -> list[Job]:
-    """Expand an event target into affected jobs."""
-    piece_id = event.effects.get("unexpected_piece_id")
-    if piece_id in state.pieces:
-        return [state.jobs[job_id] for job_id in state.pieces[piece_id].job_ids if job_id in state.jobs]
-    if event.target_type == TargetType.JOB and event.target_id in state.jobs:
-        return [state.jobs[event.target_id]]
-    if event.target_type == TargetType.PIECE and event.target_id in state.pieces:
-        return [state.jobs[job_id] for job_id in state.pieces[event.target_id].job_ids if job_id in state.jobs]
-    if event.target_type == TargetType.SHOP and event.target_id in state.shops:
-        return [job for job in state.jobs.values() if job.shop_id == event.target_id and not job.is_complete]
-    if event.target_type == TargetType.WORKCENTER and event.target_id in state.workcenters:
-        wc = state.workcenters[event.target_id]
-        ids = list(wc.queue)
-        if wc.current_job_id:
-            ids.append(wc.current_job_id)
-        return [state.jobs[job_id] for job_id in ids if job_id in state.jobs]
-    return []
 
 
 def _reroute_value(state: SimulationState, jobs: list[Job]) -> float:
@@ -402,13 +356,6 @@ def _event_for_card(state: SimulationState, card: DecisionCard) -> Event | None:
         if event:
             return event
     return None
-
-
-def _event_by_id(state: SimulationState, event_id: object) -> Event | None:
-    """Find an event by id."""
-    if not isinstance(event_id, str):
-        return None
-    return next((event for event in state.event_timeline if event.id == event_id), None)
 
 
 def _late_stage(state: SimulationState) -> bool:

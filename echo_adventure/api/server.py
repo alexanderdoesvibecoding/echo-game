@@ -10,20 +10,20 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .session import GameSession, SessionStore
-from .view import INDEX_HTML, STATIC_DIR
+from .view import INDEX_HTML, UI_DIR
 
 STATIC_ASSETS = {
-    "/static/api.js": ("application/javascript; charset=utf-8", STATIC_DIR / "api.js"),
-    "/static/app.js": ("application/javascript; charset=utf-8", STATIC_DIR / "app.js"),
-    "/static/dayClock.js": ("application/javascript; charset=utf-8", STATIC_DIR / "dayClock.js"),
-    "/static/html.js": ("application/javascript; charset=utf-8", STATIC_DIR / "html.js"),
-    "/static/modals.js": ("application/javascript; charset=utf-8", STATIC_DIR / "modals.js"),
-    "/static/renderDecisions.js": ("application/javascript; charset=utf-8", STATIC_DIR / "renderDecisions.js"),
-    "/static/renderFinal.js": ("application/javascript; charset=utf-8", STATIC_DIR / "renderFinal.js"),
-    "/static/renderMetrics.js": ("application/javascript; charset=utf-8", STATIC_DIR / "renderMetrics.js"),
-    "/static/renderSummary.js": ("application/javascript; charset=utf-8", STATIC_DIR / "renderSummary.js"),
-    "/static/state.js": ("application/javascript; charset=utf-8", STATIC_DIR / "state.js"),
-    "/static/styles.css": ("text/css; charset=utf-8", STATIC_DIR / "styles.css"),
+    "/ui/api.js": ("application/javascript; charset=utf-8", UI_DIR / "api.js"),
+    "/ui/app.js": ("application/javascript; charset=utf-8", UI_DIR / "app.js"),
+    "/ui/dayClock.js": ("application/javascript; charset=utf-8", UI_DIR / "dayClock.js"),
+    "/ui/html.js": ("application/javascript; charset=utf-8", UI_DIR / "html.js"),
+    "/ui/modals.js": ("application/javascript; charset=utf-8", UI_DIR / "modals.js"),
+    "/ui/renderDecisions.js": ("application/javascript; charset=utf-8", UI_DIR / "renderDecisions.js"),
+    "/ui/renderFinal.js": ("application/javascript; charset=utf-8", UI_DIR / "renderFinal.js"),
+    "/ui/renderMetrics.js": ("application/javascript; charset=utf-8", UI_DIR / "renderMetrics.js"),
+    "/ui/renderSummary.js": ("application/javascript; charset=utf-8", UI_DIR / "renderSummary.js"),
+    "/ui/state.js": ("application/javascript; charset=utf-8", UI_DIR / "state.js"),
+    "/ui/styles.css": ("text/css; charset=utf-8", UI_DIR / "styles.css"),
 }
 
 
