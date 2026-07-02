@@ -1,0 +1,106 @@
+"use strict";
+
+import { uiState } from "./state.js";
+import { $, escapeHtml } from "./html.js";
+
+const callbacks = {
+  renderDecisionModal: () => {},
+  showNewRunError: () => {},
+};
+
+export function configureModals(overrides) {
+  Object.assign(callbacks, overrides || {});
+}
+
+export function renderWelcomeModal() {
+  const overlay = document.getElementById("welcomeModalOverlay");
+  if (!overlay) return;
+  renderWelcomeContent();
+  overlay.classList.toggle("active", uiState.welcomeModalVisible);
+}
+
+function renderWelcomeContent() {
+  const blurb = $("welcomeBlurb");
+  const list = $("welcomeCriticalPath");
+  if (!blurb || !list) return;
+
+  const jobCount = Array.isArray(uiState.state?.pieces) ? uiState.state.pieces.length : 0;
+  const jobText = jobCount ? `${jobCount} job${jobCount === 1 ? "" : "s"}` : "jobs";
+  blurb.textContent = `Your job is to get these ${jobText} done on time. Each decision you make can risk or reward other jobs.`;
+
+  const criticalRows = Array.isArray(uiState.state?.criticalPath) ? uiState.state.criticalPath : [];
+  list.innerHTML = criticalRows.length
+    ? criticalRows.map(job => `
+      <li>
+        <strong>${escapeHtml(job.id)} - ${escapeHtml(job.impact || "Job")}</strong>
+        <span>${escapeHtml(job.shop || "-")} - ${Number(job.remaining || 0)} shift${Number(job.remaining || 0) === 1 ? "" : "s"} left - slack ${escapeHtml(job.slack ?? "-")}</span>
+      </li>
+    `).join("")
+    : `<li><strong>No critical path jobs yet</strong><span>The first schedule pass is still loading.</span></li>`;
+}
+
+export function closeWelcomeModal() {
+  uiState.welcomeModalVisible = false;
+  renderWelcomeModal();
+  callbacks.renderDecisionModal();
+}
+
+export function toggleSettingsMenu() {
+  uiState.settingsMenuOpen = !uiState.settingsMenuOpen;
+  renderSettingsMenu();
+}
+
+export function closeSettingsMenu() {
+  uiState.settingsMenuOpen = false;
+  renderSettingsMenu();
+}
+
+export function renderSettingsMenu() {
+  const panel = $("settingsPanel");
+  const button = $("settingsMenuBtn");
+  if (!panel || !button) return;
+  panel.classList.toggle("active", uiState.settingsMenuOpen);
+  button.setAttribute("aria-expanded", uiState.settingsMenuOpen ? "true" : "false");
+}
+
+export function openNewRunModal() {
+  closeSettingsMenu();
+  uiState.newRunModalVisible = true;
+  callbacks.showNewRunError("");
+  renderNewRunModal();
+  callbacks.renderDecisionModal();
+}
+
+export function closeNewRunModal() {
+  uiState.newRunModalVisible = false;
+  callbacks.showNewRunError("");
+  renderNewRunModal();
+  callbacks.renderDecisionModal();
+}
+
+export function renderNewRunModal() {
+  const overlay = $("newRunModalOverlay");
+  if (!overlay) return;
+  overlay.classList.toggle("active", uiState.newRunModalVisible);
+}
+
+export function initDarkMode() {
+  // Theme is intentionally local browser preference, separate from run
+  // uiState.state so seed replays do not change presentation preferences.
+  const saved = localStorage.getItem("theme") || "light";
+  document.documentElement.setAttribute("data-theme", saved);
+  updateThemeButton(saved);
+}
+
+function updateThemeButton(theme) {
+  const btn = $("themeMenuBtn");
+  if (btn) btn.textContent = theme === "dark" ? "Light Mode" : "Dark Mode";
+}
+
+export function toggleDarkMode() {
+  const current = document.documentElement.getAttribute("data-theme") || "light";
+  const next = current === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  localStorage.setItem("theme", next);
+  updateThemeButton(next);
+}

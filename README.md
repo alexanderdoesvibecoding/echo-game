@@ -94,11 +94,15 @@ The browser app lives under `echo_adventure/ui/` and is served by `ThreadingHTTP
 
 Important UI files:
 
-- `echo_adventure/ui/server.py` owns the local HTTP API, `GameSession`, and payload shaping.
+- `echo_adventure/ui/server.py` owns the local HTTP API request/response plumbing.
+- `echo_adventure/ui/session.py` owns `GameSession` and `SessionStore`.
+- `echo_adventure/ui/payloads.py` builds state, summary, chart, and final reveal payloads.
+- `echo_adventure/ui/review.py` builds final win/loss explanation text.
 - `echo_adventure/ui/view.py` loads the static HTML shell.
 - `echo_adventure/ui/static/index.html` contains the browser markup.
 - `echo_adventure/ui/static/styles.css` contains the UI styles and theme rules.
-- `echo_adventure/ui/static/app.js` contains the client-side rendering, modal state, day clock, and API calls.
+- `echo_adventure/ui/static/app.js` is the browser ES module entrypoint.
+- `echo_adventure/ui/static/*.js` modules split API calls, UI state, day clock, modals, and renderers without a build step.
 
 The server is the rule authority. The browser stores only presentation state such as modal visibility, day-clock progress, pending choice selection, and theme preference.
 
@@ -201,7 +205,13 @@ echo_adventure/
   scenario_generator.py  Scenario construction, validation, due dates, graph setup
   simulation.py          Shift/day advancement and job processing
   events.py              Event timeline generation, handlers, cascades
-  decisions.py           Campaign graph, active cards, choice effects, scoring
+  decisions/             Decision graph, cards, effects, scoring, selectors
+    __init__.py          Backward-compatible public decision API
+    graph.py             Campaign graph generation and active-card filtering
+    cards.py             Decision-card factories, templates, and text
+    effects.py           Choice application and effect handlers
+    scoring.py           Static ECHO choice and path scoring
+    selectors.py         Jobs, events, targets, and workcenters affected by cards
   echo.py                Hidden ECHO decision policy and benchmark decision flow
   metrics.py             Snapshots, final score, risk, critical path, status refresh
   schedulers/
@@ -209,12 +219,21 @@ echo_adventure/
     manual.py            Player-side scheduler behavior
     automated.py         Hidden ECHO benchmark scheduler
   ui/
-    server.py            Local HTTP server, GameSession, JSON payloads
+    server.py            Local HTTP routing and request/response plumbing
+    session.py           GameSession and SessionStore
+    payloads.py          State, summary, chart, and final reveal payloads
+    review.py            Final win/loss explanation text
     view.py              Static HTML loader
     static/
       index.html         Browser shell
       styles.css         Styles and theme rules
-      app.js             Client renderer and interaction logic
+      app.js             Browser ES module entrypoint
+      api.js             Fetch helper
+      state.js           Client presentation state
+      dayClock.js        Day clock and automatic shift advancement
+      render*.js         Metrics, decisions, summary, and final reveal renderers
+      modals.js          Modal and theme controls
+      html.js            DOM and escaping helpers
   tests.py               unittest coverage for decision, scenario, and UI payload logic
 ```
 
@@ -460,7 +479,7 @@ python3 --version
 
 ### The browser shows old UI
 
-Restart the UI server. `echo_adventure/ui/view.py` reads `static/index.html` at import time, and the server serves `static/app.js` and `static/styles.css` as known static assets.
+Restart the UI server. `echo_adventure/ui/view.py` reads `static/index.html` at import time, and the server serves the browser ES modules plus `static/styles.css` as known static assets.
 
 ### Port 8765 is already in use
 
