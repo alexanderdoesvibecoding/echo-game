@@ -91,7 +91,7 @@ function renderDecisionScoreChart(history) {
     const [x, y] = point(value, index);
     if (series === "Player") {
       return `
-        <circle class="chart-dot chart-player-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.8" fill="var(--teal)" stroke="#fff" stroke-width="1.4" ${decisionAttrs(decisionPoint, series)}></circle>
+        <circle class="chart-dot chart-player-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.8" fill="var(--teal)" stroke="var(--panel)" stroke-width="1.4" ${decisionAttrs(decisionPoint, series)}></circle>
       `;
     }
     return `
@@ -112,7 +112,7 @@ function renderDecisionScoreChart(history) {
           <line class="chart-axis" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${height - pad.bottom}"></line>
           ${xLabels}
           <path d="${pathFor(playerScore)}" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-          <path d="${pathFor(echoScore)}" fill="none" stroke="var(--violet)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+          <path d="${pathFor(echoScore)}" fill="none" stroke="var(--violet)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 6"></path>
           <g>${decisionPoints.map((decisionPoint, index) => decisionMarker(decisionPoint, "Player", index)).join("")}</g>
           <g>${decisionPoints.map((decisionPoint, index) => decisionMarker(decisionPoint, "ECHO", index)).join("")}</g>
         </svg>
@@ -247,27 +247,4 @@ export function renderFinal() {
   $("finalNotes").innerHTML = (review.reasons || final.explanation || [])
     .map(note => `<li>${escapeHtml(note)}</li>`)
     .join("") || "<li>No final review notes recorded.</li>";
-
-  $("decisionAuditTable").innerHTML = `
-    <thead>
-      <tr>
-        <th>Day</th>
-        <th>Decision</th>
-        <th>Your choice</th>
-        <th>ECHO choice</th>
-        <th>Matched</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${(final.decisionAudit || []).map(row => `
-        <tr>
-          <td>${row.day}</td>
-          <td>${escapeHtml(row.card)}</td>
-          <td>${escapeHtml(row.playerChoice || "-")}</td>
-          <td>${escapeHtml(row.echoChoice || "-")}</td>
-          <td>${row.matched ? "Yes" : "No"}</td>
-        </tr>
-      `).join("")}
-    </tbody>
-  `;
 }

@@ -84,8 +84,6 @@ The final reveal includes:
 - Final decision score over answered questions
 - Metric comparison
 - Outcome drivers
-- Decision-by-decision audit
-- ECHO's preferred answer for each player decision
 
 The final score shown in the comparison table is the same accumulated decision score shown by the decision chart. Schedule performance is shown separately through deadline, completion, late-work, risk, idle-time, and reschedule metrics.
 
@@ -122,7 +120,7 @@ The main UI includes:
 - Update notes
 - Submarine assembly puzzle visualization
 - Settings menu for new game and light/dark mode
-- Final ECHO comparison and decision audit
+- Final ECHO comparison
 
 ## Core Concepts
 

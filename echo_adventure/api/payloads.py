@@ -204,7 +204,6 @@ class PayloadMixin:
         return {
             "player": _snapshot_payload(player_snapshot, self.config.shifts_per_day, self.player_state),
             "automated": _snapshot_payload(automated_snapshot, self.config.shifts_per_day, self.automated_state),
-            "decisionAudit": self._decision_audit_payload(),
             "completionHistory": self._completion_history_payload(player_snapshot, automated_snapshot),
             "review": review,
             "explanation": review["reasons"],
@@ -378,22 +377,6 @@ class PayloadMixin:
             cumulative += questions_on_day.get(day, 0)
             counts[day] = cumulative
         return counts
-
-    def _decision_audit_payload(self) -> list[dict[str, Any]]:
-        """Return the player decision trail with ECHO's preferred answers."""
-        return [
-            {
-                "day": record.day,
-                "card": record.card_title,
-                "playerChoice": record.choice_label,
-                "echoChoice": record.echo_choice_label or "-",
-                "matched": record.aligned_with_echo,
-                "note": record.note,
-            }
-            for record in self.player_state.decision_history
-            if record.actor == "player"
-        ]
-
 
 def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: SimulationState | None = None) -> dict[str, Any]:
     """Convert a MetricSnapshot into frontend-friendly camelCase fields."""

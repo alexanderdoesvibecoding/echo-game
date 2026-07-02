@@ -270,17 +270,24 @@ async function advanceShift(marker) {
 
 export function renderDayClock(statusText, paused = false) {
   const percent = dayCyclePercent();
+  const gradientWidth = dayProgressGradientWidth(percent);
   return `
     <div class="day-clock">
       <div class="day-clock-row">
         <span>${escapeHtml(statusText)}</span>
         <span>${Math.round(percent)}%</span>
       </div>
-      <div class="day-progress-track" aria-label="Day progress">
-        <div class="day-progress-fill ${paused ? "paused" : ""}" style="width:${percent}%"></div>
+      <div class="day-progress-track" aria-label="Day progress, ${Math.round(percent)} percent">
+        <div class="day-progress-fill ${paused ? "paused" : ""}" style="width:${percent}%; --day-progress-gradient-width:${gradientWidth}"></div>
       </div>
     </div>
   `;
+}
+
+function dayProgressGradientWidth(percent) {
+  if (percent <= 0) return "100%";
+  const safePercent = Math.max(1, Math.min(100, Number(percent) || 0));
+  return `${Number((10000 / safePercent).toFixed(2))}%`;
 }
 
 export function currentOpenDecisionCard() {
