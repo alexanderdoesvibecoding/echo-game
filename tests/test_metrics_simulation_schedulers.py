@@ -9,7 +9,6 @@ from echo_adventure.metrics import (
     calculate_snapshot,
     day_shift,
     recalculate_critical_path,
-    score_decision_path_differentiator,
     shop_utilization,
     update_state_metrics,
 )
@@ -99,17 +98,15 @@ class MetricsTests(unittest.TestCase):
         self.assertIn("JOB-02-001", critical_ids)
         self.assertEqual(downstream_count(state, state.jobs["JOB-01-001"]), 1)
 
-    def test_final_score_includes_deterministic_decision_path_component(self):
+    def test_final_score_is_accumulated_decision_score(self):
         state = make_state()
         state.decision_path = ["CARD-1:A", "CARD-2:B"]
         state.decision_path_signature = "12345678abcdef00"
         state.decision_path_score_delta = 1.5
 
-        differentiator = score_decision_path_differentiator(state)
         score = calculate_final_score(state)
 
-        self.assertEqual(differentiator, round(1.5 + (int("12345678", 16) % 2500) / 100.0, 2))
-        self.assertIsInstance(score, float)
+        self.assertEqual(score, 1.5)
 
     def test_day_shift_formats_boundaries(self):
         self.assertEqual(day_shift(0, 3), "Day 1, Shift 1")

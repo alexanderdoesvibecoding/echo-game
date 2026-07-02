@@ -31,14 +31,16 @@ class PayloadHelperTests(unittest.TestCase):
         state = make_state()
         state.decision_path = ["CARD:A"]
         state.decision_path_signature = "abcdef1234567890"
+        state.decision_path_score_delta = 2.75
         snapshot = calculate_snapshot(state)
 
         payload = _snapshot_payload(snapshot, shifts_per_day=3, state=state)
 
         self.assertEqual(payload["shift"], snapshot.shift)
         self.assertEqual(payload["projectedCompletion"], day_shift(snapshot.projected_completion_shift, 3))
-        self.assertIn("finalScore", payload)
-        self.assertEqual(payload["decisionPathSignature"], "abcdef1234567890")
+        self.assertEqual(payload["finalScore"], 2.75)
+        self.assertNotIn("decisionPathSignature", payload)
+        self.assertNotIn("decisionPathDifferentiator", payload)
 
     def test_card_choice_and_progress_payload_helpers_are_json_ready(self):
         selected = make_choice("B", effect_type="wait", risk_effect=2, reschedule_effect=1)

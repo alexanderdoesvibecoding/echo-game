@@ -202,14 +202,9 @@ export function renderFinal() {
     </thead>
     <tbody>
       <tr>
-        <td>Final score</td>
+        <td>Final decision score</td>
         <td>${Number(p.finalScore || 0).toFixed(2)}</td>
         <td>${Number(a.finalScore || 0).toFixed(2)}</td>
-      </tr>
-      <tr>
-        <td>Strategic path signature</td>
-        <td>${Number(p.decisionPathDifferentiator || 0).toFixed(2)}</td>
-        <td>${Number(a.decisionPathDifferentiator || 0).toFixed(2)}</td>
       </tr>
       <tr>
         <td>Deadline met</td>

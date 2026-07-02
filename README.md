@@ -81,11 +81,13 @@ Daily decisions are generated as a bounded campaign graph during scenario creati
 The final reveal includes:
 
 - Player and ECHO final snapshots
-- Decision score over answered questions
+- Final decision score over answered questions
 - Metric comparison
 - Outcome drivers
 - Decision-by-decision audit
 - ECHO's preferred answer for each player decision
+
+The final score shown in the comparison table is the same accumulated decision score shown by the decision chart. Schedule performance is shown separately through deadline, completion, late-work, risk, idle-time, and reschedule metrics.
 
 ## Browser UI And API
 
@@ -187,7 +189,7 @@ The benchmark run uses the same generated scenario as the player, but a separate
 ECHO decision selection has two layers:
 
 - Static campaign-tree scoring reads reachable downstream decision paths so a choice with a bad hidden tail can be avoided.
-- Live-board forecasting expands each card through the same shared target selectors used by player-side decision effects, projects each current choice through the remaining run with the automated scheduler, then ranks outcomes by completion, completion shift, final score, remaining jobs, lateness, reschedules, idle time, and risk.
+- Live-board forecasting expands each card through the same shared target selectors used by player-side decision effects, projects each current choice through the remaining run with the automated scheduler, then ranks outcomes by completion, completion shift, projected decision score, remaining jobs, lateness, reschedules, idle time, and risk.
 
 Relevant ECHO knobs in `GameConfig`:
 

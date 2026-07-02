@@ -128,6 +128,7 @@ class StaticViewAssetTests(unittest.TestCase):
         self.assertIn("Your answer:", source)
         self.assertIn("cumulative decision score", source)
         self.assertNotIn("const playerImpact = decisionPoints.map", source)
+        self.assertNotIn("Strategic path signature", source)
 
 
 class FinalDecisionGraphPayloadTests(unittest.TestCase):

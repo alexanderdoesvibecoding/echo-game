@@ -10,7 +10,6 @@ from ..metrics import (
     calculate_final_score,
     calculate_snapshot,
     day_shift,
-    score_decision_path_differentiator,
     update_state_metrics,
 )
 from ..models import DecisionCard, DecisionChoice, DecisionProgress, MetricSnapshot, PuzzlePiece, SimulationState
@@ -420,8 +419,6 @@ def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: Simu
         payload.update(
             {
                 "finalScore": calculate_final_score(state),
-                "decisionPathDifferentiator": score_decision_path_differentiator(state),
-                "decisionPathSignature": state.decision_path_signature or "-",
             }
         )
     return payload
