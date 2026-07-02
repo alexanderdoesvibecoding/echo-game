@@ -7,7 +7,6 @@ dependencies = []
 
 [project.scripts]
 echo-adventure = "echo_adventure.app:main"
-echo-adventure-ui = "echo_adventure.ui.server:main"
 
 [tool.setuptools.package-data]
 "echo_adventure.ui" = ["static/*.html", "static/*.css", "static/*.js"]

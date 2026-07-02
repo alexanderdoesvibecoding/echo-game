@@ -58,11 +58,10 @@ The compatibility script works too:
 python3 main.py
 ```
 
-If the package is installed into an environment, the project scripts are:
+If the package is installed into an environment, the project script is:
 
 ```bash
 echo-adventure
-echo-adventure-ui
 ```
 
 ## Gameplay
