@@ -119,6 +119,16 @@ class StaticViewAssetTests(unittest.TestCase):
         for _, asset_path in STATIC_ASSETS.values():
             self.assertTrue(asset_path.exists())
 
+    def test_final_chart_renderer_uses_cumulative_scores_and_correct_answer_copy(self):
+        source = STATIC_ASSETS["/ui/renderFinal.js"][1].read_text(encoding="utf-8")
+
+        self.assertIn("playerCumulativeScore", source)
+        self.assertIn("echoCumulativeScore", source)
+        self.assertIn("Correct answer (ECHO)", source)
+        self.assertIn("Your answer:", source)
+        self.assertIn("cumulative decision score", source)
+        self.assertNotIn("const playerImpact = decisionPoints.map", source)
+
 
 class FinalDecisionGraphPayloadTests(unittest.TestCase):
     def test_decision_chart_payload_includes_player_and_echo_choice_details(self):
@@ -135,6 +145,7 @@ class FinalDecisionGraphPayloadTests(unittest.TestCase):
         self.assertEqual(point["day"], card.day)
         self.assertEqual(point["questionId"], card.id)
         self.assertEqual(point["questionTitle"], card.title)
+        self.assertEqual(point["questionText"], card.description)
         self.assertEqual(point["playerChoice"], choice.label)
         self.assertIn(point["echoChoice"], [candidate.label for candidate in card.choices])
         self.assertIn("playerDelta", point)

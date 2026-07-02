@@ -81,7 +81,7 @@ Daily decisions are generated as a bounded campaign graph during scenario creati
 The final reveal includes:
 
 - Player and ECHO final snapshots
-- Decision score impact over answered questions
+- Decision score over answered questions
 - Metric comparison
 - Outcome drivers
 - Decision-by-decision audit
@@ -236,7 +236,8 @@ echo_adventure/
     render*.js           Metrics, decisions, summary, and final reveal renderers
     modals.js            Modal and theme controls
     html.js              DOM and escaping helpers
-  tests.py               unittest coverage for decision, scenario, and UI payload logic
+tests/
+  test_*.py              unittest coverage for core logic, events, decisions, API payloads, and regressions
 ```
 
 ## Balance And Configuration
@@ -390,10 +391,10 @@ python3 -m compileall -q echo_adventure main.py
 Run the unit tests:
 
 ```bash
-python3 -m unittest echo_adventure.tests
+python3 -m unittest discover -v
 ```
 
-The tests currently live in `echo_adventure/tests.py` and use the standard-library `unittest` runner. `python3 -m unittest discover` also finds the same suite from the repository root.
+The tests live in the top-level `tests/` package and use the standard-library `unittest` runner.
 
 Current coverage focuses on:
 
@@ -407,6 +408,7 @@ Current coverage focuses on:
 - Scenario due-date spread across configured total days
 - Shift-by-shift browser session progression before day summary
 - Frozen summary puzzle and past-due payloads after later state changes
+- Config validation, model helpers, metrics, schedulers, event effects, decision effects/selectors, card factories, ECHO policy helpers, and API/server payload routing
 
 Run the UI with a stable seed while developing:
 

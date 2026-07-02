@@ -3,7 +3,7 @@
 import { uiState } from "./state.js";
 import { $, escapeHtml } from "./html.js";
 
-function renderCompletionChart(history) {
+function renderDecisionScoreChart(history) {
   const decisionPoints = Array.isArray(history?.decisionPoints) ? history.decisionPoints : [];
   const count = decisionPoints.length;
   if (!count) return `<div class="subtle">No decision score history recorded.</div>`;
@@ -11,14 +11,14 @@ function renderCompletionChart(history) {
   const width = 640;
   const height = 260;
   const pad = { left: 54, right: 18, top: 18, bottom: 42 };
-  const formatImpact = (value) => {
+  const formatScore = (value) => {
     const number = Number(value) || 0;
     return `${number >= 0 ? "+" : ""}${number.toFixed(2)}`;
   };
-  const playerImpact = decisionPoints.map(decisionPoint => Number(decisionPoint.playerDelta) || 0);
-  const echoImpact = decisionPoints.map(decisionPoint => Number(decisionPoint.echoDelta) || 0);
-  const rawMin = Math.min(0, ...playerImpact, ...echoImpact);
-  const rawMax = Math.max(0, ...playerImpact, ...echoImpact);
+  const playerScore = decisionPoints.map(decisionPoint => Number(decisionPoint.playerCumulativeScore) || 0);
+  const echoScore = decisionPoints.map(decisionPoint => Number(decisionPoint.echoCumulativeScore) || 0);
+  const rawMin = Math.min(0, ...playerScore, ...echoScore);
+  const rawMax = Math.max(0, ...playerScore, ...echoScore);
   const scoreSpan = Math.max(1, rawMax - rawMin);
   const minScore = rawMin - scoreSpan * 0.15;
   const maxScore = rawMax + scoreSpan * 0.15;
@@ -43,7 +43,7 @@ function renderCompletionChart(history) {
     const [, y] = point(value, 0);
     return `
       <line class="chart-grid" x1="${pad.left}" y1="${y.toFixed(1)}" x2="${(width - pad.right).toFixed(1)}" y2="${y.toFixed(1)}"></line>
-      <text class="chart-label" x="${pad.left - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">${formatImpact(value)}</text>
+      <text class="chart-label" x="${pad.left - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">${formatScore(value)}</text>
     `;
   }).join("");
   const xLabels = xTicks.map(index => {
@@ -52,25 +52,41 @@ function renderCompletionChart(history) {
     const label = `Q${sequence}`;
     return `<text class="chart-label" x="${x.toFixed(1)}" y="${height - 12}" text-anchor="middle">${escapeHtml(label)}</text>`;
   }).join("");
-  const decisionAttrs = (decisionPoint, series) => `
-    tabindex="0"
-    data-series="${escapeHtml(series)}"
-    data-day="${escapeHtml(decisionPoint.day || "-")}"
-    data-question="${escapeHtml(decisionPoint.questionTitle || decisionPoint.questionText || decisionPoint.questionId || "-")}"
-    data-player-choice="${escapeHtml(decisionPoint.playerChoice || "-")}"
-    data-echo-choice="${escapeHtml(decisionPoint.echoChoice || "-")}"
-    data-player-impact="${escapeHtml(formatImpact(decisionPoint.playerDelta))}"
-    data-echo-impact="${escapeHtml(formatImpact(decisionPoint.echoDelta))}"
-    data-player-cumulative="${escapeHtml(formatImpact(decisionPoint.playerCumulativeScore))}"
-    data-echo-cumulative="${escapeHtml(formatImpact(decisionPoint.echoCumulativeScore))}"
-    data-affected="${escapeHtml(decisionPoint.affectedLabel || "-")}"
-    onmousemove="showDecisionChartTooltip(event, this)"
-    onmouseleave="hideDecisionChartTooltip()"
-    onfocus="showDecisionChartTooltip(event, this)"
-    onblur="hideDecisionChartTooltip()"
-  `;
+  const decisionAttrs = (decisionPoint, series) => {
+    const sequence = Number(decisionPoint.sequence || 0) || 0;
+    const label = decisionPoint.label || (sequence ? `Q${sequence}` : "Question");
+    const questionTitle = decisionPoint.questionTitle || decisionPoint.questionId || "-";
+    const questionText = decisionPoint.questionText || questionTitle;
+    const playerChoice = decisionPoint.playerChoice || "-";
+    const correctAnswer = decisionPoint.echoChoice || "-";
+    const score = series === "Player" ? decisionPoint.playerCumulativeScore : decisionPoint.echoCumulativeScore;
+    const change = series === "Player" ? decisionPoint.playerDelta : decisionPoint.echoDelta;
+    const ariaLabel = `${label}: ${questionTitle}. Your answer: ${playerChoice}. Correct answer: ${correctAnswer}.`;
+    return `
+      tabindex="0"
+      aria-label="${escapeHtml(ariaLabel)}"
+      data-series="${escapeHtml(series)}"
+      data-label="${escapeHtml(label)}"
+      data-day="${escapeHtml(decisionPoint.day || "-")}"
+      data-question-title="${escapeHtml(questionTitle)}"
+      data-question-text="${escapeHtml(questionText)}"
+      data-player-choice="${escapeHtml(playerChoice)}"
+      data-correct-answer="${escapeHtml(correctAnswer)}"
+      data-score="${escapeHtml(formatScore(score))}"
+      data-change="${escapeHtml(formatScore(change))}"
+      data-player-change="${escapeHtml(formatScore(decisionPoint.playerDelta))}"
+      data-echo-change="${escapeHtml(formatScore(decisionPoint.echoDelta))}"
+      data-player-cumulative="${escapeHtml(formatScore(decisionPoint.playerCumulativeScore))}"
+      data-echo-cumulative="${escapeHtml(formatScore(decisionPoint.echoCumulativeScore))}"
+      data-affected="${escapeHtml(decisionPoint.affectedLabel || "-")}"
+      onmousemove="showDecisionChartTooltip(event, this)"
+      onmouseleave="hideDecisionChartTooltip()"
+      onfocus="showDecisionChartTooltip(event, this)"
+      onblur="hideDecisionChartTooltip()"
+    `;
+  };
   const decisionMarker = (decisionPoint, series, index) => {
-    const values = series === "Player" ? playerImpact : echoImpact;
+    const values = series === "Player" ? playerScore : echoScore;
     const value = Number(values[index]) || 0;
     const [x, y] = point(value, index);
     if (series === "Player") {
@@ -86,17 +102,17 @@ function renderCompletionChart(history) {
   return `
     <div class="completion-chart">
       <div class="chart-legend">
-        <span class="chart-key chart-player"><span class="chart-swatch"></span>Your impact</span>
-        <span class="chart-key chart-echo"><span class="chart-swatch"></span>ECHO impact</span>
+        <span class="chart-key chart-player"><span class="chart-swatch"></span>Your score</span>
+        <span class="chart-key chart-echo"><span class="chart-swatch"></span>ECHO score</span>
       </div>
       <div class="chart-frame">
-        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Line chart comparing decision score impact by question for player and ECHO">
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Line chart comparing cumulative decision score by question for player and ECHO">
           ${yGrid}
           <line class="chart-axis" x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}"></line>
           <line class="chart-axis" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${height - pad.bottom}"></line>
           ${xLabels}
-          <path d="${pathFor(playerImpact)}" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-          <path d="${pathFor(echoImpact)}" fill="none" stroke="var(--violet)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+          <path d="${pathFor(playerScore)}" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+          <path d="${pathFor(echoScore)}" fill="none" stroke="var(--violet)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
           <g>${decisionPoints.map((decisionPoint, index) => decisionMarker(decisionPoint, "Player", index)).join("")}</g>
           <g>${decisionPoints.map((decisionPoint, index) => decisionMarker(decisionPoint, "ECHO", index)).join("")}</g>
         </svg>
@@ -110,14 +126,18 @@ export function showDecisionChartTooltip(event, marker) {
   const tooltip = $("decisionChartTooltip");
   if (!tooltip || !marker) return;
   const data = marker.dataset;
+  const questionDetail = data.questionText && data.questionText !== data.questionTitle
+    ? `<div>${escapeHtml(data.questionText)}</div>`
+    : "";
   tooltip.innerHTML = `
-    <strong>${escapeHtml(data.series || "Decision")} point</strong>
+    <strong>${escapeHtml(data.label || "Question")} decision</strong>
     <div>Day ${escapeHtml(data.day || "-")}</div>
-    <div>Question: ${escapeHtml(data.question || "-")}</div>
-    <div>Player picked: ${escapeHtml(data.playerChoice || "-")}</div>
-    <div>ECHO picked: ${escapeHtml(data.echoChoice || "-")}</div>
-    <div>Player impact: ${escapeHtml(data.playerImpact || "+0.00")} (${escapeHtml(data.playerCumulative || "+0.00")} cumulative)</div>
-    <div>ECHO impact: ${escapeHtml(data.echoImpact || "+0.00")} (${escapeHtml(data.echoCumulative || "+0.00")} cumulative)</div>
+    <div>Question: ${escapeHtml(data.questionTitle || "-")}</div>
+    ${questionDetail}
+    <div>Your answer: ${escapeHtml(data.playerChoice || "-")}</div>
+    <div>Correct answer (ECHO): ${escapeHtml(data.correctAnswer || "-")}</div>
+    <div>Your score: ${escapeHtml(data.playerCumulative || "+0.00")} (${escapeHtml(data.playerChange || "+0.00")} this question)</div>
+    <div>ECHO score: ${escapeHtml(data.echoCumulative || "+0.00")} (${escapeHtml(data.echoChange || "+0.00")} this question)</div>
     <div>Job/Subjob: ${escapeHtml(data.affected || "-")}</div>
   `;
   tooltip.classList.add("active");
@@ -170,7 +190,7 @@ export function renderFinal() {
   const a = final.automated;
   const review = final.review || {};
 
-  $("finalCompletionChart").innerHTML = renderCompletionChart(final.completionHistory);
+  $("finalCompletionChart").innerHTML = renderDecisionScoreChart(final.completionHistory);
 
   $("finalTable").innerHTML = `
     <thead>
