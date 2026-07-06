@@ -829,6 +829,46 @@ tr:last-child td { border-bottom: none; }
   gap: 12px;
   padding: 14px;
 }
+.final-layout {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+.final-metrics-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 10px;
+}
+.final-metric {
+  min-height: 82px;
+  overflow: hidden;
+}
+.final-metric-value-row strong {
+  font-size: 24px;
+}
+.final-metric-benchmark {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1.25;
+}
+.final-metric-good {
+  border-color: rgba(0, 122, 94, 0.3);
+  box-shadow: inset 0 3px 0 rgba(0, 122, 94, 0.7);
+}
+.final-metric-warn {
+  border-color: rgba(213, 137, 0, 0.36);
+  box-shadow: inset 0 3px 0 rgba(213, 137, 0, 0.76);
+}
+.final-metric-danger {
+  border-color: rgba(213, 94, 0, 0.36);
+  box-shadow: inset 0 3px 0 rgba(213, 94, 0, 0.78);
+}
+.final-chart-panel,
+.final-notes-panel {
+  min-width: 0;
+}
 .reveal-panel {
   border: 1px solid var(--line);
   border-radius: 8px;

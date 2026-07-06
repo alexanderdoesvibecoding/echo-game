@@ -150,6 +150,7 @@ function render() {
   syncDayCycleForState();
   $("dayBadge").textContent = `Day ${uiState.state.day}`;
   $("projectedText").textContent = `Projected completion: ${uiState.state.projectedCompletion}`;
+  renderMainSectionVisibility();
 
   renderMetrics();
   renderDecisions();
@@ -161,6 +162,12 @@ function render() {
   renderNewRunModal();
   renderDecisionModal();
   renderSettingsMenu();
+}
+
+function renderMainSectionVisibility() {
+  const gameOver = Boolean(uiState.state.gameOver);
+  $("projectPositionSection").classList.toggle("hidden", gameOver);
+  $("dailyDecisionSection").classList.toggle("hidden", gameOver);
 }
 
 configureDayClock({

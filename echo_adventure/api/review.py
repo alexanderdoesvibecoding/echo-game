@@ -59,16 +59,6 @@ class ReviewMixin:
                 else:
                     reasons.append("You and ECHO finished at the same shift.")
 
-        decision_records = [
-            record
-            for record in self.player_state.decision_history
-            if record.actor == "player"
-        ]
-        if decision_records:
-            matched = sum(1 for record in decision_records if record.aligned_with_echo)
-            match_rate = round((matched / len(decision_records)) * 100)
-            reasons.append(f"You matched ECHO on {matched}/{len(decision_records)} decisions ({match_rate}%).")
-
         return {
             "outcome": outcome,
             "headline": headline,

@@ -88,6 +88,23 @@ class MetricsTests(unittest.TestCase):
         state.final_item_completed = True
         self.assertLessEqual(calculate_schedule_risk(state, projected_completion_shift=99), 8.0)
 
+    def test_max_schedule_risk_seen_survives_completion_cap(self):
+        state = make_state()
+        state.current_shift = 11
+        state.active_events = ["EVT-1", "EVT-2"]
+        for job in state.jobs.values():
+            job.block_reason = "blocked"
+            job.critical_path = True
+
+        update_state_metrics(state)
+        peak_risk = state.max_schedule_risk_seen
+
+        state.final_item_completed = True
+        update_state_metrics(state)
+
+        self.assertGreater(peak_risk, 8.0)
+        self.assertEqual(state.max_schedule_risk_seen, peak_risk)
+
     def test_critical_path_marks_longest_remaining_chain(self):
         state = make_state()
 

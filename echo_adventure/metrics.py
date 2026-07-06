@@ -17,6 +17,7 @@ def update_state_metrics(state: SimulationState) -> None:
     _refresh_piece_statuses(state)
     _refresh_shop_statuses(state)
     risk = calculate_schedule_risk(state, projected)
+    state.max_schedule_risk_seen = max(state.max_schedule_risk_seen, risk)
     for shop in state.shops.values():
         shop.risk_score = min(100.0, shop.risk_score + risk * 0.08)
 

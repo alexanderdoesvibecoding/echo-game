@@ -442,9 +442,22 @@ def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: Simu
         payload.update(
             {
                 "finalScore": calculate_final_score(state),
+                "maxScheduleRisk": _max_schedule_risk(state, snapshot),
             }
         )
     return payload
+
+
+def _max_schedule_risk(state: SimulationState, current_snapshot: MetricSnapshot) -> float:
+    """Return the highest run risk captured in stored snapshots or the current snapshot."""
+    return round(
+        max(
+            [state.max_schedule_risk_seen, current_snapshot.schedule_risk]
+            + [snapshot.schedule_risk for snapshot in state.metric_history],
+            default=current_snapshot.schedule_risk,
+        ),
+        1,
+    )
 
 
 def _choice_by_id(card: DecisionCard | None, choice_id: str | None) -> DecisionChoice | None:

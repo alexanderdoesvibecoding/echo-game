@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from io import BytesIO
 import json
 import threading
@@ -23,7 +24,7 @@ from echo_adventure.api.server import GameRequestHandler, _parse_optional_seed
 from echo_adventure.enums import JobStatus
 from echo_adventure.metrics import day_shift
 from echo_adventure.metrics import calculate_snapshot, update_state_metrics
-from echo_adventure.models import DecisionProgress
+from echo_adventure.models import DecisionProgress, DecisionRecord
 
 from .helpers import make_card, make_choice, make_state, unit_config
 
@@ -84,6 +85,17 @@ class PayloadHelperTests(unittest.TestCase):
         self.assertNotIn("decisionPathSignature", payload)
         self.assertNotIn("decisionPathDifferentiator", payload)
 
+    def test_snapshot_payload_includes_max_schedule_risk_from_history(self):
+        state = make_state()
+        snapshot = calculate_snapshot(state)
+        state.metric_history.append(replace(snapshot, schedule_risk=42.2))
+        state.max_schedule_risk_seen = 51.4
+
+        payload = _snapshot_payload(snapshot, shifts_per_day=3, state=state)
+
+        self.assertEqual(payload["scheduleRisk"], round(snapshot.schedule_risk, 1))
+        self.assertEqual(payload["maxScheduleRisk"], 51.4)
+
     def test_card_choice_and_progress_payload_helpers_are_json_ready(self):
         selected = make_choice("B", effect_type="wait", risk_effect=2, reschedule_effect=1)
         card = make_card("CARD", choices=[make_choice("A"), selected])
@@ -140,6 +152,31 @@ class ReviewMixinTests(unittest.TestCase):
         self.assertEqual(review["outcome"], "won")
         self.assertIn("You won", review["headline"])
         self.assertTrue(any("beat the benchmark" in reason for reason in review["reasons"]))
+
+    def test_final_review_payload_omits_decision_match_audit(self):
+        player = make_state()
+        automated = make_state()
+        player.decision_history.append(
+            DecisionRecord(
+                day=1,
+                card_id="CARD-1",
+                card_title="Unit Card",
+                actor="player",
+                choice_id="A",
+                choice_label="A choice",
+                echo_choice_id="A",
+                echo_choice_label="A choice",
+                aligned_with_echo=True,
+                note="Recorded elsewhere.",
+            )
+        )
+        update_state_metrics(player)
+        update_state_metrics(automated)
+        harness = ReviewHarness(unit_config(), player, automated)
+
+        review = harness._final_review_payload(calculate_snapshot(player), calculate_snapshot(automated))
+
+        self.assertFalse(any("matched ECHO" in reason for reason in review["reasons"]))
 
     def test_loss_reasons_include_incomplete_late_blocked_and_rework_pressure(self):
         player = make_state()

@@ -128,8 +128,23 @@ class StaticViewAssetTests(unittest.TestCase):
         self.assertIn("Correct answer (ECHO)", source)
         self.assertIn("Your answer:", source)
         self.assertIn("cumulative decision score", source)
+        self.assertIn('id="finalMetricsBar"', INDEX_HTML)
+        self.assertIn('class="reveal-panel final-chart-panel"', INDEX_HTML)
+        self.assertIn('$("finalMetricsBar").innerHTML', source)
+        self.assertIn('label: "Max risk"', source)
+        self.assertIn("maxScheduleRisk", source)
         self.assertNotIn("const playerImpact = decisionPoints.map", source)
         self.assertNotIn("Strategic path signature", source)
+        self.assertNotIn("finalTable", source)
+        self.assertNotIn("Metric Comparison", INDEX_HTML)
+
+    def test_game_over_view_hides_project_position_and_daily_decisions(self):
+        source = STATIC_ASSETS["/ui/app.js"][1].read_text(encoding="utf-8")
+
+        self.assertIn('id="projectPositionSection"', INDEX_HTML)
+        self.assertIn('id="dailyDecisionSection"', INDEX_HTML)
+        self.assertIn('$("projectPositionSection").classList.toggle("hidden", gameOver)', source)
+        self.assertIn('$("dailyDecisionSection").classList.toggle("hidden", gameOver)', source)
 
 
 class FinalDecisionGraphPayloadTests(unittest.TestCase):
@@ -315,6 +330,7 @@ class ShiftProgressionPayloadTests(unittest.TestCase):
         self.assertIsNotNone(session.last_result)
         self.assertEqual(session.last_result.start_snapshot.shift, initial["snapshot"]["shift"])
         self.assertEqual(session.last_result.end_snapshot.shift, initial["snapshot"]["shift"] + session.config.shifts_per_day)
+        self.assertEqual(session.player_state.metric_history[-1], session.last_result.end_snapshot)
 
     def test_state_payload_includes_live_past_due_subjobs(self):
         session = GameSession(seed=123)

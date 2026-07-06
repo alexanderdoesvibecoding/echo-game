@@ -179,6 +179,7 @@ class GameSession(PayloadMixin, ReviewMixin):
             return
         update_state_metrics(self.player_state)
         end_snapshot = calculate_snapshot(self.player_state)
+        self.player_state.metric_history.append(end_snapshot)
         completed_today = sorted(self.player_state.completed_jobs - self.day_completed_before)
         notes = self.player_state.daily_notes[self.day_notes_start:]
         self.last_result = DayResult(

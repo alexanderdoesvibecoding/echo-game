@@ -302,6 +302,7 @@ class SimulationState:
     decision_path: list[str] = field(default_factory=list)
     decision_path_signature: str = ""
     decision_path_score_delta: float = 0.0
+    max_schedule_risk_seen: float = 0.0
     current_shift: int = 0
     active_events: list[str] = field(default_factory=list)
     known_warnings: list[str] = field(default_factory=list)

@@ -122,6 +122,74 @@ function renderDecisionScoreChart(history) {
   `;
 }
 
+function renderFinalMetricBar(player, automated) {
+  const totalPieces = Array.isArray(uiState.state?.pieces) ? uiState.state.pieces.length : 0;
+  const totalSubjobs = Math.max(
+    Number(player.jobsCompleted || 0) + Number(player.jobsRemaining || 0),
+    Number(automated.jobsCompleted || 0) + Number(automated.jobsRemaining || 0),
+    1,
+  );
+  const formatScore = (value) => Number(value || 0).toFixed(2);
+  const formatRisk = (value) => `${Math.round(Number(value || 0))}/100`;
+  const metricCards = [
+    {
+      label: "Decision Score",
+      playerValue: formatScore(player.finalScore),
+      echoValue: formatScore(automated.finalScore),
+      tone: Number(player.finalScore || 0) >= Number(automated.finalScore || 0) ? "good" : "warn",
+    },
+    {
+      label: "Deadline Met",
+      playerValue: player.deadlineMet ? "Yes" : "No",
+      echoValue: automated.deadlineMet ? "Yes" : "No",
+      tone: player.deadlineMet ? "good" : "danger",
+    },
+    {
+      label: "Jobs Complete",
+      playerValue: `${Number(player.piecesCompleted || 0)}/${Math.max(1, totalPieces)}`,
+      echoValue: `${Number(automated.piecesCompleted || 0)}/${Math.max(1, totalPieces)}`,
+      tone: Number(player.piecesCompleted || 0) >= Number(automated.piecesCompleted || 0) ? "good" : "warn",
+    },
+    {
+      label: "Subjobs Complete",
+      playerValue: `${Number(player.jobsCompleted || 0)}/${totalSubjobs}`,
+      echoValue: `${Number(automated.jobsCompleted || 0)}/${totalSubjobs}`,
+      tone: Number(player.jobsCompleted || 0) >= Number(automated.jobsCompleted || 0) ? "good" : "warn",
+    },
+    {
+      label: "Behind Schedule",
+      playerValue: Number(player.jobsBehindSchedule || 0),
+      echoValue: Number(automated.jobsBehindSchedule || 0),
+      tone: Number(player.jobsBehindSchedule || 0) <= Number(automated.jobsBehindSchedule || 0) ? "good" : "warn",
+    },
+    {
+      label: "Late Subjobs",
+      playerValue: Number(player.jobsLate || 0),
+      echoValue: Number(automated.jobsLate || 0),
+      tone: Number(player.jobsLate || 0) <= Number(automated.jobsLate || 0) ? "good" : "warn",
+    },
+    {
+      label: "Max risk",
+      playerValue: formatRisk(player.maxScheduleRisk ?? player.scheduleRisk),
+      echoValue: formatRisk(automated.maxScheduleRisk ?? automated.scheduleRisk),
+      tone: Number(player.maxScheduleRisk ?? player.scheduleRisk ?? 0)
+        <= Number(automated.maxScheduleRisk ?? automated.scheduleRisk ?? 0) ? "good" : "warn",
+    },
+  ];
+
+  return metricCards.map(metric => `
+    <div class="metric final-metric final-metric-${metric.tone}">
+      <div class="metric-title-row">
+        <span class="subtle metric-label">${escapeHtml(metric.label)}</span>
+      </div>
+      <div class="metric-value-row final-metric-value-row">
+        <strong>${escapeHtml(metric.playerValue)}</strong>
+      </div>
+      <div class="final-metric-benchmark">ECHO ${escapeHtml(metric.echoValue)}</div>
+    </div>
+  `).join("");
+}
+
 export function showDecisionChartTooltip(event, marker) {
   const tooltip = $("decisionChartTooltip");
   if (!tooltip || !marker) return;
@@ -190,59 +258,8 @@ export function renderFinal() {
   const a = final.automated;
   const review = final.review || {};
 
+  $("finalMetricsBar").innerHTML = renderFinalMetricBar(p, a);
   $("finalCompletionChart").innerHTML = renderDecisionScoreChart(final.completionHistory);
-
-  $("finalTable").innerHTML = `
-    <thead>
-      <tr>
-        <th>Metric</th>
-        <th>Your Schedule</th>
-        <th>ECHO Benchmark</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Final decision score</td>
-        <td>${Number(p.finalScore || 0).toFixed(2)}</td>
-        <td>${Number(a.finalScore || 0).toFixed(2)}</td>
-      </tr>
-      <tr>
-        <td>Deadline met</td>
-        <td>${p.deadlineMet ? "Yes" : "No"}</td>
-        <td>${a.deadlineMet ? "Yes" : "No"}</td>
-      </tr>
-      <tr>
-        <td>Completion</td>
-        <td>${escapeHtml(p.completion || "Not complete")}</td>
-        <td>${escapeHtml(a.completion || "Not complete")}</td>
-      </tr>
-      <tr>
-        <td>Jobs complete</td>
-        <td>${p.piecesCompleted}</td>
-        <td>${a.piecesCompleted}</td>
-      </tr>
-      <tr>
-        <td>Subjobs completed</td>
-        <td>${p.jobsCompleted}</td>
-        <td>${a.jobsCompleted}</td>
-      </tr>
-      <tr>
-        <td>Subjobs behind schedule</td>
-        <td>${p.jobsBehindSchedule}</td>
-        <td>${a.jobsBehindSchedule}</td>
-      </tr>
-      <tr>
-        <td>Subjobs late</td>
-        <td>${p.jobsLate}</td>
-        <td>${a.jobsLate}</td>
-      </tr>
-      <tr>
-        <td>Risk</td>
-        <td>${Math.round(p.scheduleRisk)}/100</td>
-        <td>${Math.round(a.scheduleRisk)}/100</td>
-      </tr>
-    </tbody>
-  `;
 
   $("finalNotes").innerHTML = (review.reasons || final.explanation || [])
     .map(note => `<li>${escapeHtml(note)}</li>`)
