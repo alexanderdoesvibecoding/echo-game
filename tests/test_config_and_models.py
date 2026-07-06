@@ -60,6 +60,7 @@ class ConfigTests(unittest.TestCase):
         base = GameConfig.for_preset("normal", seed=1)
         cases = [
             (replace(base, total_days=0), "total_days must be at least 1"),
+            (replace(base, day_cycle_duration_ms=0), "day_cycle_duration_ms must be at least 1"),
             (replace(base, min_base_events=-1), "min_base_events cannot be negative"),
             (replace(base, min_jobs_per_piece=4, max_jobs_per_piece=3), "minimum subjobs per job"),
             (replace(base, transport_delay_probability=1.01), "transport_delay_probability must be between"),

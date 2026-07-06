@@ -4,7 +4,7 @@ import { api } from "./api.js";
 import { uiState } from "./state.js";
 import { escapeHtml } from "./html.js";
 
-const DAY_CYCLE_DURATION_MS = 28000;
+const DEFAULT_DAY_CYCLE_DURATION_MS = 8000;
 const DAY_CYCLE_TICK_MS = 220;
 
 const callbacks = {
@@ -179,7 +179,7 @@ function tickDayCycle() {
   uiState.dayCycleLastTick = now;
 
   if (!dayCycleBlocked()) {
-    uiState.dayCycleProgress = Math.min(100, uiState.dayCycleProgress + (elapsed / DAY_CYCLE_DURATION_MS) * 100);
+    uiState.dayCycleProgress = Math.min(100, uiState.dayCycleProgress + (elapsed / dayCycleDurationMs()) * 100);
   }
 
   if (nextDecisionIsDue()) {
@@ -217,6 +217,11 @@ export function dayCyclePercent() {
 
 function shiftsPerDay() {
   return Math.max(1, Number(uiState.state?.shiftsPerDay || 3));
+}
+
+function dayCycleDurationMs() {
+  const configured = Number(uiState.state?.dayCycleDurationMs ?? DEFAULT_DAY_CYCLE_DURATION_MS);
+  return Number.isFinite(configured) ? Math.max(1, configured) : DEFAULT_DAY_CYCLE_DURATION_MS;
 }
 
 function nextShiftMarkerDue() {

@@ -6,15 +6,17 @@ import { $, escapeHtml, fmtNum } from "./html.js";
 export function renderMetrics() {
   const snap = uiState.state.snapshot;
   const totalSubjobs = snap.jobsCompleted + snap.jobsRemaining;
+  const jobsCompletedToday = Math.max(0, Number(snap.jobsCompletedToday || 0));
+  const jobsCompletedTodayDelta = renderTodayDelta(jobsCompletedToday);
   const metrics = [
     ["Jobs Complete", `${snap.piecesCompleted}/${uiState.state.pieces.length}`, snap.piecesCompleted / uiState.state.pieces.length, "good", "How many top-level jobs are complete.", true, renderJobsMetricPopover(), "jobsMetricPopover"],
-    ["Subjobs Complete", `${fmtNum(snap.jobsCompleted)}/${fmtNum(totalSubjobs)}`, snap.jobsCompleted / Math.max(1, totalSubjobs), "good", "Total subjobs finished out of all required work.", true, "", ""],
-    ["Subjobs Behind Schedule", fmtNum(snap.jobsBehindSchedule), 0, snap.jobsBehindSchedule > 0 ? "warn" : "good", "Incomplete subjobs whose target completion date has already passed.", false, renderSubjobsBehindSchedulePopover(), "subjobsBehindSchedulePopover"],
-    ["Subjobs Late", fmtNum(snap.jobsLate), 0, snap.jobsLate > 0 ? "warn" : "good", "Completed subjobs that finished after their target completion date.", false, "", ""],
-    ["Schedule Risk", `${Math.round(snap.scheduleRisk)}/100`, snap.scheduleRisk / 100, snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good", "Overall probability of missing the deadline (0 = safe, 100 = critical).", true, "", ""]
+    ["Subjobs Complete", `${fmtNum(snap.jobsCompleted)}/${fmtNum(totalSubjobs)}`, snap.jobsCompleted / Math.max(1, totalSubjobs), "good", "Total subjobs finished out of all required work.", true, "", jobsCompletedToday],
+    ["Subjobs Behind Schedule", fmtNum(snap.jobsBehindSchedule), 0, snap.jobsBehindSchedule > 0 ? "warn" : "good", "Incomplete subjobs whose target completion date has already passed.", false,  renderSubjobsBehindSchedulePopover(), "subjobsBehindSchedulePopover"],
+    ["Subjobs Late", fmtNum(snap.jobsLate), 0, snap.jobsLate > 0 ? "warn" : "good", "Completed subjobs that finished after their target completion date.", false, ""],
+    ["Schedule Risk", `${Math.round(snap.scheduleRisk)}/100`, snap.scheduleRisk / 100, snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good", "Overall probability of missing the deadline (0 = safe, 100 = critical).", true, "",""]
   ];
-  $("metrics").innerHTML = metrics.map(([label, value, pct, tone, tooltip, showBar, detail, detailId]) => `
-    <div class="metric ${detail ? "hoverable" : ""}" ${detail ? `tabindex="0" aria-describedby="${detailId}"` : ""}>
+  $("metrics").innerHTML = metrics.map(([label, value, pct, tone, tooltip, showBar, detail]) => `
+    <div class="metric ${detail ? "hoverable" : ""}" ${detail ? `tabindex="0" aria-describedby="jobsMetricPopover"` : ""}>
       <div class="metric-title-row">
         <span class="subtle metric-label">${label}<span class="info-icon" data-tooltip="${escapeHtml(tooltip)}">i</span></span>
         ${detail ? `<span class="metric-hint">Details</span>` : ""}
@@ -24,6 +26,11 @@ export function renderMetrics() {
       ${detail}
     </div>
   `).join("");
+}
+
+function renderTodayDelta(count) {
+  if (!count) return "";
+  return `<span class="metric-live-delta" aria-label="${fmtNum(count)} subjobs completed today">+${fmtNum(count)}</span>`;
 }
 
 function renderJobsMetricPopover() {
