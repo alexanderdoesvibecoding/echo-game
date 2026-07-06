@@ -426,7 +426,7 @@ export function renderInlineDecisions() {
     const badge = decisionDue ? `<span class="badge warn">Paused</span>` : `<span class="badge info">Rolling</span>`;
     const status = decisionDue
       ? "Paused for decision"
-      : "Day progress";
+      : "Day Progress";
     const detail = decisionDue
       ? `${escapeHtml(nextCard.title)}`
       : "Work is moving through the day.";
@@ -451,17 +451,16 @@ export function renderInlineDecisions() {
   }
 
   const ending = uiState.dayCycleProgress >= 100 || uiState.dayCycleAdvancing;
-  const status = ending ? "Preparing daily summary" : "Finishing today's work";
   body.innerHTML = `
     <div class="reveal-panel decision-status-panel">
       <div class="decision-title">
         <div>
           <h3>${ending ? "Day Complete" : "Day In Motion"}</h3>
-          <div class="subtle">${progressState.total ? "All scheduled decisions are answered." : "No campaign decisions are scheduled today."}</div>
+          <div class="subtle">Work is moving through the day.</div>
         </div>
         <span class="badge good">${ending ? "Complete" : "Rolling"}</span>
       </div>
-      ${renderDayClock(status, ending)}
+      ${renderDayClock("Day Progress", ending)}
     </div>
   `;
 }
