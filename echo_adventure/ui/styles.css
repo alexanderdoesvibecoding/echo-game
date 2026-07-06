@@ -346,17 +346,31 @@ section { overflow: visible; }
   line-height: 1.1;
   margin-top: 6px;
 }
-.metric.has-live-delta .metric-title-row {
-  padding-right: 52px;
+.metric-value-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 25px;
+  margin-top: 6px;
+}
+.metric-value-row strong {
+  margin-top: 0;
 }
 .metric-live-delta {
-  position: absolute;
-  top: 10px;
-  right: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  min-height: 23px;
+  padding: 2px 8px;
+  border: 1px solid rgba(0, 122, 94, 0.28);
+  border-radius: 999px;
+  background: #e5f3ef;
   color: var(--green);
-  font-size: 20px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1;
+  animation: metric-delta-pop 2200ms ease-out both;
 }
 .metric.hoverable {
   cursor: help;
@@ -464,11 +478,43 @@ html[data-theme="dark"] .metric-hint {
   border-color: rgba(86, 180, 233, 0.28);
   color: var(--teal);
 }
+html[data-theme="dark"] .metric-live-delta {
+  background: #12372f;
+  border-color: rgba(46, 196, 166, 0.34);
+}
 html[data-theme="dark"] .metric-popover-frame {
   border-color: #3a4352;
 }
 html[data-theme="dark"] .metric-popover th {
   background: #252d38;
+}
+
+@keyframes metric-delta-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(5px) scale(0.94);
+  }
+  14% {
+    opacity: 1;
+    transform: translateY(0) scale(1.05);
+  }
+  28% {
+    transform: translateY(0) scale(1);
+  }
+  72% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .metric-live-delta {
+    animation: none;
+  }
 }
 
 .progress {

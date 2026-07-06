@@ -4,7 +4,8 @@
     * Making it look more realistic
     * Use actual pictures of a Virginia or Columbia class submarine
         * Just need to figure out how to split an image like that (my vote is copies)
-- [ ] Add an indicator, perhaps a thing that says +1 or +5 in the subjobs completed box so we see it update at the end
+
+- [x] Add an indicator, perhaps a thing that says +1 or +5 in the subjobs completed box so we see it update at the end
   of each shift
     * Need to check but something similar should be done for jobs too if it updates similarly
 
@@ -17,7 +18,7 @@
 
 - [ ] Progress bar changes
     - [ ] Make the tip of the progress bar a submarine
-    - [x]	Make it progress faster through the day by making it slide very fast
+    - [x] Make it progress faster through the day by making it slide very fast
 
 - [ ] Change the final chart to be day by day (instead of question by question) and the hover will show each of the
   daily decisions, what you picked, and what you should have picked

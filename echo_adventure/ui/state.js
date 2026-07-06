@@ -22,4 +22,7 @@ export const uiState = {
   pendingAdvanceState: null,
   modalVisible: false,
   pendingChoice: null,
+  metricSnapshot: null,
+  metricDeltas: {},
+  metricDeltaTimer: null,
 };
