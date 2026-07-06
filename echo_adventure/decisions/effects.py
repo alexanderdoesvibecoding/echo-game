@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import random
 
-from ..enums import DecisionType, EventType, JobStatus, TargetType, WorkCenterStatus
-from ..events import insert_unexpected_job, schedule_follow_on_event
+from ..enums import DecisionType, EventType, JobStatus, TargetType
+from ..events import JOB_BLOCKING_EVENT_TYPES, insert_unexpected_job, schedule_follow_on_event
 from ..metrics import update_state_metrics
 from ..models import DecisionCard, DecisionChoice, DecisionRecord, Event, Job, SimulationState
 from .cards import _piece_label
@@ -162,14 +162,7 @@ def _expedite_event(state: SimulationState, event_id: str | None) -> str:
     event.duration_shifts = max(1, event.duration_shifts - reduction)
     event.severity = max(1, event.severity - 1)
     event.effects["mitigation_score"] = int(event.effects.get("mitigation_score", 0)) + 3
-    if event.type in {
-        EventType.MISSING_MATERIAL,
-        EventType.DELAYED_MATERIAL,
-        EventType.INSPECTION_DELAY,
-        EventType.SUPPLIER_ESCALATION,
-        EventType.LOGISTICS_BACKLOG,
-        EventType.CERTIFICATION_AUDIT,
-    }:
+    if event.type in JOB_BLOCKING_EVENT_TYPES:
         for job_id in event.effects.get("blocked_job_ids", [])[:2]:
             if job_id in state.jobs and state.jobs[job_id].block_reason:
                 state.jobs[job_id].priority += 12
@@ -184,16 +177,11 @@ def _reroute_targets(state: SimulationState, card: DecisionCard) -> str:
         if not alt:
             continue
         current = state.workcenters.get(job.assigned_workcenter_id) if job.assigned_workcenter_id else None
-        current_disrupted = bool(
-            current
-            and current.status in {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}
-        )
+        current_disrupted = bool(current and current.is_disrupted)
         if job.status == JobStatus.RUNNING and not current_disrupted:
             continue
         if current and not current_disrupted:
-            current_load = len(current.queue) + (1 if current.current_job_id else 0)
-            alt_load = len(alt.queue) + (1 if alt.current_job_id else 0)
-            if alt_load >= current_load:
+            if alt.load >= current.load:
                 continue
         if alt:
             state.assign_job(job.id, alt.id, front=job.critical_path)

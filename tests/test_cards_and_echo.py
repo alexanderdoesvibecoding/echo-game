@@ -3,7 +3,6 @@ from __future__ import annotations
 import math
 import unittest
 
-from echo_adventure.config import GameConfig
 from echo_adventure.decisions.cards import (
     _assigned_location_phrase,
     _bottleneck_card,
@@ -41,7 +40,6 @@ from echo_adventure.echo import (
     _late_stage,
     _live_operational_score,
     _queue_pressure_value,
-    _workcenter_load,
     apply_echo_decisions_for_day,
 )
 from echo_adventure.enums import DecisionType, EventType, JobStatus, TargetType, WorkCenterStatus
@@ -287,7 +285,7 @@ class EchoPolicyHelperTests(unittest.TestCase):
         self.assertEqual(_event_expedite_value(state, None), 4.0)
         self.assertGreater(_event_expedite_value(state, event), 20.0)
         self.assertGreater(_queue_pressure_value(state, card, [job]), 0.0)
-        self.assertEqual(_workcenter_load(None), 999)
+        self.assertEqual(state.workcenters["WC-A1"].load, 1)
         self.assertEqual(_event_for_choice(state, choice), event)
         self.assertEqual(_event_for_card(state, card), event)
         self.assertEqual(_best_open_alternate(state, job).id, "WC-B1")
@@ -296,6 +294,7 @@ class EchoPolicyHelperTests(unittest.TestCase):
         self.assertTrue(_late_stage(state))
 
         state.workcenters["WC-B1"].status = WorkCenterStatus.DOWN
+        self.assertTrue(state.workcenters["WC-B1"].is_disrupted)
         self.assertIsNone(_best_open_alternate(state, job))
 
 

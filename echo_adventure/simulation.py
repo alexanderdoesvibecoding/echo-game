@@ -201,9 +201,8 @@ def _start_available_jobs(state: SimulationState) -> None:
 
 def _process_workcenters(state: SimulationState) -> None:
     """Consume one shift of capacity across all workcenters."""
-    disrupted = {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}
     for wc in state.workcenters.values():
-        if wc.status in disrupted:
+        if wc.is_disrupted:
             state.idle_disrupted_time += 1
             continue
         state.available_shift_count += 1

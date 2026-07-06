@@ -12,7 +12,7 @@ from .decisions.selectors import (
     _event_by_id,
     _jobs_for_card,
 )
-from .enums import DecisionType, EventType, WorkCenterStatus
+from .enums import DecisionType, EventType
 from .metrics import calculate_final_score, calculate_snapshot, update_state_metrics
 from .models import DecisionCard, DecisionChoice, Event, Job, SimulationState
 from .schedulers.automated import AutomatedScheduler
@@ -266,10 +266,10 @@ def _reroute_value(state: SimulationState, jobs: list[Job]) -> float:
         best = _best_open_alternate(state, job)
         if not best:
             continue
-        if current_wc and current_wc.status in {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}:
+        if current_wc and current_wc.is_disrupted:
             value += 20.0
-        current_load = _workcenter_load(current_wc) if current_wc else 4
-        value += max(0.0, current_load - _workcenter_load(best)) * 6.0
+        current_load = current_wc.load if current_wc else 4
+        value += max(0.0, current_load - best.load) * 6.0
         if job.critical_path:
             value += 10.0
     return min(38.0, value)
@@ -329,19 +329,12 @@ def _best_open_alternate(state: SimulationState, job: Job):
             continue
         if job.required_capability not in wc.capabilities:
             continue
-        if wc.status in {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}:
+        if wc.is_disrupted:
             continue
         candidates.append(wc)
     if not candidates:
         return None
-    return min(candidates, key=lambda wc: (_workcenter_load(wc), -wc.efficiency, wc.id))
-
-
-def _workcenter_load(wc) -> int:
-    """Return queued-plus-running load for a workcenter-like object."""
-    if not wc:
-        return 999
-    return len(wc.queue) + (1 if wc.current_job_id else 0)
+    return min(candidates, key=lambda wc: (wc.load, -wc.efficiency, wc.id))
 
 
 def _event_for_choice(state: SimulationState, choice: DecisionChoice) -> Event | None:

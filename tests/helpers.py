@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import Any
 
 from echo_adventure.config import GameConfig
-from echo_adventure.enums import DecisionType, EventType, JobStatus, TargetType, WorkCenterStatus
+from echo_adventure.enums import DecisionType, EventType, TargetType
 from echo_adventure.metrics import update_state_metrics
 from echo_adventure.models import (
     CampaignDecisionGraph,
@@ -20,8 +20,6 @@ from echo_adventure.models import (
     SimulationState,
     WorkCenter,
 )
-from echo_adventure.scenario_generator import generate_scenario
-from echo_adventure.simulation import initialize_state
 
 
 def unit_config(**overrides: Any) -> GameConfig:
@@ -59,13 +57,6 @@ def unit_config(**overrides: Any) -> GameConfig:
         seed=101,
     )
     return replace(config, **overrides)
-
-
-def generated_state(**config_overrides: Any) -> tuple[GameConfig, SimulationState]:
-    """Generate and initialize a compact deterministic scenario."""
-    config = unit_config(**config_overrides)
-    scenario = generate_scenario(config)
-    return config, initialize_state(scenario, config.shifts_per_day)
 
 
 def make_state(update_metrics: bool = True) -> SimulationState:

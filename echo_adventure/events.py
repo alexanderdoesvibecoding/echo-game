@@ -7,7 +7,7 @@ from typing import Iterable
 
 from .config import GameConfig
 from .enums import EventType, JobStatus, TargetType, WorkCenterStatus
-from .models import Event, Job, PuzzlePiece, Shop, SimulationState, WorkCenter
+from .models import Event, Job, PuzzlePiece, Shop, SimulationState, WorkCenter, least_loaded_workcenter
 
 
 EVENT_SEQUENCE = [
@@ -41,6 +41,15 @@ UNEXPECTED_JOB_NAMES = [
     "Northstar",
     "Outrider",
 ]
+
+JOB_BLOCKING_EVENT_TYPES = {
+    EventType.MISSING_MATERIAL,
+    EventType.DELAYED_MATERIAL,
+    EventType.INSPECTION_DELAY,
+    EventType.SUPPLIER_ESCALATION,
+    EventType.LOGISTICS_BACKLOG,
+    EventType.CERTIFICATION_AUDIT,
+}
 
 
 def generate_event_timeline(
@@ -267,14 +276,7 @@ def apply_event_start(state: SimulationState, event: Event) -> None:
     if event.id in state.known_warnings:
         state.known_warnings.remove(event.id)
 
-    if event.type in {
-        EventType.MISSING_MATERIAL,
-        EventType.DELAYED_MATERIAL,
-        EventType.INSPECTION_DELAY,
-        EventType.SUPPLIER_ESCALATION,
-        EventType.LOGISTICS_BACKLOG,
-        EventType.CERTIFICATION_AUDIT,
-    }:
+    if event.type in JOB_BLOCKING_EVENT_TYPES:
         _block_target_jobs(state, event, reason=event.type.value)
     elif event.type in {EventType.MACHINE_DOWN, EventType.TOOLING_DAMAGE}:
         _set_workcenters_down(state, event, [event.target_id], WorkCenterStatus.DOWN, event.type.value)
@@ -687,19 +689,10 @@ def _best_workcenter_for_job(state: SimulationState, job: Job) -> str | None:
         for wc_id in job.candidate_workcenter_ids
         if wc_id in state.workcenters
         and job.required_capability in state.workcenters[wc_id].capabilities
-        and state.workcenters[wc_id].status
-        not in {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}
+        and not state.workcenters[wc_id].is_disrupted
     ]
-    if not candidates:
-        return None
-    return min(
-        candidates,
-        key=lambda wc: (
-            len(wc.queue) + (1 if wc.current_job_id else 0),
-            0 if wc.shop_id == job.shop_id else 1,
-            wc.id,
-        ),
-    ).id
+    workcenter = least_loaded_workcenter(candidates, job.shop_id)
+    return workcenter.id if workcenter else None
 
 
 def _create_follow_on_job(

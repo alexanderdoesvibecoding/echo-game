@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from ..enums import JobStatus, WorkCenterStatus
+from ..enums import JobStatus
 from ..metrics import update_state_metrics
-from ..models import Event, Job, SimulationState, WorkCenter
+from ..models import Event, Job, SimulationState, WorkCenter, least_loaded_workcenter
 from .base import Scheduler
 
 
@@ -36,11 +36,7 @@ class ManualScheduler(Scheduler):
         """Prefer the existing assignment, then the shortest viable queue."""
         if job.assigned_workcenter_id:
             assigned = state.workcenters[job.assigned_workcenter_id]
-            if assigned.status not in {
-                WorkCenterStatus.DOWN,
-                WorkCenterStatus.BLOCKED,
-                WorkCenterStatus.WEATHER_IMPACTED,
-            }:
+            if not assigned.is_disrupted:
                 return assigned
             return None
         primary = [
@@ -48,23 +44,12 @@ class ManualScheduler(Scheduler):
             for wc_id in job.candidate_workcenter_ids
             if wc_id in state.workcenters
             and state.workcenters[wc_id].shop_id == job.shop_id
-            and state.workcenters[wc_id].status
-            not in {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}
+            and not state.workcenters[wc_id].is_disrupted
         ]
         candidates = primary or [
             state.workcenters[wc_id]
             for wc_id in job.candidate_workcenter_ids
             if wc_id in state.workcenters
-            and state.workcenters[wc_id].status
-            not in {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}
+            and not state.workcenters[wc_id].is_disrupted
         ]
-        if not candidates:
-            return None
-        return min(
-            candidates,
-            key=lambda wc: (
-                len(wc.queue) + (1 if wc.current_job_id else 0),
-                0 if wc.shop_id == job.shop_id else 1,
-                wc.id,
-            ),
-        )
+        return least_loaded_workcenter(candidates, job.shop_id)

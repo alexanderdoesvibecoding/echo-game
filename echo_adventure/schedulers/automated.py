@@ -140,8 +140,7 @@ class AutomatedScheduler(Scheduler):
             if wc_id in state.workcenters
             and wc_id not in exclude
             and job.required_capability in state.workcenters[wc_id].capabilities
-            and state.workcenters[wc_id].status
-            not in {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}
+            and not state.workcenters[wc_id].is_disrupted
         ]
         if not candidates:
             return None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -46,6 +47,38 @@ class WorkCenter:
     queue: list[str] = field(default_factory=list)
     downtime_remaining: int = 0
     blocked_reason: str | None = None
+
+    @property
+    def load(self) -> int:
+        """Return queued-plus-running load for scheduling comparisons."""
+        return len(self.queue) + (1 if self.current_job_id else 0)
+
+    @property
+    def is_disrupted(self) -> bool:
+        """Return whether this workcenter is unavailable due to a disruption."""
+        return self.status in {
+            WorkCenterStatus.DOWN,
+            WorkCenterStatus.BLOCKED,
+            WorkCenterStatus.WEATHER_IMPACTED,
+        }
+
+
+def least_loaded_workcenter(
+    candidates: Iterable[WorkCenter],
+    preferred_shop_id: str,
+) -> WorkCenter | None:
+    """Return the lowest-load workcenter, preferring a shop only as a tiebreaker."""
+    candidate_list = list(candidates)
+    if not candidate_list:
+        return None
+    return min(
+        candidate_list,
+        key=lambda wc: (
+            wc.load,
+            0 if wc.shop_id == preferred_shop_id else 1,
+            wc.id,
+        ),
+    )
 
 
 @dataclass
@@ -363,11 +396,6 @@ class SimulationState:
         being moved, not repairing the old workcenter.
         """
         cleared = False
-        disrupted_statuses = {
-            WorkCenterStatus.DOWN,
-            WorkCenterStatus.BLOCKED,
-            WorkCenterStatus.WEATHER_IMPACTED,
-        }
 
         for old_wc in self.workcenters.values():
             if old_wc.id == except_workcenter_id or old_wc.current_job_id != job_id:
@@ -376,7 +404,7 @@ class SimulationState:
             old_wc.current_job_id = None
             cleared = True
 
-            if old_wc.status not in disrupted_statuses:
+            if not old_wc.is_disrupted:
                 old_wc.status = WorkCenterStatus.AVAILABLE
 
         return cleared

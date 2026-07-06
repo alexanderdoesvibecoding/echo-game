@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..enums import EventType, JobStatus, TargetType, WorkCenterStatus
+from ..enums import EventType, JobStatus, TargetType
 from ..models import DecisionCard, Event, Job, SimulationState, WorkCenter
 
 def _visible_events(state: SimulationState) -> list[Event]:
@@ -88,7 +88,7 @@ def _best_alternate_workcenter(
         if wc_id not in state.workcenters:
             continue
         wc = state.workcenters[wc_id]
-        if wc.status in {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}:
+        if wc.is_disrupted:
             continue
         if not allow_primary and wc.id == job.assigned_workcenter_id:
             continue
@@ -96,7 +96,7 @@ def _best_alternate_workcenter(
             candidates.append(wc)
     if not candidates:
         return None
-    return min(candidates, key=lambda wc: (len(wc.queue) + (1 if wc.current_job_id else 0), -wc.efficiency, wc.id))
+    return min(candidates, key=lambda wc: (wc.load, -wc.efficiency, wc.id))
 
 def _alternate_routing_jobs(state: SimulationState) -> list[Job]:
     """Find risky jobs with usable alternate workcenters."""

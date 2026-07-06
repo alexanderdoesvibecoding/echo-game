@@ -82,7 +82,7 @@ def calculate_schedule_risk(state: SimulationState, projected_completion_shift: 
     down_centers = sum(
         1
         for wc in state.workcenters.values()
-        if wc.status in {WorkCenterStatus.DOWN, WorkCenterStatus.BLOCKED, WorkCenterStatus.WEATHER_IMPACTED}
+        if wc.is_disrupted
     )
     remaining_jobs = sum(1 for job in state.jobs.values() if not job.is_complete)
     completed_pieces = sum(1 for piece in state.pieces.values() if piece.completed)
