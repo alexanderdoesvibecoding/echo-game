@@ -133,18 +133,7 @@ class AutomatedScheduler(Scheduler):
         exclude: set[str] | None = None,
     ) -> WorkCenter | None:
         """Choose the highest-scoring capable workcenter for a job."""
-        exclude = exclude or set()
-        candidates = [
-            state.workcenters[wc_id]
-            for wc_id in job.candidate_workcenter_ids
-            if wc_id in state.workcenters
-            and wc_id not in exclude
-            and job.required_capability in state.workcenters[wc_id].capabilities
-            and not state.workcenters[wc_id].is_disrupted
-        ]
-        if not candidates:
-            return None
-        return max(candidates, key=lambda wc: self._assignment_score(state, job, wc))
+        return self._highest_scoring_workcenter(state, job, exclude=exclude)
 
     def _best_idle_workcenter(
         self,
@@ -153,6 +142,16 @@ class AutomatedScheduler(Scheduler):
         exclude: set[str] | None = None,
     ) -> WorkCenter | None:
         """Return the strongest idle capable alternate for queued-job rebalancing."""
+        return self._highest_scoring_workcenter(state, job, exclude=exclude, idle_only=True)
+
+    def _highest_scoring_workcenter(
+        self,
+        state: SimulationState,
+        job: Job,
+        exclude: set[str] | None = None,
+        idle_only: bool = False,
+    ) -> WorkCenter | None:
+        """Return the best valid workcenter for a job under optional filters."""
         exclude = exclude or set()
         candidates = [
             state.workcenters[wc_id]
@@ -160,8 +159,14 @@ class AutomatedScheduler(Scheduler):
             if wc_id in state.workcenters
             and wc_id not in exclude
             and job.required_capability in state.workcenters[wc_id].capabilities
-            and state.workcenters[wc_id].current_job_id is None
-            and state.workcenters[wc_id].status in {WorkCenterStatus.AVAILABLE, WorkCenterStatus.IDLE}
+            and (
+                (
+                    state.workcenters[wc_id].current_job_id is None
+                    and state.workcenters[wc_id].status in {WorkCenterStatus.AVAILABLE, WorkCenterStatus.IDLE}
+                )
+                if idle_only
+                else not state.workcenters[wc_id].is_disrupted
+            )
         ]
         if not candidates:
             return None

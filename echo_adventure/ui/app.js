@@ -31,8 +31,8 @@ import {
 import { renderSummary, renderSummaryModal } from "./renderSummary.js";
 import { uiState } from "./state.js";
 
-function showError(message) {
-  const box = $("error");
+function showMessageBox(box, message) {
+  if (!box) return;
   if (!message) {
     box.classList.add("hidden");
     box.textContent = "";
@@ -42,16 +42,12 @@ function showError(message) {
   box.classList.remove("hidden");
 }
 
+function showError(message) {
+  showMessageBox($("error"), message);
+}
+
 function showNewRunError(message) {
-  const box = $("newRunError");
-  if (!box) return;
-  if (!message) {
-    box.classList.add("hidden");
-    box.textContent = "";
-    return;
-  }
-  box.textContent = message;
-  box.classList.remove("hidden");
+  showMessageBox($("newRunError"), message);
 }
 
 async function loadState() {
