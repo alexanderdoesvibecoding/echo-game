@@ -7,16 +7,16 @@ export function renderMetrics() {
   const snap = uiState.state.snapshot;
   const totalSubjobs = snap.jobsCompleted + snap.jobsRemaining;
   const metrics = [
-    ["Jobs Complete", `${snap.piecesCompleted}/${uiState.state.pieces.length}`, snap.piecesCompleted / uiState.state.pieces.length, "good", "How many top-level jobs are complete.", true, renderJobsMetricPopover()],
-    ["Subjobs Complete", `${fmtNum(snap.jobsCompleted)}/${fmtNum(totalSubjobs)}`, snap.jobsCompleted / Math.max(1, totalSubjobs), "good", "Total subjobs finished out of all required work.", true, ""],
-    ["Subjobs Behind Schedule", fmtNum(snap.jobsBehindSchedule), 0, snap.jobsBehindSchedule > 0 ? "warn" : "good", "Incomplete subjobs whose target completion date has already passed.", false, ""],
-    ["Subjobs Late", fmtNum(snap.jobsLate), 0, snap.jobsLate > 0 ? "warn" : "good", "Completed subjobs that finished after their target completion date.", false, ""],
-    ["Schedule Risk", `${Math.round(snap.scheduleRisk)}/100`, snap.scheduleRisk / 100, snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good", "Overall probability of missing the deadline (0 = safe, 100 = critical).", true, ""]
+    ["Jobs Complete", `${snap.piecesCompleted}/${uiState.state.pieces.length}`, snap.piecesCompleted / uiState.state.pieces.length, "good", "How many top-level jobs are complete.", true, renderJobsMetricPopover(), "jobsMetricPopover"],
+    ["Subjobs Complete", `${fmtNum(snap.jobsCompleted)}/${fmtNum(totalSubjobs)}`, snap.jobsCompleted / Math.max(1, totalSubjobs), "good", "Total subjobs finished out of all required work.", true, "", ""],
+    ["Subjobs Behind Schedule", fmtNum(snap.jobsBehindSchedule), 0, snap.jobsBehindSchedule > 0 ? "warn" : "good", "Incomplete subjobs whose target completion date has already passed.", false, renderSubjobsBehindSchedulePopover(), "subjobsBehindSchedulePopover"],
+    ["Subjobs Late", fmtNum(snap.jobsLate), 0, snap.jobsLate > 0 ? "warn" : "good", "Completed subjobs that finished after their target completion date.", false, "", ""],
+    ["Schedule Risk", `${Math.round(snap.scheduleRisk)}/100`, snap.scheduleRisk / 100, snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good", "Overall probability of missing the deadline (0 = safe, 100 = critical).", true, "", ""]
   ];
-  $("metrics").innerHTML = metrics.map(([label, value, pct, tone, tooltip, showBar, detail]) => `
-    <div class="metric ${detail ? "hoverable" : ""}" ${detail ? `tabindex="0" aria-describedby="jobsMetricPopover"` : ""}>
+  $("metrics").innerHTML = metrics.map(([label, value, pct, tone, tooltip, showBar, detail, detailId]) => `
+    <div class="metric ${detail ? "hoverable" : ""}" ${detail ? `tabindex="0" aria-describedby="${detailId}"` : ""}>
       <div class="metric-title-row">
-        <span class="subtle">${label}<span class="info-icon" data-tooltip="${escapeHtml(tooltip)}">i</span></span>
+        <span class="subtle metric-label">${label}<span class="info-icon" data-tooltip="${escapeHtml(tooltip)}">i</span></span>
         ${detail ? `<span class="metric-hint">Details</span>` : ""}
       </div>
       <strong>${value}</strong>
@@ -60,6 +60,45 @@ function renderJobsMetricPopover() {
             }).join("")}
           </tbody>
         </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderSubjobsBehindSchedulePopover() {
+  const pastDueJobs = Array.isArray(uiState.state?.pastDueJobs) ? uiState.state.pastDueJobs : [];
+  const body = pastDueJobs.length ? `
+    <table>
+      <thead>
+        <tr>
+          <th>Subjob</th>
+          <th>Job</th>
+          <th>Shop</th>
+          <th>Due Date</th>
+          <th>Late</th>
+          <th>Remaining</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${pastDueJobs.map(job => `
+          <tr>
+            <td>${escapeHtml(job.id)}</td>
+            <td>${escapeHtml(job.piece || "-")}</td>
+            <td>${escapeHtml(job.shop || "-")}</td>
+            <td>${escapeHtml(job.due || "-")}</td>
+            <td>${fmtNum(job.daysLate)} day${Number(job.daysLate) === 1 ? "" : "s"}</td>
+            <td>${fmtNum(job.remaining)} shift${Number(job.remaining) === 1 ? "" : "s"}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  ` : `<p class="subtle metric-empty">No subjobs are currently behind schedule.</p>`;
+
+  return `
+    <div id="subjobsBehindSchedulePopover" class="metric-popover" role="tooltip">
+      <h3>Behind Schedule</h3>
+      <div class="metric-popover-frame">
+        ${body}
       </div>
     </div>
   `;

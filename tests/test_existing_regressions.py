@@ -12,6 +12,7 @@ from echo_adventure.metrics import update_state_metrics
 from echo_adventure.models import DecisionCard, DecisionChoice, Event
 from echo_adventure.scenario_generator import generate_scenario
 from echo_adventure.simulation import initialize_state
+from echo_adventure.api.payloads import _piece_display_id
 from echo_adventure.api.server import STATIC_ASSETS, GameSession, SessionStore
 from echo_adventure.api.view import INDEX_HTML
 
@@ -314,6 +315,23 @@ class ShiftProgressionPayloadTests(unittest.TestCase):
         self.assertIsNotNone(session.last_result)
         self.assertEqual(session.last_result.start_snapshot.shift, initial["snapshot"]["shift"])
         self.assertEqual(session.last_result.end_snapshot.shift, initial["snapshot"]["shift"] + session.config.shifts_per_day)
+
+    def test_state_payload_includes_live_past_due_subjobs(self):
+        session = GameSession(seed=123)
+        target_job = next(job for job in session.player_state.jobs.values() if not job.is_complete)
+        session.player_state.current_shift = 6
+        for job in session.player_state.jobs.values():
+            job.due_shift = session.player_state.deadline_shift
+        target_job.due_shift = 1
+        target_job.remaining_duration_shifts = 4
+        update_state_metrics(session.player_state)
+
+        payload = session.state_payload()
+
+        self.assertEqual(payload["snapshot"]["jobsBehindSchedule"], 1)
+        self.assertEqual(payload["pastDueJobs"][0]["id"], target_job.id)
+        self.assertEqual(payload["pastDueJobs"][0]["piece"], _piece_display_id(target_job.piece_id))
+        self.assertEqual(payload["pastDueJobs"][0]["remaining"], 4)
 
     def test_summary_puzzle_does_not_change_after_midday_progress(self):
         session = GameSession(seed=123)

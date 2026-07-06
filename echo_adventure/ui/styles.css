@@ -351,11 +351,19 @@ section { overflow: visible; }
   border-color: rgba(0, 114, 178, 0.34);
   box-shadow: 0 0 0 1px rgba(0, 114, 178, 0.08);
 }
+.metric.hoverable:hover,
+.metric.hoverable:focus-within {
+  border-color: rgba(0, 114, 178, 0.62);
+  box-shadow: 0 0 0 2px rgba(0, 114, 178, 0.14);
+}
 .metric-title-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+.metric-label {
+  min-width: 0;
 }
 .metric-hint {
   display: inline-flex;
@@ -425,6 +433,11 @@ section { overflow: visible; }
 .metric-popover td:first-child {
   white-space: normal;
   min-width: 92px;
+}
+.metric-empty {
+  margin: 0;
+  padding: 14px 10px;
+  text-align: center;
 }
 html[data-theme="dark"] .metric-popover {
   background: #1a202a;

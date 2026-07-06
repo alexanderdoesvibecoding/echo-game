@@ -38,6 +38,7 @@ class PayloadMixin:
                 "projectedCompletion": day_shift(snapshot.projected_completion_shift, self.config.shifts_per_day),
                 "snapshot": _snapshot_payload(snapshot, self.config.shifts_per_day),
                 "pieces": self._pieces_payload(),
+                "pastDueJobs": self._past_due_jobs_payload(),
                 "criticalPath": self._critical_path_payload(),
                 "decisions": [_card_payload(card, self.applied_choices.get(card.id)) for card in self.current_cards],
                 "decisionProgress": _decision_progress_payload(
