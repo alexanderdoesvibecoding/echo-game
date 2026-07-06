@@ -30,13 +30,16 @@ class PayloadMixin:
             # Keep payload fields deliberately flat and table-oriented. The
             # frontend is plain JavaScript, so it benefits from data shaped
             # close to the rows and panels it renders.
+            snapshot_payload = _snapshot_payload(snapshot, self.config.shifts_per_day)
+            snapshot_payload["jobsCompletedToday"] = self._live_jobs_completed_today()
             payload: dict[str, Any] = {
                 "seed": self.seed,
                 "gameOver": game_over,
                 "day": self.player_state.current_day,
                 "shiftsPerDay": self.config.shifts_per_day,
+                "dayCycleDurationMs": self.config.day_cycle_duration_ms,
                 "projectedCompletion": day_shift(snapshot.projected_completion_shift, self.config.shifts_per_day),
-                "snapshot": _snapshot_payload(snapshot, self.config.shifts_per_day),
+                "snapshot": snapshot_payload,
                 "pieces": self._pieces_payload(),
                 "criticalPath": self._critical_path_payload(),
                 "decisions": [_card_payload(card, self.applied_choices.get(card.id)) for card in self.current_cards],
@@ -44,6 +47,7 @@ class PayloadMixin:
                     decision_progress(self.player_state, self.player_state.current_day, self.applied_choices)
                 ),
                 "appliedChoices": self.choice_notes[-6:],
+                "livePuzzle": self._live_puzzle_payload(),
                 "lastSummary": self._summary_payload(),
             }
             if game_over:
@@ -52,6 +56,13 @@ class PayloadMixin:
                 self._finish_automated()
                 payload["finalReveal"] = self._final_payload()
             return payload
+
+    def _live_jobs_completed_today(self) -> int:
+        """Return subjobs completed during the current in-progress day."""
+        if getattr(self, "day_start_snapshot", None) is None:
+            return 0
+        completed_before = set(getattr(self, "day_completed_before", set()))
+        return max(0, len(set(self.player_state.completed_jobs) - completed_before))
 
     def _pieces_payload(self) -> list[dict[str, Any]]:
         """Return the compact top-level job rows rendered by the current UI."""
@@ -157,13 +168,37 @@ class PayloadMixin:
             return self.last_summary_puzzle
         return self._build_summary_puzzle_payload()
 
+    def _live_puzzle_payload(self) -> dict[str, Any]:
+        """Return the current submarine assembly state for live page rendering."""
+        start_shift = (
+            getattr(self, "day_start_shift", None)
+            if getattr(self, "day_start_snapshot", None) is not None
+            else None
+        )
+        return self._build_puzzle_payload(
+            day=self.player_state.current_day,
+            start_shift=start_shift,
+            end_shift=self.player_state.current_shift,
+        )
+
     def _build_summary_puzzle_payload(self) -> dict[str, Any]:
         """Build submarine puzzle tiles at the moment a daily summary is created."""
         if not self.last_result:
             return {"day": self.player_state.current_day, "total": 0, "completed": 0, "completedToday": 0, "tiles": []}
 
-        start_shift = self.last_result.start_snapshot.shift
-        end_shift = self.last_result.end_snapshot.shift
+        return self._build_puzzle_payload(
+            day=self.last_result.end_snapshot.day,
+            start_shift=self.last_result.start_snapshot.shift,
+            end_shift=self.last_result.end_snapshot.shift,
+        )
+
+    def _build_puzzle_payload(
+        self,
+        day: int,
+        start_shift: int | None,
+        end_shift: int,
+    ) -> dict[str, Any]:
+        """Build submarine puzzle tiles for a shift window."""
         tiles = []
 
         for piece in sorted(self.player_state.pieces.values(), key=lambda item: item.id):
@@ -171,7 +206,11 @@ class PayloadMixin:
             due_shift = _piece_due_shift(self.player_state, piece)
             completed = completion_shift is not None
             late = bool(completed and completion_shift > due_shift)
-            newly_completed = bool(completed and start_shift < completion_shift <= end_shift)
+            newly_completed = bool(
+                completed
+                and start_shift is not None
+                and start_shift < completion_shift <= end_shift
+            )
 
             tiles.append(
                 {
@@ -188,7 +227,7 @@ class PayloadMixin:
             )
 
         return {
-            "day": self.last_result.end_snapshot.day,
+            "day": day,
             "total": len(tiles),
             "completed": sum(1 for tile in tiles if tile["completed"]),
             "completedToday": sum(1 for tile in tiles if tile["newlyCompleted"]),

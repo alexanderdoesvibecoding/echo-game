@@ -230,7 +230,7 @@ function renderPuzzleSection(tile, slot, className, transform = "") {
   `;
 }
 
-function renderSubmarinePuzzle(puzzle, instanceId) {
+export function renderSubmarinePuzzle(puzzle, instanceId) {
   const tiles = Array.isArray(puzzle?.tiles) ? puzzle.tiles : [];
   if (!tiles.length) return "";
 
@@ -297,8 +297,12 @@ export function renderSummaryModal() {
 }
 
 export function renderSummary() {
-  const summary = uiState.state.lastSummary;
-  $("summarySection").classList.toggle("hidden", !summary);
-  if (!summary) return;
-  $("summaryGrid").innerHTML = renderSummaryGrid(summary, uiState.state.pieces.length, "summary-panel");
+  const puzzle = uiState.state.livePuzzle;
+  $("summarySection").classList.toggle("hidden", !puzzle);
+  if (!puzzle) return;
+  $("summaryGrid").innerHTML = `
+    <div class="reveal-panel summary-puzzle-panel live-submarine-panel">
+      ${renderSubmarinePuzzle(puzzle, "live-submarine")}
+    </div>
+  `;
 }

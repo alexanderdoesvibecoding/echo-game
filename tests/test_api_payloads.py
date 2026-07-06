@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from io import BytesIO
 import json
+import threading
 import unittest
 
 from echo_adventure.api.payloads import (
+    PayloadMixin,
     _card_payload,
     _choice_by_id,
     _choice_payload,
@@ -27,6 +29,46 @@ from .helpers import make_card, make_choice, make_state, unit_config
 
 
 class PayloadHelperTests(unittest.TestCase):
+    def test_state_payload_exposes_day_cycle_duration_from_config(self):
+        harness = PayloadHarness(unit_config(day_cycle_duration_ms=12345), make_state())
+
+        payload = harness.state_payload()
+
+        self.assertEqual(payload["dayCycleDurationMs"], 12345)
+        self.assertEqual(payload["snapshot"]["jobsCompletedToday"], 0)
+
+    def test_state_payload_counts_live_subjobs_completed_today(self):
+        state = make_state()
+        state.jobs["JOB-01-001"].status = JobStatus.COMPLETE
+        state.jobs["JOB-01-001"].completed_shift = 1
+        state.completed_jobs.add("JOB-01-001")
+        harness = PayloadHarness(unit_config(), state)
+        harness.day_start_snapshot = object()
+
+        payload = harness.state_payload()
+
+        self.assertEqual(payload["snapshot"]["jobsCompletedToday"], 1)
+
+    def test_state_payload_includes_live_submarine_puzzle(self):
+        state = make_state()
+        state.current_shift = 2
+        for job_id in ("JOB-01-001", "JOB-01-002"):
+            state.jobs[job_id].status = JobStatus.COMPLETE
+            state.jobs[job_id].completed_shift = 2
+            state.completed_jobs.add(job_id)
+        harness = PayloadHarness(unit_config(), state)
+        harness.day_start_snapshot = object()
+        harness.day_start_shift = 0
+
+        payload = harness.state_payload()
+        puzzle = payload["livePuzzle"]
+        completed_tile = next(tile for tile in puzzle["tiles"] if tile["id"] == "PIECE-01")
+
+        self.assertEqual(puzzle["completed"], 1)
+        self.assertEqual(puzzle["completedToday"], 1)
+        self.assertTrue(completed_tile["completed"])
+        self.assertTrue(completed_tile["newlyCompleted"])
+
     def test_snapshot_payload_includes_score_fields_when_state_is_supplied(self):
         state = make_state()
         state.decision_path = ["CARD:A"]
@@ -125,6 +167,29 @@ class ReviewHarness(ReviewMixin):
         self.config = config
         self.player_state = player_state
         self.automated_state = automated_state
+
+
+class PayloadHarness(PayloadMixin):
+    def __init__(self, config, player_state):
+        self.lock = threading.RLock()
+        self.seed = config.seed
+        self.config = config
+        self.player_state = player_state
+        self.current_cards = []
+        self.applied_choices = {}
+        self.choice_notes = []
+        self.last_result = None
+        self.last_summary_past_due_jobs = None
+        self.last_summary_puzzle = None
+        self.day_start_snapshot = None
+        self.day_completed_before = set()
+        self.day_start_shift = None
+
+    def _ensure_cards(self):
+        return None
+
+    def _game_over(self):
+        return False
 
 
 class ServerHelperTests(unittest.TestCase):

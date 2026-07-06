@@ -10,9 +10,9 @@
   --red: #b63b24;
   --green: #007a5e;
   --violet: #7b5ab6;
-  --day-progress-start: var(--teal);
+  --day-progress-start: var(--amber);
   --day-progress-mid: var(--violet);
-  --day-progress-end: var(--amber);
+  --day-progress-end: var(--teal);
   --day-progress-pause-stripe: rgba(31, 36, 40, 0.22);
   --shadow: 0 14px 32px rgba(31, 36, 40, 0.08);
 }
@@ -345,6 +345,18 @@ section { overflow: visible; }
   font-size: 22px;
   line-height: 1.1;
   margin-top: 6px;
+}
+.metric.has-live-delta .metric-title-row {
+  padding-right: 52px;
+}
+.metric-live-delta {
+  position: absolute;
+  top: 10px;
+  right: 11px;
+  color: var(--green);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
 }
 .metric.hoverable {
   cursor: help;
@@ -780,6 +792,9 @@ tr:last-child td { border-bottom: none; }
 }
 .summary-puzzle-panel .submarine-puzzle {
   margin-bottom: 0;
+}
+.live-submarine-panel {
+  grid-column: 1 / -1;
 }
 .summary-past-due-panel,
 .summary-stats-panel,

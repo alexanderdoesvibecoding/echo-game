@@ -155,6 +155,7 @@ class GameConfig:
     max_branch_variants_per_day: int = 12
     echo_choice_lookahead_days: int = 0
     echo_choice_projection_limit: int = 0
+    day_cycle_duration_ms: int = 8000
     seed: int | None = None
 
     @property
@@ -204,6 +205,7 @@ def _validate_config(preset: str, config: GameConfig) -> None:
         "min_capable_workcenters_per_capability",
         "min_candidate_workcenters_per_job",
         "max_candidate_workcenters_per_job",
+        "day_cycle_duration_ms",
     ]
     for field in positive_fields:
         if int(getattr(config, field)) < 1:
