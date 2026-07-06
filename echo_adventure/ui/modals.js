@@ -2,6 +2,7 @@
 
 import { uiState } from "./state.js";
 import { $, escapeHtml } from "./html.js";
+import { renderSubmarineImage } from "./submarineVisual.js";
 
 const callbacks = {
   renderDecisionModal: () => {},
@@ -20,8 +21,18 @@ export function renderWelcomeModal() {
 }
 
 function renderWelcomeContent() {
+  const visual = $("welcomeSubmarineVisual");
   const blurb = $("welcomeBlurb");
   const list = $("welcomeCriticalPath");
+
+  if (visual) {
+    visual.innerHTML = renderSubmarineImage({
+      idPrefix: "welcomeSubmarine",
+      className: "welcome-submarine-image",
+      ariaLabel: "Submarine underway",
+    });
+  }
+
   if (!blurb || !list) return;
 
   const jobCount = Array.isArray(uiState.state?.pieces) ? uiState.state.pieces.length : 0;

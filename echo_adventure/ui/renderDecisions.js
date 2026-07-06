@@ -442,7 +442,7 @@ export function renderInlineDecisions() {
         ${renderDayClock(status, decisionDue)}
         ${decisionDue ? `
           <div class="inline-decision-actions">
-            <button class="primary" onclick="openDecisionModal()">Respond</button>
+            <button type="button" class="primary" data-action="open-decision-modal">Respond</button>
           </div>
         ` : ""}
       </div>

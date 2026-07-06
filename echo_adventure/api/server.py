@@ -23,6 +23,7 @@ STATIC_ASSETS = {
     "/ui/renderMetrics.js": ("application/javascript; charset=utf-8", UI_DIR / "renderMetrics.js"),
     "/ui/renderSummary.js": ("application/javascript; charset=utf-8", UI_DIR / "renderSummary.js"),
     "/ui/state.js": ("application/javascript; charset=utf-8", UI_DIR / "state.js"),
+    "/ui/submarineVisual.js": ("application/javascript; charset=utf-8", UI_DIR / "submarineVisual.js"),
     "/ui/styles.css": ("text/css; charset=utf-8", UI_DIR / "styles.css"),
 }
 

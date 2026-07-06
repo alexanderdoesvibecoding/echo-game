@@ -146,6 +146,37 @@ class StaticViewAssetTests(unittest.TestCase):
         self.assertIn('$("projectPositionSection").classList.toggle("hidden", gameOver)', source)
         self.assertIn('$("dailyDecisionSection").classList.toggle("hidden", gameOver)', source)
 
+    def test_respond_button_reopens_dismissed_daily_decision_modal(self):
+        app_source = STATIC_ASSETS["/ui/app.js"][1].read_text(encoding="utf-8")
+        decision_source = STATIC_ASSETS["/ui/renderDecisions.js"][1].read_text(encoding="utf-8")
+
+        self.assertIn('data-action="open-decision-modal"', decision_source)
+        self.assertIn('document.addEventListener("pointerdown"', app_source)
+        self.assertIn('closest(\'[data-action="open-decision-modal"]\')', app_source)
+        self.assertNotIn('onclick="openDecisionModal()"', decision_source)
+
+    def test_daily_decision_modal_only_closes_from_close_button(self):
+        app_source = STATIC_ASSETS["/ui/app.js"][1].read_text(encoding="utf-8")
+
+        self.assertIn('target && target.id === "closeDecisionModalBtn"', app_source)
+        self.assertNotIn('decisionOverlay && target === decisionOverlay', app_source)
+
+    def test_live_submarine_assembly_is_scaled_down(self):
+        styles = STATIC_ASSETS["/ui/styles.css"][1].read_text(encoding="utf-8")
+
+        self.assertIn(".live-submarine-panel .submarine-puzzle", styles)
+        self.assertIn("width: min(100%, 640px)", styles)
+
+    def test_welcome_and_day_progress_share_submarine_visual(self):
+        modal_source = STATIC_ASSETS["/ui/modals.js"][1].read_text(encoding="utf-8")
+        clock_source = STATIC_ASSETS["/ui/dayClock.js"][1].read_text(encoding="utf-8")
+
+        self.assertIn("/ui/submarineVisual.js", STATIC_ASSETS)
+        self.assertIn('id="welcomeSubmarineVisual"', INDEX_HTML)
+        self.assertIn('from "./submarineVisual.js"', modal_source)
+        self.assertIn('from "./submarineVisual.js"', clock_source)
+        self.assertIn("day-progress-submarine", clock_source)
+
 
 class FinalDecisionGraphPayloadTests(unittest.TestCase):
     def test_decision_chart_payload_includes_player_and_echo_choice_details(self):

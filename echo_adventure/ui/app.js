@@ -179,31 +179,40 @@ $("settingsMenuBtn").addEventListener("click", toggleSettingsMenu);
 $("openNewRunModalBtn").addEventListener("click", openNewRunModal);
 $("themeMenuBtn").addEventListener("click", toggleDarkMode);
 
+document.addEventListener("pointerdown", (e) => {
+  const target = e.target instanceof Element ? e.target : null;
+  if (!target?.closest('[data-action="open-decision-modal"]')) return;
+  e.preventDefault();
+  openDecisionModal();
+});
+
 document.addEventListener("click", (e) => {
+  const target = e.target instanceof Element ? e.target : null;
   const welcomeOverlay = document.getElementById("welcomeModalOverlay");
   const newRunOverlay = document.getElementById("newRunModalOverlay");
   const decisionOverlay = document.getElementById("decisionModalOverlay");
   const settingsWrap = document.querySelector(".settings-wrap");
-  if (settingsWrap && !settingsWrap.contains(e.target)) {
+  if (settingsWrap && target && !settingsWrap.contains(target)) {
     closeSettingsMenu();
   }
-  if (e.target && e.target.id === "closeWelcomeBtn") {
+  if (target?.closest('[data-action="open-decision-modal"]')) {
+    openDecisionModal();
+    return;
+  }
+  if (target && target.id === "closeWelcomeBtn") {
     closeWelcomeModal();
   }
-  if (e.target && e.target.id === "closeNewRunModalBtn") {
+  if (target && target.id === "closeNewRunModalBtn") {
     closeNewRunModal();
   }
-  if (e.target && e.target.id === "closeDecisionModalBtn") {
+  if (target && target.id === "closeDecisionModalBtn") {
     closeDecisionModal();
   }
-  if (welcomeOverlay && e.target === welcomeOverlay) {
+  if (welcomeOverlay && target === welcomeOverlay) {
     closeWelcomeModal();
   }
-  if (newRunOverlay && e.target === newRunOverlay) {
+  if (newRunOverlay && target === newRunOverlay) {
     closeNewRunModal();
-  }
-  if (decisionOverlay && e.target === decisionOverlay) {
-    closeDecisionModal();
   }
 });
 

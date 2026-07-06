@@ -3,6 +3,7 @@
 import { api } from "./api.js";
 import { uiState } from "./state.js";
 import { escapeHtml } from "./html.js";
+import { renderSubmarineImage } from "./submarineVisual.js";
 
 const DEFAULT_DAY_CYCLE_DURATION_MS = 8000;
 const DAY_CYCLE_TICK_MS = 220;
@@ -275,6 +276,7 @@ async function advanceShift(marker) {
 
 export function renderDayClock(statusText, paused = false) {
   const percent = dayCyclePercent();
+  const markerPercent = Number(percent.toFixed(2));
   const gradientWidth = dayProgressGradientWidth(percent);
   return `
     <div class="day-clock">
@@ -284,6 +286,13 @@ export function renderDayClock(statusText, paused = false) {
       </div>
       <div class="day-progress-track" aria-label="Day progress, ${Math.round(percent)} percent">
         <div class="day-progress-fill ${paused ? "paused" : ""}" style="width:${percent}%; --day-progress-gradient-width:${gradientWidth}"></div>
+        <div class="day-progress-submarine" style="left:${markerPercent}%">
+          ${renderSubmarineImage({
+            idPrefix: "dayProgressSubmarine",
+            className: "day-progress-submarine-image",
+            decorative: true,
+          })}
+        </div>
       </div>
     </div>
   `;
