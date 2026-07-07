@@ -3,37 +3,6 @@
 import { uiState } from "./state.js";
 import { $, escapeHtml } from "./html.js";
 
-function renderPastDueJobs(pastDueJobs) {
-  if (!pastDueJobs || pastDueJobs.length === 0) {
-    return `<p class="subtle">No past due subjobs.</p>`;
-  }
-
-  return `
-    <table>
-      <thead>
-        <tr>
-          <th>Subjob</th>
-          <th>Shop</th>
-          <th>Due</th>
-          <th>Late</th>
-          <th>Remaining</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${pastDueJobs.map(job => `
-          <tr>
-            <td>${escapeHtml(job.id)}</td>
-            <td>${escapeHtml(job.shop)}</td>
-            <td>${escapeHtml(job.due)}</td>
-            <td>${job.daysLate} day${job.daysLate === 1 ? "" : "s"}</td>
-            <td>${job.remaining} work period${job.remaining === 1 ? "" : "s"}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  `;
-}
-
 function renderSummaryMetricBar(summary, piecesTotal) {
   const risk = Math.round(Number(summary.risk || 0));
   const metrics = [
@@ -96,18 +65,12 @@ function renderSummaryGrid(summary, piecesTotal, puzzleInstanceId) {
     .join("") || "<li>No notable notes recorded.</li>";
   return `
     ${renderSummaryMetricBar(summary, piecesTotal)}
+    <div class="summary-updates-banner" role="status">
+      <h3>Updates</h3>
+      <ul class="notes">${notesMarkup}</ul>
+    </div>
     <div class="reveal-panel summary-puzzle-panel">
       ${renderSubmarinePuzzle(summary.puzzle, puzzleInstanceId)}
-    </div>
-    <div class="summary-detail-grid">
-      <div class="reveal-panel summary-updates-panel">
-        <h3>Updates</h3>
-        <ul class="notes">${notesMarkup}</ul>
-      </div>
-      <div class="reveal-panel summary-past-due-panel">
-        <h3>Past Due Subjobs</h3>
-        <div class="summary-table-scroll">${renderPastDueJobs(summary.pastDueJobs)}</div>
-      </div>
     </div>
   `;
 }

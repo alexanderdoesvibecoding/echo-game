@@ -120,11 +120,16 @@ class StaticViewAssetTests(unittest.TestCase):
         for _, asset_path in STATIC_ASSETS.values():
             self.assertTrue(asset_path.exists())
 
-    def test_final_chart_renderer_uses_cumulative_scores_and_correct_answer_copy(self):
+    def test_final_chart_renderer_uses_daily_score_groups_and_correct_answer_copy(self):
         source = STATIC_ASSETS["/ui/renderFinal.js"][1].read_text(encoding="utf-8")
 
+        self.assertIn("buildDailyDecisionGroups", source)
         self.assertIn("playerCumulativeScore", source)
         self.assertIn("echoCumulativeScore", source)
+        self.assertIn("chart-day-label", source)
+        self.assertIn("data-decisions", source)
+        self.assertIn("by day for player and ECHO", source)
+        self.assertIn("Should have picked", source)
         self.assertIn("Correct answer (ECHO)", source)
         self.assertIn("Your answer:", source)
         self.assertIn("cumulative decision score", source)
