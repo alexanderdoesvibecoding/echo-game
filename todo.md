@@ -16,8 +16,8 @@
 - [x] Where the daily summary goes currently after you advance to the next day (just at the bottom of the screen) change
   that so that it's essentially just a live summary of the puzzle, no longer just the previous days daily summary
 
-- [ ] Progress bar changes
-    - [ ] Make the tip of the progress bar a submarine
+- [x] Progress bar changes
+    - [x] Make the tip of the progress bar a submarine
     - [x] Make it progress faster through the day by making it slide very fast
 
 - [ ] Change the final chart to be day by day (instead of question by question), and the hover will show each of the
