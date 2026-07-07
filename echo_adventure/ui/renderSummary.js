@@ -34,19 +34,59 @@ function renderPastDueJobs(pastDueJobs) {
   `;
 }
 
-function renderSummaryStatsTable(summary, piecesTotal) {
+function renderSummaryMetricBar(summary, piecesTotal) {
+  const risk = Math.round(Number(summary.risk || 0));
+  const metrics = [
+    {
+      label: "Subjobs Today",
+      value: Number(summary.completedToday || 0),
+      tone: Number(summary.completedToday || 0) > 0 ? "good" : "warn",
+    },
+    {
+      label: "Subjobs Remaining",
+      value: Number(summary.jobsRemaining || 0),
+      tone: Number(summary.jobsRemaining || 0) > 0 ? "warn" : "good",
+    },
+    {
+      label: "Jobs Complete",
+      value: `${Number(summary.piecesCompleted || 0)}/${Math.max(1, Number(piecesTotal || 0))}`,
+      tone: Number(summary.piecesCompleted || 0) >= Number(piecesTotal || 0) ? "good" : "warn",
+    },
+    {
+      label: "Behind Schedule",
+      value: Number(summary.jobsBehindSchedule || 0),
+      tone: Number(summary.jobsBehindSchedule || 0) > 0 ? "warn" : "good",
+    },
+    {
+      label: "Late Subjobs",
+      value: Number(summary.jobsLate || 0),
+      tone: Number(summary.jobsLate || 0) > 0 ? "danger" : "good",
+    },
+    {
+      label: "Risk",
+      value: `${risk}/100`,
+      tone: risk > 70 ? "danger" : risk > 40 ? "warn" : "good",
+    },
+    {
+      label: "Projected Finish",
+      value: summary.projectedCompletion || "-",
+      tone: "good",
+    },
+  ];
+
   return `
-    <table>
-      <tbody>
-        <tr><td>Subjobs completed today</td><td>${summary.completedToday}</td></tr>
-        <tr><td>Subjobs remaining</td><td>${summary.jobsRemaining}</td></tr>
-        <tr><td>Jobs complete</td><td>${summary.piecesCompleted}/${piecesTotal}</td></tr>
-        <tr><td>Subjobs behind schedule</td><td>${summary.jobsBehindSchedule}</td></tr>
-        <tr><td>Subjobs late</td><td>${summary.jobsLate}</td></tr>
-        <tr><td>Risk</td><td>${Math.round(summary.risk)}/100</td></tr>
-        <tr><td>Projected completion</td><td>${summary.projectedCompletion}</td></tr>
-      </tbody>
-    </table>
+    <div class="summary-metrics-bar">
+      ${metrics.map(metric => `
+        <div class="metric summary-metric summary-metric-${metric.tone}">
+          <div class="metric-title-row">
+            <span class="subtle metric-label">${escapeHtml(metric.label)}</span>
+          </div>
+          <div class="metric-value-row summary-metric-value-row">
+            <strong>${escapeHtml(metric.value)}</strong>
+          </div>
+        </div>
+      `).join("")}
+    </div>
   `;
 }
 
@@ -55,16 +95,11 @@ function renderSummaryGrid(summary, piecesTotal, puzzleInstanceId) {
     .map(note => `<li>${escapeHtml(note)}</li>`)
     .join("") || "<li>No notable notes recorded.</li>";
   return `
-    <div class="summary-main-column">
-      <div class="reveal-panel summary-puzzle-panel">
-        ${renderSubmarinePuzzle(summary.puzzle, puzzleInstanceId)}
-      </div>
+    ${renderSummaryMetricBar(summary, piecesTotal)}
+    <div class="reveal-panel summary-puzzle-panel">
+      ${renderSubmarinePuzzle(summary.puzzle, puzzleInstanceId)}
     </div>
-    <div class="summary-side-column">
-      <div class="reveal-panel summary-stats-panel">
-        <h3>Stats</h3>
-        <div class="summary-table-scroll">${renderSummaryStatsTable(summary, piecesTotal)}</div>
-      </div>
+    <div class="summary-detail-grid">
       <div class="reveal-panel summary-updates-panel">
         <h3>Updates</h3>
         <ul class="notes">${notesMarkup}</ul>
@@ -192,48 +227,66 @@ function submarinePieceSlots(total) {
 
 const PUZZLE_SUBMARINE_VIEWBOX_WIDTH = 800;
 const PUZZLE_SUBMARINE_CENTER_Y = 220;
+const PUZZLE_SUBMARINE_WITH_LOOSE_OFFSET_Y = -64;
 const PUZZLE_WIDTH = 1080;
 const PUZZLE_MIN_HEIGHT = 430;
-const PUZZLE_SIDE_INSET = 96;
-const PUZZLE_SIDE_ROW_GAP = 122;
-const PUZZLE_SIDE_VERTICAL_PADDING = 108;
-const PUZZLE_SIDE_MAX_WIDTH = 176;
-const PUZZLE_SIDE_MAX_HEIGHT = 118;
+const PUZZLE_LOOSE_ROW_Y = 292;
+const PUZZLE_LOOSE_SIDE_PADDING = 74;
+const PUZZLE_LOOSE_GAP = 22;
+const PUZZLE_LOOSE_MAX_WIDTH = 150;
+const PUZZLE_LOOSE_MAX_HEIGHT = 70;
 
-function loosePieceRows(total) {
-  if (total <= 0) return 0;
-  return Math.ceil(total / 2);
+function loosePieceStageHeight() {
+  return PUZZLE_MIN_HEIGHT;
 }
 
-function loosePieceStageHeight(total) {
-  const rows = loosePieceRows(total);
-  if (!rows) return PUZZLE_MIN_HEIGHT;
-  return Math.max(PUZZLE_MIN_HEIGHT, (PUZZLE_SIDE_VERTICAL_PADDING * 2) + ((rows - 1) * PUZZLE_SIDE_ROW_GAP));
-}
-
-function loosePiecePosition(index, total, height) {
-  const rows = loosePieceRows(total);
-  const row = Math.floor(index / 2);
-  const side = index % 2;
-  const topY = (height / 2) - (((rows - 1) * PUZZLE_SIDE_ROW_GAP) / 2);
-  const angles = [-8, 7, -5, 6, -6, 4];
-  return {
-    x: side ? PUZZLE_WIDTH - PUZZLE_SIDE_INSET : PUZZLE_SIDE_INSET,
-    y: topY + row * PUZZLE_SIDE_ROW_GAP,
-    angle: angles[index % angles.length],
-  };
-}
-
-function loosePieceScale(slot) {
-  const bounds = slot.bounds || {
+function slotBounds(slot) {
+  return slot.bounds || {
     minX: slot.centerX - 80,
     maxX: slot.centerX + 80,
     minY: slot.centerY - 60,
     maxY: slot.centerY + 60,
   };
+}
+
+function loosePieceScale(slot) {
+  const bounds = slotBounds(slot);
   const width = Math.max(1, bounds.maxX - bounds.minX);
   const height = Math.max(1, bounds.maxY - bounds.minY);
-  return Math.min(1, PUZZLE_SIDE_MAX_WIDTH / width, PUZZLE_SIDE_MAX_HEIGHT / height);
+  return Math.min(1, PUZZLE_LOOSE_MAX_WIDTH / width, PUZZLE_LOOSE_MAX_HEIGHT / height);
+}
+
+function loosePieceLineLayout(items) {
+  if (!items.length) return [];
+
+  const base = items.map((item) => {
+    const bounds = slotBounds(item.slot);
+    const scale = loosePieceScale(item.slot);
+    return {
+      scale,
+      width: Math.max(1, (bounds.maxX - bounds.minX) * scale),
+    };
+  });
+  const availableWidth = PUZZLE_WIDTH - (PUZZLE_LOOSE_SIDE_PADDING * 2);
+  const gapTotal = PUZZLE_LOOSE_GAP * Math.max(0, items.length - 1);
+  const widthTotal = base.reduce((sum, item) => sum + item.width, 0);
+  const fitScale = Math.min(1, Math.max(0.42, (availableWidth - gapTotal) / Math.max(1, widthTotal)));
+  const rowWidth = (widthTotal * fitScale) + gapTotal;
+  let cursor = (PUZZLE_WIDTH - rowWidth) / 2;
+
+  return base.map((item) => {
+    const width = item.width * fitScale;
+    const position = {
+      x: cursor + (width / 2),
+      y: PUZZLE_LOOSE_ROW_Y,
+      angle: 0,
+    };
+    cursor += width + PUZZLE_LOOSE_GAP;
+    return {
+      position,
+      scale: item.scale * fitScale,
+    };
+  });
 }
 
 function loosePieceTransform(slot, position, scale) {
@@ -280,9 +333,11 @@ export function renderSubmarinePuzzle(puzzle, instanceId) {
   const unplacedItems = tiles
     .map((tile, index) => ({ tile, index, slot: slots[index] }))
     .filter((item) => !item.tile.completed);
-  const height = loosePieceStageHeight(unplacedItems.length);
+  const height = loosePieceStageHeight();
   const submarineOffsetX = (PUZZLE_WIDTH - PUZZLE_SUBMARINE_VIEWBOX_WIDTH) / 2;
-  const submarineOffsetY = (height / 2) - PUZZLE_SUBMARINE_CENTER_Y;
+  const submarineOffsetY = unplacedItems.length
+    ? PUZZLE_SUBMARINE_WITH_LOOSE_OFFSET_Y
+    : (height / 2) - PUZZLE_SUBMARINE_CENTER_Y;
   const submarineTransform = `translate(${submarineOffsetX.toFixed(1)} ${submarineOffsetY.toFixed(1)})`;
   const slotMarkup = slots.map((slot) => `
     <path class="puzzle-slot" d="${slot.path}">
@@ -292,10 +347,11 @@ export function renderSubmarinePuzzle(puzzle, instanceId) {
   const placedMarkup = tiles.map((tile, index) => (
     tile.completed ? renderPuzzleSection(tile, slots[index], "placed") : ""
   )).join("");
+  const looseLayouts = loosePieceLineLayout(unplacedItems);
   const unplacedMarkup = unplacedItems
     .map((item, looseIndex) => {
-      const position = loosePiecePosition(looseIndex, unplacedItems.length, height);
-      const transform = loosePieceTransform(item.slot, position, loosePieceScale(item.slot));
+      const layout = looseLayouts[looseIndex];
+      const transform = loosePieceTransform(item.slot, layout.position, layout.scale);
       return renderPuzzleSection(item.tile, item.slot, "unplaced", transform);
     }).join("");
   const placedToday = tiles.filter(tile => tile.completed && tile.newlyCompleted);

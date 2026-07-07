@@ -855,6 +855,11 @@ tr:last-child td { border-bottom: none; }
   grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
   gap: 10px;
 }
+.summary-metrics-bar {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(126px, 1fr)) minmax(180px, 1.25fr);
+  gap: 8px;
+}
 .final-metric {
   min-height: 82px;
   overflow: hidden;
@@ -881,6 +886,27 @@ tr:last-child td { border-bottom: none; }
   border-color: rgba(213, 94, 0, 0.36);
   box-shadow: inset 0 3px 0 rgba(213, 94, 0, 0.78);
 }
+.summary-metric {
+  min-height: 82px;
+  overflow: hidden;
+}
+.summary-metric-value-row strong {
+  font-size: 24px;
+  overflow-wrap: anywhere;
+  white-space: nowrap;
+}
+.summary-metric-good {
+  border-color: rgba(0, 122, 94, 0.3);
+  box-shadow: inset 0 3px 0 rgba(0, 122, 94, 0.7);
+}
+.summary-metric-warn {
+  border-color: rgba(213, 137, 0, 0.36);
+  box-shadow: inset 0 3px 0 rgba(213, 137, 0, 0.76);
+}
+.summary-metric-danger {
+  border-color: rgba(213, 94, 0, 0.36);
+  box-shadow: inset 0 3px 0 rgba(213, 94, 0, 0.78);
+}
 .final-chart-panel,
 .final-notes-panel {
   min-width: 0;
@@ -893,16 +919,15 @@ tr:last-child td { border-bottom: none; }
 }
 .summary-grid {
   display: grid;
-  grid-template-columns: minmax(360px, 1.25fr) minmax(280px, 0.75fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   padding: 14px;
   align-items: start;
 }
-.summary-main-column,
-.summary-side-column {
+.summary-detail-grid {
   display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
   gap: 12px;
-  align-content: start;
   min-width: 0;
 }
 .summary-puzzle-panel .submarine-puzzle {
@@ -916,7 +941,6 @@ tr:last-child td { border-bottom: none; }
   margin-inline: 0;
 }
 .summary-past-due-panel,
-.summary-stats-panel,
 .summary-updates-panel {
   min-width: 0;
   overflow: hidden;
@@ -1151,22 +1175,20 @@ html[data-theme="dark"] .puzzle-added {
 @media (max-width: 1120px) {
   main { grid-template-columns: 1fr; }
   .metrics { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
-  .summary-grid {
+  .summary-grid,
+  .summary-detail-grid {
     grid-template-columns: 1fr;
   }
-  .summary-main-column,
-  .summary-side-column {
-    display: contents;
-  }
-  .summary-puzzle-panel { order: 1; }
-  .summary-stats-panel { order: 2; }
-  .summary-updates-panel { order: 3; }
-  .summary-past-due-panel { order: 4; }
+  .summary-metrics-bar { grid-template-columns: repeat(3, minmax(145px, 1fr)); }
+  .summary-metrics-bar { order: 1; }
+  .summary-puzzle-panel { order: 2; }
+  .summary-detail-grid { order: 3; }
 }
 @media (max-width: 680px) {
   .topbar { grid-template-columns: auto 1fr; }
   main { padding: 12px; }
   .metrics, .split, .summary-grid { grid-template-columns: 1fr; }
+  .summary-metrics-bar { grid-template-columns: 1fr; }
   .decision-title-with-icon {
     grid-template-columns: auto minmax(0, 1fr);
   }
@@ -1205,7 +1227,7 @@ html[data-theme="dark"] .puzzle-added {
 .modal .modal-footer { display:flex; justify-content:flex-end; gap:8px; }
 .modal h3 { margin-top: 0; }
 .summary-modal {
-  max-width: 1160px;
+  max-width: 1280px;
 }
 .summary-modal > h1 {
   margin: 0 0 18px;

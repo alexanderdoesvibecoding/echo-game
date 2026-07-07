@@ -9,7 +9,7 @@
   of each shift
     * Need to check, but something similar should be done for jobs too if it updates similarly
 
-- [ ] Revamp Daily Summary screen
+- [x] Revamp Daily Summary screen
     * The numbers off to the side should be the size of the project position numbers
     * Additionally, the placement of the unplaced puzzle pieces gets funky after a couple are placed in the puzzle
 
@@ -25,7 +25,7 @@
 
 - [x] Remove decision audit from the end-of-game summary (as it is now captured in the chart)
 
-- [ ] Give the user a date. In the welcome say “must be done by December 30th” instead of just having vague “day 4,
+- [x] Give the user a date. In the welcome say “must be done by December 30th” instead of just having vague “day 4,
   shift 3”
 
 - [ ] Come up with a logo/brand, something that can go on the welcome screen
