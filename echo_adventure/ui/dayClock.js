@@ -284,7 +284,7 @@ export function renderDayClock(statusText, paused = false) {
         <span>${escapeHtml(statusText)}</span>
         <span>${Math.round(percent)}%</span>
       </div>
-      <div class="day-progress-track" aria-label="Day progress, ${Math.round(percent)} percent">
+      <div class="day-progress-track" aria-label="Workday progress, ${Math.round(percent)} percent">
         <div class="day-progress-fill ${paused ? "paused" : ""}" style="width:${percent}%; --day-progress-gradient-width:${gradientWidth}"></div>
         <div class="day-progress-submarine" style="left:${markerPercent}%">
           ${renderSubmarineImage({

@@ -68,6 +68,7 @@ function renderDecisionScoreChart(history) {
       data-series="${escapeHtml(series)}"
       data-label="${escapeHtml(label)}"
       data-day="${escapeHtml(decisionPoint.day || "-")}"
+      data-date-label="${escapeHtml(decisionPoint.dateLabel || "")}"
       data-question-title="${escapeHtml(questionTitle)}"
       data-question-text="${escapeHtml(questionText)}"
       data-player-choice="${escapeHtml(playerChoice)}"
@@ -199,7 +200,7 @@ export function showDecisionChartTooltip(event, marker) {
     : "";
   tooltip.innerHTML = `
     <strong>${escapeHtml(data.label || "Question")} decision</strong>
-    <div>Day ${escapeHtml(data.day || "-")}</div>
+    <div>Date: ${escapeHtml(data.dateLabel || "-")}</div>
     <div>Question: ${escapeHtml(data.questionTitle || "-")}</div>
     ${questionDetail}
     <div>Your answer: ${escapeHtml(data.playerChoice || "-")}</div>

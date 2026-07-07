@@ -30,15 +30,18 @@ class PayloadMixin:
             # Keep payload fields deliberately flat and table-oriented. The
             # frontend is plain JavaScript, so it benefits from data shaped
             # close to the rows and panels it renders.
-            snapshot_payload = _snapshot_payload(snapshot, self.config.shifts_per_day)
+            snapshot_payload = _snapshot_payload(snapshot, self.config.shifts_per_day, config=self.config)
             snapshot_payload["jobsCompletedToday"] = self._live_jobs_completed_today()
             payload: dict[str, Any] = {
                 "seed": self.seed,
                 "gameOver": game_over,
                 "day": self.player_state.current_day,
+                "currentDate": self.config.date_label_for_day(self.player_state.current_day),
+                "dateRange": self.config.date_range_label,
+                "deadlineDate": self.config.deadline_date_label,
                 "shiftsPerDay": self.config.shifts_per_day,
                 "dayCycleDurationMs": self.config.day_cycle_duration_ms,
-                "projectedCompletion": day_shift(snapshot.projected_completion_shift, self.config.shifts_per_day),
+                "projectedCompletion": self.config.date_label_for_shift(snapshot.projected_completion_shift),
                 "snapshot": snapshot_payload,
                 "pieces": self._pieces_payload(),
                 "pastDueJobs": self._past_due_jobs_payload(),
@@ -79,8 +82,8 @@ class PayloadMixin:
                     "displayId": _piece_display_id(piece.id),
                     "completed": piece.completed_job_count,
                     "total": piece.total_job_count,
-                    "dueDate": day_shift(due_shift, self.config.shifts_per_day),
-                    "projectedCompletion": day_shift(finish_shift, self.config.shifts_per_day),
+                    "dueDate": self.config.date_label_for_shift(due_shift),
+                    "projectedCompletion": self.config.date_label_for_shift(finish_shift),
                 }
             )
         return pieces
@@ -118,7 +121,7 @@ class PayloadMixin:
                     "id": job.id,
                     "piece": _piece_display_id(job.piece_id),
                     "shop": shop.name if shop else job.shop_id,
-                    "due": day_shift(job.due_shift, self.config.shifts_per_day),
+                    "due": self.config.date_label_for_shift(job.due_shift),
                     "daysLate": max(
                         1,
                         (self.player_state.current_shift - job.due_shift + self.config.shifts_per_day - 1)
@@ -151,7 +154,7 @@ class PayloadMixin:
             "reschedules": snapshot.reschedules,
             "idleTime": snapshot.idle_time,
             "risk": round(snapshot.schedule_risk, 1),
-            "projectedCompletion": day_shift(snapshot.projected_completion_shift, self.config.shifts_per_day),
+            "projectedCompletion": self.config.date_label_for_shift(snapshot.projected_completion_shift),
             "pastDueJobs": self._summary_past_due_jobs_payload(),
             "puzzle": self._summary_puzzle_payload(),
             "notes": self.last_result.notes[-10:],
@@ -222,8 +225,8 @@ class PayloadMixin:
                     "newlyCompleted": newly_completed,
                     "late": late,
                     "tone": "late" if late else "on-time" if completed else "pending",
-                    "due": day_shift(due_shift, self.config.shifts_per_day),
-                    "completedAt": day_shift(completion_shift, self.config.shifts_per_day) if completion_shift else None,
+                    "due": self.config.date_label_for_shift(due_shift),
+                    "completedAt": self.config.date_label_for_shift(completion_shift) if completion_shift else None,
                 }
             )
 
@@ -242,8 +245,18 @@ class PayloadMixin:
         review = self._final_review_payload(player_snapshot, automated_snapshot)
 
         return {
-            "player": _snapshot_payload(player_snapshot, self.config.shifts_per_day, self.player_state),
-            "automated": _snapshot_payload(automated_snapshot, self.config.shifts_per_day, self.automated_state),
+            "player": _snapshot_payload(
+                player_snapshot,
+                self.config.shifts_per_day,
+                self.player_state,
+                config=self.config,
+            ),
+            "automated": _snapshot_payload(
+                automated_snapshot,
+                self.config.shifts_per_day,
+                self.automated_state,
+                config=self.config,
+            ),
             "completionHistory": self._completion_history_payload(player_snapshot, automated_snapshot),
             "review": review,
             "explanation": review["reasons"],
@@ -299,6 +312,7 @@ class PayloadMixin:
                     "sequence": sequence,
                     "label": f"Q{sequence}",
                     "day": record.day,
+                    "dateLabel": self.config.date_label_for_day(record.day),
                     "questionId": record.card_id,
                     "questionTitle": record.card_title,
                     "questionText": card.description if card else record.card_title,
@@ -418,12 +432,19 @@ class PayloadMixin:
             counts[day] = cumulative
         return counts
 
-def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: SimulationState | None = None) -> dict[str, Any]:
+def _snapshot_payload(
+    snapshot: MetricSnapshot,
+    shifts_per_day: int,
+    state: SimulationState | None = None,
+    config=None,
+) -> dict[str, Any]:
     """Convert a MetricSnapshot into frontend-friendly camelCase fields."""
     completion_shift = state.completion_shift if state else None
+    shift_label = config.date_label_for_shift if config else lambda shift: day_shift(shift, shifts_per_day)
     payload = {
         "shift": snapshot.shift,
         "day": snapshot.day,
+        "date": config.date_label_for_day(snapshot.day) if config else day_shift(snapshot.shift, shifts_per_day),
         "piecesCompleted": snapshot.pieces_completed,
         "jobsCompleted": snapshot.jobs_completed,
         "jobsRemaining": snapshot.jobs_remaining,
@@ -433,10 +454,10 @@ def _snapshot_payload(snapshot: MetricSnapshot, shifts_per_day: int, state: Simu
         "reschedules": snapshot.reschedules,
         "scheduleRisk": round(snapshot.schedule_risk, 1),
         "projectedCompletionShift": snapshot.projected_completion_shift,
-        "projectedCompletion": day_shift(snapshot.projected_completion_shift, shifts_per_day),
+        "projectedCompletion": shift_label(snapshot.projected_completion_shift),
         "finalItemCompleted": snapshot.final_item_completed,
         "deadlineMet": snapshot.deadline_met,
-        "completion": day_shift(completion_shift, shifts_per_day) if completion_shift else None,
+        "completion": shift_label(completion_shift) if completion_shift else None,
     }
     if state:
         payload.update(

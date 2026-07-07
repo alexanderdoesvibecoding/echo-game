@@ -144,7 +144,7 @@ function commitAdvanceDay() {
 function render() {
   if (!uiState.state) return;
   syncDayCycleForState();
-  $("dayBadge").textContent = `Day ${uiState.state.day}`;
+  $("dayBadge").textContent = uiState.state.currentDate || "Schedule";
   $("projectedText").textContent = `Projected completion: ${uiState.state.projectedCompletion}`;
   renderMainSectionVisibility();
 

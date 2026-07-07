@@ -22,7 +22,6 @@ from echo_adventure.api.payloads import (
 from echo_adventure.api.review import ReviewMixin, _job_was_late
 from echo_adventure.api.server import GameRequestHandler, _parse_optional_seed
 from echo_adventure.enums import JobStatus
-from echo_adventure.metrics import day_shift
 from echo_adventure.metrics import calculate_snapshot, update_state_metrics
 from echo_adventure.models import DecisionProgress, DecisionRecord
 
@@ -77,10 +76,13 @@ class PayloadHelperTests(unittest.TestCase):
         state.decision_path_score_delta = 2.75
         snapshot = calculate_snapshot(state)
 
-        payload = _snapshot_payload(snapshot, shifts_per_day=3, state=state)
+        config = unit_config()
+
+        payload = _snapshot_payload(snapshot, shifts_per_day=3, state=state, config=config)
 
         self.assertEqual(payload["shift"], snapshot.shift)
-        self.assertEqual(payload["projectedCompletion"], day_shift(snapshot.projected_completion_shift, 3))
+        self.assertEqual(payload["projectedCompletion"], config.date_label_for_shift(snapshot.projected_completion_shift))
+        self.assertEqual(payload["date"], config.date_label_for_day(snapshot.day))
         self.assertEqual(payload["finalScore"], 2.75)
         self.assertNotIn("decisionPathSignature", payload)
         self.assertNotIn("decisionPathDifferentiator", payload)

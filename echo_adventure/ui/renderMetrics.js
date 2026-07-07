@@ -85,7 +85,7 @@ export function renderMetrics() {
 function renderShiftDelta(count, unitName) {
   if (!count) return "";
   const unit = Number(count) === 1 ? unitName : `${unitName}s`;
-  return `<span class="metric-live-delta" aria-live="polite" aria-label="${fmtNum(count)} ${unit} completed this shift">+${fmtNum(count)}</span>`;
+  return `<span class="metric-live-delta" aria-live="polite" aria-label="${fmtNum(count)} ${unit} completed this work period">+${fmtNum(count)}</span>`;
 }
 
 function syncMetricDeltas(snap) {
@@ -228,7 +228,7 @@ function renderSubjobsBehindSchedulePopover() {
             <td>${escapeHtml(job.shop || "-")}</td>
             <td>${escapeHtml(job.due || "-")}</td>
             <td>${fmtNum(job.daysLate)} day${Number(job.daysLate) === 1 ? "" : "s"}</td>
-            <td>${fmtNum(job.remaining)} shift${Number(job.remaining) === 1 ? "" : "s"}</td>
+            <td>${fmtNum(job.remaining)} work period${Number(job.remaining) === 1 ? "" : "s"}</td>
           </tr>
         `).join("")}
       </tbody>

@@ -43,6 +43,10 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.seed, 77)
         self.assertEqual(config.total_days, 8)
         self.assertEqual(config.deadline_shift, 24)
+        self.assertEqual(config.date_range_label, "December 23 to December 30")
+        self.assertEqual(config.deadline_date_label, "December 30")
+        self.assertEqual(config.date_label_for_shift(4), "December 24")
+        self.assertEqual(config.work_period_label_for_shift(4), "December 24, Morning")
         with self.assertRaisesRegex(ValueError, "Unknown game preset"):
             GameConfig.for_preset("missing")
 
@@ -66,6 +70,9 @@ class ConfigTests(unittest.TestCase):
             (replace(base, transport_delay_probability=1.01), "transport_delay_probability must be between"),
             (replace(base, setup_time_choices=()), "setup_time_choices cannot be empty"),
             (replace(base, setup_time_choices=(-1,)), "setup_time_choices cannot contain negative"),
+            (replace(base, end_date="2026-12-22"), "end_date must be on or after start_date"),
+            (replace(base, end_date="2026-12-31"), "total_days must match"),
+            (replace(base, work_period_labels=()), "work_period_labels cannot be empty"),
             (
                 replace(
                     base,

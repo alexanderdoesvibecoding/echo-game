@@ -422,14 +422,14 @@ export function renderInlineDecisions() {
       uiState.pendingChoice = null;
     }
     const decisionDue = nextDecisionIsDue();
-    const title = decisionDue ? "Decision Event" : "Day In Motion";
+    const title = decisionDue ? "Decision Event" : "Schedule In Motion";
     const badge = decisionDue ? `<span class="badge warn">Paused</span>` : `<span class="badge info">Rolling</span>`;
     const status = decisionDue
       ? "Paused for decision"
-      : "Day Progress";
+      : "Workday Progress";
     const detail = decisionDue
       ? `${escapeHtml(nextCard.title)}`
-      : "Work is moving through the day.";
+      : "Work is moving through the schedule.";
     body.innerHTML = `
       <div class="reveal-panel decision-status-panel">
         <div class="decision-title">
@@ -455,12 +455,12 @@ export function renderInlineDecisions() {
     <div class="reveal-panel decision-status-panel">
       <div class="decision-title">
         <div>
-          <h3>${ending ? "Day Complete" : "Day In Motion"}</h3>
-          <div class="subtle">Work is moving through the day.</div>
+          <h3>${ending ? "Workday Complete" : "Schedule In Motion"}</h3>
+          <div class="subtle">Work is moving through the schedule.</div>
         </div>
         <span class="badge good">${ending ? "Complete" : "Rolling"}</span>
       </div>
-      ${renderDayClock("Day Progress", ending)}
+      ${renderDayClock("Workday Progress", ending)}
     </div>
   `;
 }
@@ -499,8 +499,8 @@ export function renderDecisionModal() {
     return;
   }
 
-  title.textContent = "Daily Decision";
-  meta.textContent = `Day ${uiState.state.day}`;
+  title.textContent = "Decision Event";
+  meta.textContent = uiState.state.currentDate || "";
   body.innerHTML = `
     <div class="decision-prompt">
       <div class="decision-title decision-title-with-icon decision-prompt-head">

@@ -26,7 +26,7 @@ function renderPastDueJobs(pastDueJobs) {
             <td>${escapeHtml(job.shop)}</td>
             <td>${escapeHtml(job.due)}</td>
             <td>${job.daysLate} day${job.daysLate === 1 ? "" : "s"}</td>
-            <td>${job.remaining} shift${job.remaining === 1 ? "" : "s"}</td>
+            <td>${job.remaining} work period${job.remaining === 1 ? "" : "s"}</td>
           </tr>
         `).join("")}
       </tbody>
@@ -90,6 +90,7 @@ function submarinePieceSlots(total) {
     centerY: 220,
     labelY: 222,
     labelSize: 10,
+    bounds: { minX: 66, maxX: 150, minY: 166, maxY: 274 },
     details: [],
   });
   const noseSlot = () => ({
@@ -99,6 +100,7 @@ function submarinePieceSlots(total) {
     centerY: 220,
     labelY: 241,
     labelSize: 11,
+    bounds: { minX: 570, maxX: 738, minY: 172, maxY: 268 },
     details: [`<circle class="piece-detail-fill" cx="640" cy="209" r="12"></circle>`],
   });
   const sailSlot = () => ({
@@ -108,6 +110,7 @@ function submarinePieceSlots(total) {
     centerY: 124,
     labelY: 128,
     labelSize: 10,
+    bounds: { minX: 340, maxX: 438, minY: 68, maxY: 154 },
     details: [
       `<path class="piece-detail" d="M 376 90 L 376 68 L 390 68 M 408 90 L 408 72"></path>`,
     ],
@@ -145,6 +148,12 @@ function submarinePieceSlots(total) {
       centerY: (top1 + top2 + bottom1 + bottom2) / 4,
       labelY: portholes.length ? 242 : 222,
       labelSize: Math.max(9, Math.min(12, width * 0.13)),
+      bounds: {
+        minX: x1,
+        maxX: x2,
+        minY: Math.min(top1, top2) - 10,
+        maxY: Math.max(bottom1, bottom2) + 10,
+      },
       details: portholes,
     };
   };
@@ -157,6 +166,7 @@ function submarinePieceSlots(total) {
       centerY: 220,
       labelY: 222,
       labelSize: 13,
+      bounds: { minX: 70, maxX: 730, minY: 138, maxY: 302 },
       details: [],
     }];
   }
@@ -180,33 +190,63 @@ function submarinePieceSlots(total) {
   return slots.slice(0, total);
 }
 
-function loosePieceColumnCount(total) {
-  if (total <= 3) return 1;
-  if (total <= 8) return 4;
-  return 5;
-}
+const PUZZLE_SUBMARINE_VIEWBOX_WIDTH = 800;
+const PUZZLE_SUBMARINE_CENTER_Y = 220;
+const PUZZLE_WIDTH = 1080;
+const PUZZLE_MIN_HEIGHT = 430;
+const PUZZLE_SIDE_INSET = 96;
+const PUZZLE_SIDE_ROW_GAP = 122;
+const PUZZLE_SIDE_VERTICAL_PADDING = 108;
+const PUZZLE_SIDE_MAX_WIDTH = 176;
+const PUZZLE_SIDE_MAX_HEIGHT = 118;
 
 function loosePieceRows(total) {
   if (total <= 0) return 0;
-  return Math.ceil(total / loosePieceColumnCount(total));
+  return Math.ceil(total / 2);
 }
 
 function loosePieceStageHeight(total) {
   const rows = loosePieceRows(total);
-  return rows ? 550 + (rows - 1) * 170 : 500;
+  if (!rows) return PUZZLE_MIN_HEIGHT;
+  return Math.max(PUZZLE_MIN_HEIGHT, (PUZZLE_SIDE_VERTICAL_PADDING * 2) + ((rows - 1) * PUZZLE_SIDE_ROW_GAP));
 }
 
-function loosePiecePosition(index, total) {
-  const columns = loosePieceColumnCount(total);
-  const column = index % columns;
-  const row = Math.floor(index / columns);
-  const laneWidth = 800 / columns;
-  const angles = [-7, 5, -4, 7, -5];
+function loosePiecePosition(index, total, height) {
+  const rows = loosePieceRows(total);
+  const row = Math.floor(index / 2);
+  const side = index % 2;
+  const topY = (height / 2) - (((rows - 1) * PUZZLE_SIDE_ROW_GAP) / 2);
+  const angles = [-8, 7, -5, 6, -6, 4];
   return {
-    x: columns === 1 ? 400 : laneWidth * column + laneWidth / 2,
-    y: 420 + row * 170,
+    x: side ? PUZZLE_WIDTH - PUZZLE_SIDE_INSET : PUZZLE_SIDE_INSET,
+    y: topY + row * PUZZLE_SIDE_ROW_GAP,
     angle: angles[index % angles.length],
   };
+}
+
+function loosePieceScale(slot) {
+  const bounds = slot.bounds || {
+    minX: slot.centerX - 80,
+    maxX: slot.centerX + 80,
+    minY: slot.centerY - 60,
+    maxY: slot.centerY + 60,
+  };
+  const width = Math.max(1, bounds.maxX - bounds.minX);
+  const height = Math.max(1, bounds.maxY - bounds.minY);
+  return Math.min(1, PUZZLE_SIDE_MAX_WIDTH / width, PUZZLE_SIDE_MAX_HEIGHT / height);
+}
+
+function loosePieceTransform(slot, position, scale) {
+  const radians = position.angle * Math.PI / 180;
+  const cos = Math.cos(radians) * scale;
+  const sin = Math.sin(radians) * scale;
+  const a = cos;
+  const b = sin;
+  const c = -sin;
+  const d = cos;
+  const e = position.x - (a * slot.centerX) - (c * slot.centerY);
+  const f = position.y - (b * slot.centerX) - (d * slot.centerY);
+  return `matrix(${[a, b, c, d, e, f].map((value) => value.toFixed(3)).join(" ")})`;
 }
 
 function renderPuzzleSection(tile, slot, className, transform = "") {
@@ -235,12 +275,15 @@ export function renderSubmarinePuzzle(puzzle, instanceId) {
   if (!tiles.length) return "";
 
   const total = tiles.length;
-  const width = 800;
+  const width = PUZZLE_WIDTH;
   const slots = submarinePieceSlots(total);
   const unplacedItems = tiles
     .map((tile, index) => ({ tile, index, slot: slots[index] }))
     .filter((item) => !item.tile.completed);
   const height = loosePieceStageHeight(unplacedItems.length);
+  const submarineOffsetX = (PUZZLE_WIDTH - PUZZLE_SUBMARINE_VIEWBOX_WIDTH) / 2;
+  const submarineOffsetY = (height / 2) - PUZZLE_SUBMARINE_CENTER_Y;
+  const submarineTransform = `translate(${submarineOffsetX.toFixed(1)} ${submarineOffsetY.toFixed(1)})`;
   const slotMarkup = slots.map((slot) => `
     <path class="puzzle-slot" d="${slot.path}">
       <title>${escapeHtml(`${slot.part} slot`)}</title>
@@ -251,10 +294,8 @@ export function renderSubmarinePuzzle(puzzle, instanceId) {
   )).join("");
   const unplacedMarkup = unplacedItems
     .map((item, looseIndex) => {
-      const position = loosePiecePosition(looseIndex, unplacedItems.length);
-      const dx = position.x - item.slot.centerX;
-      const dy = position.y - item.slot.centerY;
-      const transform = `translate(${dx.toFixed(1)} ${dy.toFixed(1)}) rotate(${position.angle} ${item.slot.centerX.toFixed(1)} ${item.slot.centerY.toFixed(1)})`;
+      const position = loosePiecePosition(looseIndex, unplacedItems.length, height);
+      const transform = loosePieceTransform(item.slot, position, loosePieceScale(item.slot));
       return renderPuzzleSection(item.tile, item.slot, "unplaced", transform);
     }).join("");
   const placedToday = tiles.filter(tile => tile.completed && tile.newlyCompleted);
@@ -269,8 +310,10 @@ export function renderSubmarinePuzzle(puzzle, instanceId) {
       </div>
       <div class="puzzle-stage">
         <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Submarine puzzle showing assembled and waiting sections">
-          <g aria-hidden="true">${slotMarkup}</g>
-          <g>${placedMarkup}</g>
+          <g class="puzzle-submarine-center" transform="${submarineTransform}">
+            <g aria-hidden="true">${slotMarkup}</g>
+            <g>${placedMarkup}</g>
+          </g>
           <g>${unplacedMarkup}</g>
         </svg>
       </div>

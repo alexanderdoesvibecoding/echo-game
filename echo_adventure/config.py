@@ -3,7 +3,27 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import date, timedelta
 import random
+
+
+NORMAL_CAMPAIGN_START_DATE = "2026-12-23"
+NORMAL_CAMPAIGN_END_DATE = "2026-12-30"
+DEFAULT_WORK_PERIOD_LABELS = ("Morning", "Afternoon", "Night")
+_MONTH_NAMES = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
 
 
 @dataclass(frozen=True)
@@ -14,6 +34,8 @@ class WorkloadProfile:
     piece_count: int
     min_jobs_per_piece: int
     max_jobs_per_piece: int
+    start_date: str = NORMAL_CAMPAIGN_START_DATE
+    end_date: str | None = None
     min_job_duration_shifts: int = 1
     max_job_duration_shifts: int = 5
     setup_time_choices: tuple[int, ...] = (0, 0, 0, 1)
@@ -81,6 +103,8 @@ class BalancePreset:
         values: dict[str, object] = {}
         for profile in (self.workload, self.capacity, self.disruptions, self.decisions, self.echo):
             values.update(asdict(profile))
+        if values.get("end_date"):
+            values["total_days"] = _inclusive_date_span(str(values["start_date"]), str(values["end_date"]))
         return values
 
 
@@ -88,6 +112,8 @@ GAME_PRESETS: dict[str, BalancePreset] = {
     "normal": BalancePreset(
         workload=WorkloadProfile(
             total_days=8,
+            start_date=NORMAL_CAMPAIGN_START_DATE,
+            end_date=NORMAL_CAMPAIGN_END_DATE,
             piece_count=6,
             min_jobs_per_piece=5,
             max_jobs_per_piece=7,
@@ -126,6 +152,9 @@ class GameConfig:
 
     total_days: int = 15
     shifts_per_day: int = 3
+    start_date: str = NORMAL_CAMPAIGN_START_DATE
+    end_date: str | None = None
+    work_period_labels: tuple[str, ...] = DEFAULT_WORK_PERIOD_LABELS
     piece_count: int = 15
     shop_count: int = 9
     min_workcenters_per_shop: int = 1
@@ -163,6 +192,53 @@ class GameConfig:
         """Convert the day-based deadline into the simulation's shift clock."""
         return self.total_days * self.shifts_per_day
 
+    @property
+    def schedule_start(self) -> date:
+        """Return the configured campaign start date."""
+        return _parse_config_date("start_date", self.start_date)
+
+    @property
+    def schedule_end(self) -> date:
+        """Return the configured campaign deadline date."""
+        if self.end_date:
+            return _parse_config_date("end_date", self.end_date)
+        return self.schedule_start + timedelta(days=self.total_days - 1)
+
+    @property
+    def deadline_date_label(self) -> str:
+        """Return the player-facing deadline date."""
+        return _format_calendar_date(self.schedule_end)
+
+    @property
+    def date_range_label(self) -> str:
+        """Return the full configured campaign date range."""
+        start = _format_calendar_date(self.schedule_start)
+        end = self.deadline_date_label
+        return start if start == end else f"{start} to {end}"
+
+    def date_label_for_day(self, day: int) -> str:
+        """Return the calendar date for a one-based simulation day."""
+        safe_day = max(1, min(self.total_days, int(day or 1)))
+        return _format_calendar_date(self.schedule_start + timedelta(days=safe_day - 1))
+
+    def date_label_for_shift(self, shift: int | None) -> str:
+        """Return only the calendar date for an internal shift."""
+        safe_shift = max(1, int(shift or 1))
+        day = ((safe_shift - 1) // self.shifts_per_day) + 1
+        return self.date_label_for_day(day)
+
+    def work_period_label_for_shift(self, shift: int | None) -> str:
+        """Return the calendar date and named work period for an internal shift."""
+        safe_shift = max(1, int(shift or 1))
+        day = ((safe_shift - 1) // self.shifts_per_day) + 1
+        period_index = (safe_shift - 1) % self.shifts_per_day
+        period = (
+            self.work_period_labels[period_index]
+            if period_index < len(self.work_period_labels)
+            else f"Work period {period_index + 1}"
+        )
+        return f"{self.date_label_for_day(day)}, {period}"
+
     @classmethod
     def for_preset(
         cls,
@@ -185,6 +261,29 @@ def resolve_seed(seed: int | None) -> int:
     if seed is not None:
         return seed
     return random.SystemRandom().randint(100_000, 999_999_999)
+
+
+def _parse_config_date(field: str, value: str) -> date:
+    """Parse an ISO date configured in this module."""
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field} must use YYYY-MM-DD format.") from exc
+
+
+def _inclusive_date_span(start_date: str, end_date: str) -> int:
+    """Return the number of calendar days in an inclusive date range."""
+    start = _parse_config_date("start_date", start_date)
+    end = _parse_config_date("end_date", end_date)
+    span = (end - start).days + 1
+    if span < 1:
+        raise ValueError("end_date must be on or after start_date.")
+    return span
+
+
+def _format_calendar_date(value: date) -> str:
+    """Format dates without platform-specific strftime flags."""
+    return f"{_MONTH_NAMES[value.month - 1]} {value.day}"
 
 
 def _validate_config(preset: str, config: GameConfig) -> None:
@@ -210,6 +309,9 @@ def _validate_config(preset: str, config: GameConfig) -> None:
     for field in positive_fields:
         if int(getattr(config, field)) < 1:
             raise ValueError(f"{preset} preset {field} must be at least 1.")
+
+    if len(config.work_period_labels) < 1:
+        raise ValueError(f"{preset} preset work_period_labels cannot be empty.")
 
     non_negative_fields = [
         "min_base_events",
@@ -257,6 +359,17 @@ def _validate_config(preset: str, config: GameConfig) -> None:
         raise ValueError(f"{preset} preset setup_time_choices cannot be empty.")
     if any(choice < 0 for choice in config.setup_time_choices):
         raise ValueError(f"{preset} preset setup_time_choices cannot contain negative values.")
+
+    schedule_start = _parse_config_date("start_date", config.start_date)
+    schedule_end = config.schedule_end
+    if schedule_end < schedule_start:
+        raise ValueError(f"{preset} preset end_date must be on or after start_date.")
+    if config.end_date:
+        date_span = (schedule_end - schedule_start).days + 1
+        if date_span != config.total_days:
+            raise ValueError(
+                f"{preset} preset total_days must match the inclusive start_date/end_date range ({date_span})."
+            )
 
     if config.completion_rework_probability > 0 and config.max_completion_rework_shifts < 1:
         raise ValueError(

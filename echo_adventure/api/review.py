@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from ..enums import JobStatus
-from ..metrics import day_shift
 from ..models import MetricSnapshot, SimulationState
 
 
@@ -22,7 +21,7 @@ class ReviewMixin:
         echo_won = automated_snapshot.deadline_met
 
         player_complete_label = (
-            day_shift(self.player_state.completion_shift, self.config.shifts_per_day)
+            self.config.date_label_for_shift(self.player_state.completion_shift)
             if self.player_state.completion_shift
             else "not completed"
         )
@@ -53,11 +52,11 @@ class ReviewMixin:
             if self.player_state.completion_shift and self.automated_state.completion_shift:
                 delta = self.player_state.completion_shift - self.automated_state.completion_shift
                 if delta < 0:
-                    reasons.append(f"You finished {abs(delta)} shift(s) earlier than ECHO.")
+                    reasons.append(f"You finished {abs(delta)} work period(s) earlier than ECHO.")
                 elif delta > 0:
-                    reasons.append(f"You met the deadline, but ECHO finished {delta} shift(s) earlier.")
+                    reasons.append(f"You met the deadline, but ECHO finished {delta} work period(s) earlier.")
                 else:
-                    reasons.append("You and ECHO finished at the same shift.")
+                    reasons.append("You and ECHO finished in the same work period.")
 
         return {
             "outcome": outcome,
@@ -125,7 +124,7 @@ class ReviewMixin:
             delta = player_snapshot.jobs_late - automated_snapshot.jobs_late
             reasons.append(f"Your schedule had {delta} more late subjob(s) than ECHO's benchmark.")
 
-        return reasons or ["The project missed the deadline because remaining work exceeded the available shifts."]
+        return reasons or ["The project missed the deadline because remaining work exceeded the available work periods."]
 
     def _win_reasons(
         self,
@@ -138,7 +137,7 @@ class ReviewMixin:
         if self.player_state.completion_shift:
             margin = self.player_state.deadline_shift - self.player_state.completion_shift
             if margin > 0:
-                reasons.append(f"You finished with {margin} shift(s) of deadline margin.")
+                reasons.append(f"You finished with {margin} work period(s) of deadline margin.")
             else:
                 reasons.append("You finished exactly at the deadline.")
 

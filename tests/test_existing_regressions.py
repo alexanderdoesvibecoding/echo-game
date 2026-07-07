@@ -161,11 +161,12 @@ class StaticViewAssetTests(unittest.TestCase):
         self.assertIn('target && target.id === "closeDecisionModalBtn"', app_source)
         self.assertNotIn('decisionOverlay && target === decisionOverlay', app_source)
 
-    def test_live_submarine_assembly_is_scaled_down(self):
+    def test_live_submarine_assembly_uses_full_panel_width(self):
         styles = STATIC_ASSETS["/ui/styles.css"][1].read_text(encoding="utf-8")
 
         self.assertIn(".live-submarine-panel .submarine-puzzle", styles)
-        self.assertIn("width: min(100%, 640px)", styles)
+        self.assertIn("width: 100%", styles)
+        self.assertNotIn("width: min(100%, 640px)", styles)
 
     def test_welcome_and_day_progress_share_submarine_visual(self):
         modal_source = STATIC_ASSETS["/ui/modals.js"][1].read_text(encoding="utf-8")
