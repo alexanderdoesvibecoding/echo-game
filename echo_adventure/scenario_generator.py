@@ -7,9 +7,16 @@ import random
 
 from .config import GameConfig
 from .decisions import generate_campaign_decision_graph
-from .enums import JobStatus
 from .events import generate_event_timeline
-from .models import Job, PuzzlePiece, Scenario, Shop, SimulationState, WorkCenter
+from .models import (
+    Job,
+    PuzzlePiece,
+    Scenario,
+    Shop,
+    SimulationState,
+    WorkCenter,
+    build_pending_job,
+)
 
 
 SHOP_BLUEPRINTS = [
@@ -252,20 +259,16 @@ def _generate_pieces_and_jobs(
                 and rng.random() < config.transport_delay_probability
                 else 0
             )
-            duration = base_duration + setup + transport
-            job = Job(
+            job = build_pending_job(
                 id=job_id,
                 piece_id=piece_id,
                 shop_id=shop_id,
                 required_capability=capability,
                 candidate_workcenter_ids=candidate_ids,
-                assigned_workcenter_id=None,
                 base_duration_shifts=base_duration,
-                remaining_duration_shifts=duration,
                 setup_time_shifts=setup,
                 transport_delay_shifts=transport,
                 dependency_ids=dependencies,
-                status=JobStatus.NOT_READY,
                 priority=rng.randint(35, 75),
                 due_shift=piece_due_shift,
                 risk_score=float(rng.randint(8, 30)),

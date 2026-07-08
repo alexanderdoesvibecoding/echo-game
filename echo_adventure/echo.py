@@ -13,6 +13,7 @@ from .decisions.selectors import (
     _jobs_for_card,
 )
 from .enums import DecisionType, EventType
+from .events import JOB_BLOCKING_EVENT_TYPES
 from .metrics import calculate_final_score, calculate_snapshot, update_state_metrics
 from .models import DecisionCard, DecisionChoice, Event, Job, SimulationState
 from .schedulers.automated import AutomatedScheduler
@@ -293,15 +294,7 @@ def _event_expedite_value(state: SimulationState, event: Event | None) -> float:
     value = event.severity * 6.0 + event.duration_shifts * 3.0
     if event.id in state.active_events:
         value += 12.0
-    if event.type in {
-        EventType.MISSING_MATERIAL,
-        EventType.DELAYED_MATERIAL,
-        EventType.INSPECTION_DELAY,
-        EventType.SUPPLIER_ESCALATION,
-        EventType.LOGISTICS_BACKLOG,
-        EventType.CERTIFICATION_AUDIT,
-        EventType.ENGINEERING_HOLD,
-    }:
+    if event.type in JOB_BLOCKING_EVENT_TYPES | {EventType.ENGINEERING_HOLD}:
         value += 10.0
     return min(44.0, value)
 

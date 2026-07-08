@@ -16,6 +16,8 @@ from echo_adventure.api.payloads import _piece_display_id
 from echo_adventure.api.server import STATIC_ASSETS, GameSession, SessionStore
 from echo_adventure.api.view import INDEX_HTML
 
+from .helpers import unit_config
+
 
 class DeterministicDecisionGenerationTests(unittest.TestCase):
     def test_echo_static_choice_reads_full_reachable_tree(self):
@@ -453,22 +455,12 @@ class ShiftProgressionPayloadTests(unittest.TestCase):
 
 
 def _due_date_test_config(total_days: int, seed: int) -> GameConfig:
-    return GameConfig(
+    return unit_config(
         total_days=total_days,
-        shifts_per_day=3,
         piece_count=6,
         min_jobs_per_piece=2,
         max_jobs_per_piece=2,
         max_job_duration_shifts=2,
-        setup_time_choices=(0,),
-        transport_delay_probability=0.0,
-        min_base_events=0,
-        max_base_events=0,
-        min_extra_quality_rework_events=0,
-        max_extra_quality_rework_events=0,
-        completion_rework_probability=0.0,
-        min_completion_rework_shifts=0,
-        max_completion_rework_shifts=0,
         min_decisions_per_day=1,
         max_decisions_per_day=1,
         max_active_decision_cards_per_day=1,

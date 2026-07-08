@@ -190,7 +190,6 @@ document.addEventListener("click", (e) => {
   const target = e.target instanceof Element ? e.target : null;
   const welcomeOverlay = document.getElementById("welcomeModalOverlay");
   const newRunOverlay = document.getElementById("newRunModalOverlay");
-  const decisionOverlay = document.getElementById("decisionModalOverlay");
   const settingsWrap = document.querySelector(".settings-wrap");
   if (settingsWrap && target && !settingsWrap.contains(target)) {
     closeSettingsMenu();

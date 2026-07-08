@@ -15,7 +15,7 @@ from echo_adventure.events import (
     schedule_follow_on_event,
 )
 
-from .helpers import make_event, make_state
+from .helpers import make_event, make_state, make_unexpected_job_event
 
 
 class EventGenerationHelperTests(unittest.TestCase):
@@ -194,13 +194,7 @@ class EventApplicationTests(unittest.TestCase):
 
     def test_unexpected_job_insertion_is_idempotent_and_can_be_reprioritized(self):
         state = make_state()
-        event = make_event(
-            "EVT-NEW",
-            event_type=EventType.UNEXPECTED_JOB,
-            target_type=TargetType.CAPABILITY,
-            target_id="NEW_JOB",
-            severity=3,
-        )
+        event = make_unexpected_job_event(severity=3)
 
         piece_id = insert_unexpected_job(state, event, prioritize=False)
         original_job_ids = list(event.effects["inserted_job_ids"])

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from typing import Any
 
-from echo_adventure.config import GameConfig
+from echo_adventure.config import GameConfig, NO_RANDOM_DISRUPTION_PROFILE
 from echo_adventure.enums import DecisionType, EventType, TargetType
 from echo_adventure.metrics import update_state_metrics
 from echo_adventure.models import (
@@ -41,13 +41,7 @@ def unit_config(**overrides: Any) -> GameConfig:
         min_candidate_workcenters_per_job=1,
         max_candidate_workcenters_per_job=4,
         max_alternate_workcenters_per_job=2,
-        min_base_events=0,
-        max_base_events=0,
-        min_extra_quality_rework_events=0,
-        max_extra_quality_rework_events=0,
-        completion_rework_probability=0.0,
-        min_completion_rework_shifts=0,
-        max_completion_rework_shifts=0,
+        **asdict(NO_RANDOM_DISRUPTION_PROFILE),
         min_decisions_per_day=1,
         max_decisions_per_day=2,
         max_active_decision_cards_per_day=2,
@@ -243,6 +237,17 @@ def make_event(
     }
     values.update(overrides)
     return Event(**values)
+
+
+def make_unexpected_job_event(event_id: str = "EVT-NEW", **overrides: Any) -> Event:
+    """Return the standard unexpected-job request event used by tests."""
+    return make_event(
+        event_id,
+        event_type=EventType.UNEXPECTED_JOB,
+        target_type=TargetType.CAPABILITY,
+        target_id="NEW_JOB",
+        **overrides,
+    )
 
 
 def make_choice(

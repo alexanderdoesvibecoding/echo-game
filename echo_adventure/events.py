@@ -7,7 +7,16 @@ from typing import Iterable
 
 from .config import GameConfig
 from .enums import EventType, JobStatus, TargetType, WorkCenterStatus
-from .models import Event, Job, PuzzlePiece, Shop, SimulationState, WorkCenter, least_loaded_workcenter
+from .models import (
+    Event,
+    Job,
+    PuzzlePiece,
+    Shop,
+    SimulationState,
+    WorkCenter,
+    build_pending_job,
+    least_loaded_workcenter,
+)
 
 
 EVENT_SEQUENCE = [
@@ -577,19 +586,14 @@ def insert_unexpected_job(state: SimulationState, event: Event, prioritize: bool
         dependency_ids = [previous_job_id] if previous_job_id else []
         due_shift = _unexpected_due_shift(state, job_index, job_count, prioritize)
 
-        state.jobs[job_id] = Job(
+        state.jobs[job_id] = build_pending_job(
             id=job_id,
             piece_id=piece_id,
             shop_id=shop_id,
             required_capability=capability,
             candidate_workcenter_ids=candidate_ids,
-            assigned_workcenter_id=None,
             base_duration_shifts=duration,
-            remaining_duration_shifts=duration,
-            setup_time_shifts=0,
-            transport_delay_shifts=0,
             dependency_ids=dependency_ids,
-            status=JobStatus.NOT_READY,
             priority=max(10, priority - job_index * 2),
             due_shift=due_shift,
             risk_score=float(18 + event.severity * 4),
@@ -711,19 +715,14 @@ def _create_follow_on_job(
     candidate_ids = [
         wc.id for wc in state.workcenters.values() if capability in wc.capabilities
     ]
-    job = Job(
+    job = build_pending_job(
         id=job_id,
         piece_id=piece_id,
         shop_id=shop_id,
         required_capability=capability,
         candidate_workcenter_ids=candidate_ids,
-        assigned_workcenter_id=None,
         base_duration_shifts=duration,
-        remaining_duration_shifts=duration,
-        setup_time_shifts=0,
-        transport_delay_shifts=0,
         dependency_ids=list(dependencies),
-        status=JobStatus.NOT_READY,
         priority=priority,
         due_shift=min(state.deadline_shift - 1, state.current_shift + 5),
         risk_score=event.severity * 4,

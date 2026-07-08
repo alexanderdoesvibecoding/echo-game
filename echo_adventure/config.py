@@ -88,6 +88,17 @@ class EchoProfile:
     echo_choice_projection_limit: int = 0
 
 
+NO_RANDOM_DISRUPTION_PROFILE = DisruptionProfile(
+    min_base_events=0,
+    max_base_events=0,
+    min_extra_quality_rework_events=0,
+    max_extra_quality_rework_events=0,
+    completion_rework_probability=0.0,
+    min_completion_rework_shifts=0,
+    max_completion_rework_shifts=0,
+)
+
+
 @dataclass(frozen=True)
 class BalancePreset:
     """Named gameplay preset assembled from focused profile groups."""
@@ -128,15 +139,7 @@ GAME_PRESETS: dict[str, BalancePreset] = {
             max_candidate_workcenters_per_job=8,
             max_alternate_workcenters_per_job=4,
         ),
-        disruptions=DisruptionProfile(
-            min_base_events=0,
-            max_base_events=0,
-            min_extra_quality_rework_events=0,
-            max_extra_quality_rework_events=0,
-            completion_rework_probability=0.0,
-            min_completion_rework_shifts=0,
-            max_completion_rework_shifts=0,
-        ),
+        disruptions=NO_RANDOM_DISRUPTION_PROFILE,
         decisions=DecisionProfile(
             min_decisions_per_day=3,
             max_decisions_per_day=4,

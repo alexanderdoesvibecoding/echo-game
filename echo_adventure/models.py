@@ -142,6 +142,47 @@ class Job:
         return self.status == JobStatus.BLOCKED or self.block_reason is not None
 
 
+def build_pending_job(
+    *,
+    id: str,
+    piece_id: str,
+    shop_id: str,
+    required_capability: str,
+    candidate_workcenter_ids: list[str],
+    base_duration_shifts: int,
+    dependency_ids: list[str],
+    priority: int,
+    due_shift: int,
+    risk_score: float,
+    setup_time_shifts: int = 0,
+    transport_delay_shifts: int = 0,
+    remaining_duration_shifts: int | None = None,
+) -> Job:
+    """Build an unassigned not-ready job with standard runtime defaults."""
+    planned_duration = base_duration_shifts + setup_time_shifts + transport_delay_shifts
+    return Job(
+        id=id,
+        piece_id=piece_id,
+        shop_id=shop_id,
+        required_capability=required_capability,
+        candidate_workcenter_ids=list(candidate_workcenter_ids),
+        assigned_workcenter_id=None,
+        base_duration_shifts=base_duration_shifts,
+        remaining_duration_shifts=(
+            planned_duration
+            if remaining_duration_shifts is None
+            else remaining_duration_shifts
+        ),
+        setup_time_shifts=setup_time_shifts,
+        transport_delay_shifts=transport_delay_shifts,
+        dependency_ids=list(dependency_ids),
+        status=JobStatus.NOT_READY,
+        priority=priority,
+        due_shift=due_shift,
+        risk_score=risk_score,
+    )
+
+
 @dataclass
 class Event:
     """A disruption, warning, or follow-on risk in the scenario timeline."""

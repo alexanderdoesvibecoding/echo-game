@@ -26,7 +26,13 @@ from echo_adventure.decisions.selectors import (
 )
 from echo_adventure.enums import DecisionType, EventType, JobStatus, TargetType, WorkCenterStatus
 
-from .helpers import make_card, make_choice, make_event, make_state
+from .helpers import (
+    make_card,
+    make_choice,
+    make_event,
+    make_state,
+    make_unexpected_job_event,
+)
 
 
 class DecisionGraphTests(unittest.TestCase):
@@ -320,13 +326,7 @@ class DecisionEffectTests(unittest.TestCase):
 
     def test_apply_choice_prioritizes_unexpected_job_request(self):
         state = make_state()
-        event = make_event(
-            "EVT-NEW",
-            event_type=EventType.UNEXPECTED_JOB,
-            target_type=TargetType.CAPABILITY,
-            target_id="NEW_JOB",
-            severity=3,
-        )
+        event = make_unexpected_job_event(severity=3)
         state.event_timeline = [event]
         card = make_card("CARD-NEW", target_ids=[event.id])
         choice = make_choice(
