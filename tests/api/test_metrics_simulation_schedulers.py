@@ -19,6 +19,7 @@ from echo_adventure.schedulers.manual import ManualScheduler
 from echo_adventure.simulation import (
     _age_queues,
     _known_events,
+    _process_workcenters,
     _start_available_jobs,
     advance_day,
     advance_shift,
@@ -221,6 +222,37 @@ class SimulationTests(unittest.TestCase):
 
         self.assertEqual(job.queue_time, 1)
 
+    def test_age_queues_is_idempotent_across_multiple_workcenter_queues(self):
+        state = make_state()
+        job = state.jobs["JOB-01-001"]
+        job.status = JobStatus.QUEUED
+        state.workcenters["WC-A1"].queue = [job.id]
+        state.workcenters["WC-B1"].queue = [job.id]
+
+        _age_queues(state)
+
+        self.assertEqual(job.queue_time, 1)
+
+    def test_process_workcenters_paused_jobs_do_not_burn_remaining_duration(self):
+        state = make_state()
+        job = state.jobs["JOB-01-001"]
+        job.status = JobStatus.PAUSED
+        job.remaining_duration_shifts = 3
+        state.workcenters["WC-A1"].current_job_id = job.id
+        state.workcenters["WC-A1"].status = WorkCenterStatus.BUSY
+
+        _process_workcenters(state)
+
+        self.assertEqual(job.remaining_duration_shifts, 3)
+        self.assertEqual(state.busy_shift_count, 0)
+        self.assertEqual(state.idle_blocked_time, 1)
+
+        job.status = JobStatus.RUNNING
+        _process_workcenters(state)
+
+        self.assertEqual(job.remaining_duration_shifts, 2)
+        self.assertEqual(state.busy_shift_count, 1)
+
     def test_complete_job_requires_preplanned_rework_once_then_completes(self):
         state = make_state()
         job = state.jobs["JOB-01-001"]
@@ -269,6 +301,18 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(state.current_shift, 12)
         self.assertEqual(result.end_snapshot.shift, 12)
         self.assertEqual(scheduler.shift_calls, 1)
+
+    def test_advance_day_at_deadline_does_not_process_extra_shifts(self):
+        state = make_state()
+        state.current_shift = state.deadline_shift
+        scheduler = RecordingScheduler()
+
+        result = advance_day(state, scheduler)
+
+        self.assertEqual(state.current_shift, state.deadline_shift)
+        self.assertEqual(result.start_snapshot.shift, state.deadline_shift)
+        self.assertEqual(result.end_snapshot.shift, state.deadline_shift)
+        self.assertEqual(scheduler.shift_calls, 0)
 
     def test_known_events_returns_active_and_warned_events(self):
         state = make_state()
@@ -370,6 +414,22 @@ class SchedulerTests(unittest.TestCase):
 
         incoming.critical_path = False
         incoming.priority = 70
+        self.assertFalse(scheduler._should_preempt(state, incoming, state.workcenters["WC-A1"]))
+
+    def test_automated_scheduler_preemption_rejects_too_long_incoming_work(self):
+        state = make_state()
+        scheduler = AutomatedScheduler()
+        current = state.jobs["JOB-01-001"]
+        incoming = state.jobs["JOB-02-001"]
+        current.status = JobStatus.RUNNING
+        current.critical_path = False
+        current.priority = 10
+        current.remaining_duration_shifts = 2
+        incoming.priority = 100
+        incoming.critical_path = True
+        incoming.remaining_duration_shifts = 20
+        state.workcenters["WC-A1"].current_job_id = current.id
+
         self.assertFalse(scheduler._should_preempt(state, incoming, state.workcenters["WC-A1"]))
 
 

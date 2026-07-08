@@ -131,6 +131,22 @@ class DecisionGraphTests(unittest.TestCase):
 
         self.assertEqual(state.unlocked_decision_card_ids, {"KNOWN"})
 
+    def test_unlocked_branch_card_is_still_filtered_by_exclusion_tags(self):
+        state = make_state()
+        card = make_card(
+            "ROUTE",
+            day=2,
+            required_tags=["critical_path_protected"],
+            excluded_tags=["crew_overloaded"],
+        )
+        state.decision_cards = {card.id: card}
+        state.campaign_decision_graph.cards_by_day = {2: [card.id]}
+        state.campaign_decision_graph.max_active_cards_per_day = 2
+        state.unlocked_decision_card_ids = {card.id}
+        state.campaign_branch_tags = {"critical_path_protected", "crew_overloaded"}
+
+        self.assertEqual(active_campaign_decision_cards(state, 2, {}), [])
+
 
 class DecisionScoringTests(unittest.TestCase):
     def test_select_echo_choice_uses_card_echo_choice_id_when_no_graph_is_supplied(self):
@@ -343,6 +359,22 @@ class DecisionEffectTests(unittest.TestCase):
         piece_id = event.effects["unexpected_piece_id"]
         first_job = state.jobs[state.pieces[piece_id].job_ids[0]]
         self.assertGreaterEqual(first_job.priority, 90)
+
+    def test_apply_choice_unknown_effect_records_safe_fallback(self):
+        state = make_state()
+        card = make_card("CARD-UNKNOWN")
+        choice = make_choice(
+            "UNKNOWN",
+            effect_type="mystery_effect",
+            immediate_effects={"type": "mystery_effect"},
+        )
+        card.choices = [choice]
+
+        note = apply_choice(state, card, choice, echo_choice=choice)
+
+        self.assertEqual(note, "Recorded the scheduling preference for today.")
+        self.assertEqual(state.decision_history[-1].choice_id, "UNKNOWN")
+        self.assertIn("CARD-UNKNOWN:UNKNOWN", state.decision_path)
 
 
 if __name__ == "__main__":

@@ -143,11 +143,25 @@ def main(argv: list[str] | None = None) -> None:
 
 def _parse_optional_seed(value: Any) -> int | None:
     """Return an integer seed from a JSON value, or None for a random run."""
-    if value is None or value == "":
+    if value is None:
         return None
+    if isinstance(value, bool):
+        raise ValueError("Seed must be an integer.")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        value = value.strip()
+        if value == "":
+            return None
+        try:
+            return int(value)
+        except ValueError as exc:
+            raise ValueError("Seed must be an integer.") from exc
+    if isinstance(value, float):
+        raise ValueError("Seed must be an integer.")
     try:
         return int(value)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError("Seed must be an integer.") from exc
 
 

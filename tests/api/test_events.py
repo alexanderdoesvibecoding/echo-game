@@ -7,7 +7,9 @@ from echo_adventure.enums import EventType, JobStatus, TargetType, WorkCenterSta
 from echo_adventure.events import (
     EVENT_SEQUENCE,
     MAX_EVENT_CHAIN_DEPTH,
+    _cascade_target,
     _duration_for,
+    _schedule_cascading_events,
     _target_for,
     apply_event_start,
     insert_unexpected_job,
@@ -207,6 +209,25 @@ class EventApplicationTests(unittest.TestCase):
         self.assertGreater(state.jobs[original_job_ids[0]].priority, first_priority)
         self.assertEqual(state.jobs[original_job_ids[0]].status, JobStatus.QUEUED)
 
+    def test_prioritized_unexpected_job_is_not_demoted_by_later_backlog_choice(self):
+        state = make_state()
+        event = make_unexpected_job_event(severity=4)
+
+        piece_id = insert_unexpected_job(state, event, prioritize=True)
+        original_priorities = [
+            state.jobs[job_id].priority
+            for job_id in state.pieces[piece_id].job_ids
+        ]
+
+        repeated_piece_id = insert_unexpected_job(state, event, prioritize=False)
+
+        self.assertEqual(repeated_piece_id, piece_id)
+        self.assertEqual(event.effects["priority_mode"], "prioritized")
+        self.assertEqual(
+            [state.jobs[job_id].priority for job_id in state.pieces[piece_id].job_ids],
+            original_priorities,
+        )
+
     def test_schedule_follow_on_event_respects_depth_deadline_and_sorts(self):
         state = make_state()
         state.current_shift = 2
@@ -262,6 +283,99 @@ class EventApplicationTests(unittest.TestCase):
                 severity=3,
             )
         )
+
+    def test_cascade_target_selection_maps_events_to_related_domain_objects(self):
+        state = make_state()
+
+        material = make_event(
+            "EVT-MAT",
+            event_type=EventType.MISSING_MATERIAL,
+            target_type=TargetType.JOB,
+            target_id="JOB-01-001",
+        )
+        self.assertEqual(
+            _cascade_target(state, material, FixedRandom([0.1])),
+            (EventType.LOGISTICS_BACKLOG, TargetType.SHOP, "SHOP-A"),
+        )
+
+        machine = make_event(
+            "EVT-MACHINE",
+            event_type=EventType.MACHINE_DOWN,
+            target_type=TargetType.WORKCENTER,
+            target_id="WC-B1",
+        )
+        self.assertEqual(
+            _cascade_target(state, machine, FixedRandom([0.1])),
+            (EventType.CREW_SHORTAGE, TargetType.SHOP, "SHOP-B"),
+        )
+
+        quality = make_event(
+            "EVT-QUALITY",
+            event_type=EventType.QUALITY_REWORK,
+            target_type=TargetType.JOB,
+            target_id="JOB-02-001",
+        )
+        self.assertEqual(
+            _cascade_target(state, quality, FixedRandom([])),
+            (EventType.REWORK_SPILLOVER, TargetType.PIECE, "PIECE-02"),
+        )
+
+        unexpected = make_unexpected_job_event("EVT-NEW")
+        unexpected.effects["unexpected_piece_id"] = "PIECE-02"
+        self.assertEqual(
+            _cascade_target(state, unexpected, FixedRandom([])),
+            (EventType.PRIORITY_CHANGE, TargetType.PIECE, "PIECE-02"),
+        )
+
+    def test_cascade_evaluation_schedules_once_and_honors_mitigation_pressure(self):
+        state = make_state()
+        state.current_shift = 2
+        source = make_event(
+            "EVT-SOURCE",
+            event_type=EventType.MISSING_MATERIAL,
+            target_type=TargetType.JOB,
+            target_id="JOB-01-001",
+            start_shift=1,
+            duration_shifts=1,
+            severity=5,
+        )
+        state.event_timeline = [source]
+
+        _schedule_cascading_events(state, source)
+
+        self.assertEqual(len(source.effects["follow_on_event_ids"]), 1)
+        follow_on_id = source.effects["follow_on_event_ids"][0]
+        self.assertIn(follow_on_id, {event.id for event in state.event_timeline})
+
+        _schedule_cascading_events(state, source)
+
+        self.assertEqual(source.effects["follow_on_event_ids"], [follow_on_id])
+
+        mitigated = make_event(
+            "EVT-MITIGATED",
+            event_type=EventType.MISSING_MATERIAL,
+            target_type=TargetType.JOB,
+            target_id="JOB-01-001",
+            start_shift=1,
+            duration_shifts=1,
+            severity=5,
+            effects={"mitigation_score": 3},
+        )
+        state.event_timeline = [mitigated]
+
+        _schedule_cascading_events(state, mitigated)
+
+        self.assertNotIn("follow_on_event_ids", mitigated.effects)
+
+
+class FixedRandom:
+    def __init__(self, random_values: list[float]) -> None:
+        self.random_values = list(random_values)
+
+    def random(self) -> float:
+        if not self.random_values:
+            raise AssertionError("No random values left for this cascade branch.")
+        return self.random_values.pop(0)
 
 
 if __name__ == "__main__":

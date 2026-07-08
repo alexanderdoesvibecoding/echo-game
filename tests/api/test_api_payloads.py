@@ -20,7 +20,7 @@ from echo_adventure.api.payloads import (
     _snapshot_payload,
 )
 from echo_adventure.api.review import ReviewMixin, _job_was_late
-from echo_adventure.api.server import GameRequestHandler, _parse_optional_seed
+from echo_adventure.api.server import GameRequestHandler, STATIC_ASSETS, SessionStore, _parse_optional_seed
 from echo_adventure.enums import JobStatus
 from echo_adventure.metrics import calculate_snapshot, update_state_metrics
 from echo_adventure.models import DecisionProgress, DecisionRecord
@@ -235,9 +235,14 @@ class ServerHelperTests(unittest.TestCase):
     def test_parse_optional_seed_accepts_empty_values_and_rejects_non_integer(self):
         self.assertIsNone(_parse_optional_seed(None))
         self.assertIsNone(_parse_optional_seed(""))
+        self.assertIsNone(_parse_optional_seed("   "))
+        self.assertEqual(_parse_optional_seed(" 007 "), 7)
+        self.assertEqual(_parse_optional_seed(42), 42)
         self.assertEqual(_parse_optional_seed("42"), 42)
-        with self.assertRaisesRegex(ValueError, "Seed must be an integer"):
-            _parse_optional_seed("abc")
+        for bad_seed in ("abc", "4.2", 4.2, True, False):
+            with self.subTest(seed=bad_seed):
+                with self.assertRaisesRegex(ValueError, "Seed must be an integer"):
+                    _parse_optional_seed(bad_seed)
 
     def test_request_handler_routes_json_html_static_and_errors(self):
         class FakeStore:
@@ -283,6 +288,77 @@ class ServerHelperTests(unittest.TestCase):
         self.assertIn("application/javascript", static.header("content-type"))
         self.assertIn("escapeHtml", static.body_text())
 
+    def test_request_handler_rejects_malformed_json_and_unknown_post_routes(self):
+        class FakeStore:
+            def new_session_payload(self, seed=None):
+                return {"route": "new", "seed": seed}
+
+        handler_type = type("FakeHandler", (HandlerHarness, GameRequestHandler), {"session_store": FakeStore()})
+
+        malformed = handler_type("POST", "/api/new", raw_body=b'{"seed":')
+        malformed.do_POST()
+        self.assertEqual(malformed.response_status, 400)
+        self.assertIn("Expecting value", json.loads(malformed.body_text())["error"])
+
+        self.assert_json_handler_response(
+            handler_type("POST", "/api/missing", {}),
+            404,
+            {"error": "Not found"},
+        )
+
+    def test_static_asset_mime_types_and_missing_static_paths(self):
+        handler_type = type("FakeHandler", (HandlerHarness, GameRequestHandler), {"session_store": object()})
+
+        for path, (expected_type, asset_path) in STATIC_ASSETS.items():
+            with self.subTest(path=path):
+                handler = handler_type("GET", path)
+                handler.do_GET()
+                self.assertEqual(handler.response_status, 200)
+                self.assertEqual(handler.header("content-type"), expected_type)
+                self.assertEqual(int(handler.header("content-length")), asset_path.stat().st_size)
+
+        missing = handler_type("GET", "/ui/missing.js")
+        missing.do_GET()
+        self.assertEqual(missing.response_status, 404)
+        self.assertEqual(json.loads(missing.body_text()), {"error": "Not found"})
+
+    def test_concurrent_duplicate_choices_apply_once(self):
+        store = SessionStore(seed=123)
+        card = store.session.current_cards[0]
+        choice = card.choices[0]
+        start = threading.Barrier(2)
+        results = []
+
+        def choose_once():
+            start.wait(timeout=2)
+            try:
+                results.append(("ok", store.choice_payload(card.id, choice.id)))
+            except ValueError as exc:
+                results.append(("error", str(exc)))
+
+        threads = [threading.Thread(target=choose_once) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=2)
+
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        self.assertEqual([kind for kind, _ in results].count("ok"), 1)
+        self.assertEqual([kind for kind, _ in results].count("error"), 1)
+        error_message = next(payload for kind, payload in results if kind == "error")
+        self.assertTrue(
+            "already" in error_message
+            or "no longer active" in error_message
+        )
+        with store.lock:
+            self.assertEqual(store.session.applied_choices.get(card.id), choice.id)
+            player_records = [
+                record
+                for record in store.session.player_state.decision_history
+                if record.actor == "player" and record.card_id == card.id
+            ]
+        self.assertEqual(len(player_records), 1)
+
     def assert_json_handler_response(self, handler, expected_status, expected_payload):
         if handler.method == "GET":
             handler.do_GET()
@@ -293,10 +369,15 @@ class ServerHelperTests(unittest.TestCase):
 
 
 class HandlerHarness:
-    def __init__(self, method, path, payload=None):
+    def __init__(self, method, path, payload=None, raw_body=None):
         self.method = method
         self.path = path
-        body = json.dumps(payload).encode("utf-8") if payload is not None else b""
+        if raw_body is not None:
+            body = raw_body
+        elif payload is not None:
+            body = json.dumps(payload).encode("utf-8")
+        else:
+            body = b""
         self.headers = {"content-length": str(len(body))}
         self.rfile = BytesIO(body)
         self.wfile = BytesIO()

@@ -215,6 +215,18 @@ def make_scenario(state: SimulationState | None = None) -> Scenario:
     )
 
 
+def piece_due_days(scenario: Scenario, shifts_per_day: int) -> dict[str, int]:
+    """Return the one-based due day for each top-level job in a scenario."""
+    due_days = {}
+    for piece in scenario.pieces.values():
+        piece_due_shifts = {scenario.jobs[job_id].due_shift for job_id in piece.job_ids}
+        if len(piece_due_shifts) != 1:
+            raise AssertionError(f"{piece.id} should have one shared due shift.")
+        due_shift = piece_due_shifts.pop()
+        due_days[piece.id] = ((due_shift - 1) // shifts_per_day) + 1
+    return due_days
+
+
 def make_event(
     event_id: str = "EVT-0001",
     event_type: EventType = EventType.MISSING_MATERIAL,

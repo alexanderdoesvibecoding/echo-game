@@ -154,8 +154,12 @@ def _forecast_choice_objective(
 def _apply_static_echo_choices(state: SimulationState, config: GameConfig) -> None:
     """Answer projection-only cards with the static campaign scorer."""
     selected: dict[str, str] = {}
+    applied = 0
+    projection_limit = config.echo_choice_projection_limit if config.echo_choice_projection_limit > 0 else None
     max_rounds = max(8, len(state.decision_cards), config.echo_choice_projection_limit)
     for _ in range(max_rounds):
+        if projection_limit is not None and applied >= projection_limit:
+            return
         cards = active_decision_cards(state, state.current_day, selected)
         open_cards = [
             card
@@ -164,14 +168,17 @@ def _apply_static_echo_choices(state: SimulationState, config: GameConfig) -> No
         ]
         if not open_cards:
             return
-        if config.echo_choice_projection_limit > 0:
-            cards_to_apply = open_cards[: config.echo_choice_projection_limit]
+        if projection_limit is not None:
+            cards_to_apply = open_cards[: projection_limit - applied]
         else:
             cards_to_apply = open_cards
         for card in cards_to_apply:
             choice = select_echo_choice(card)
             apply_choice(state, card, choice, actor="ECHO-forecast", echo_choice=choice)
             selected[card.id] = choice.id
+            applied += 1
+            if projection_limit is not None and applied >= projection_limit:
+                return
 
 
 def _heuristic_choice_score(

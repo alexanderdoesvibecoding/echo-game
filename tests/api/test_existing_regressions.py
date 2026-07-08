@@ -16,7 +16,7 @@ from echo_adventure.api.payloads import _piece_display_id
 from echo_adventure.api.server import STATIC_ASSETS, GameSession, SessionStore
 from echo_adventure.api.view import INDEX_HTML
 
-from .helpers import unit_config
+from .helpers import piece_due_days, unit_config
 
 
 class DeterministicDecisionGenerationTests(unittest.TestCase):
@@ -297,7 +297,7 @@ class ScenarioDueDateGenerationTests(unittest.TestCase):
 
     def test_piece_due_dates_spread_across_configured_total_days(self):
         scenario = generate_scenario(_due_date_test_config(total_days=8, seed=2468))
-        due_days = _piece_due_days(scenario, shifts_per_day=3)
+        due_days = piece_due_days(scenario, shifts_per_day=3)
 
         self.assertEqual(len(due_days), 6)
         self.assertTrue(all(1 <= due_day <= 8 for due_day in due_days.values()))
@@ -309,7 +309,7 @@ class ScenarioDueDateGenerationTests(unittest.TestCase):
 
     def test_piece_due_dates_adapt_to_longer_total_days(self):
         scenario = generate_scenario(_due_date_test_config(total_days=15, seed=2468))
-        due_days = _piece_due_days(scenario, shifts_per_day=3)
+        due_days = piece_due_days(scenario, shifts_per_day=3)
 
         self.assertEqual(len(due_days), 6)
         self.assertTrue(all(1 <= due_day <= 15 for due_day in due_days.values()))
@@ -469,17 +469,6 @@ def _due_date_test_config(total_days: int, seed: int) -> GameConfig:
         max_branch_variants_per_day=2,
         seed=seed,
     )
-
-
-def _piece_due_days(scenario, shifts_per_day: int) -> dict[str, int]:
-    due_days = {}
-    for piece in scenario.pieces.values():
-        piece_due_shifts = {scenario.jobs[job_id].due_shift for job_id in piece.job_ids}
-        if len(piece_due_shifts) != 1:
-            raise AssertionError(f"{piece.id} should have one shared due shift.")
-        due_shift = piece_due_shifts.pop()
-        due_days[piece.id] = ((due_shift - 1) // shifts_per_day) + 1
-    return due_days
 
 
 if __name__ == "__main__":

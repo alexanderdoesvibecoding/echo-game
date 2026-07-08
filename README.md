@@ -237,7 +237,8 @@ echo_adventure/
     modals.js            Modal and theme controls
     html.js              DOM and escaping helpers
 tests/
-  test_*.py              unittest coverage for core logic, events, decisions, API payloads, and regressions
+  api/                   Python backend coverage for core logic, events, decisions, API payloads, and regressions
+  ui/                    Node runtime tests for browser ES modules and renderer behavior
 ```
 
 ## Balance And Configuration
@@ -391,16 +392,28 @@ python3 -m compileall -q echo_adventure main.py
 Run the unit tests:
 
 ```bash
-python3 -m unittest discover -v
+npm test
 ```
 
-The tests live in the top-level `tests/` package and use the standard-library `unittest` runner.
+Backend tests use `pytest` against the Python code. Frontend tests use Node's built-in test runner against the browser ES modules with a lightweight DOM stub.
+
+Run each side directly:
+
+```bash
+npm run test:backend
+npm run test:frontend
+```
+
+Install requirements:
+
+- Python with `pytest` available in the environment.
+- Node.js 18 or newer. No npm package install is required because the frontend tests only use Node built-ins.
 
 Current coverage focuses on:
 
 - ECHO static choice scoring through reachable downstream decision trees
 - ECHO forecast error logging and heuristic fallback
-- HTML references to external CSS and JavaScript assets
+- Runtime frontend renderer behavior for metrics, day-clock decisions, final chart tooltips, and modal/theme state
 - Final decision-chart payload shape
 - Empty decision-chart payload behavior
 - Thread-safe session replacement while an action is in flight

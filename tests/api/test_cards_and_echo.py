@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import unittest
+from unittest.mock import patch
 
 from echo_adventure.decisions.cards import (
     _assigned_location_phrase,
@@ -31,6 +32,7 @@ from echo_adventure.decisions.cards import (
     _alternate_card,
 )
 from echo_adventure.echo import (
+    _apply_static_echo_choices,
     _best_open_alternate,
     _event_expedite_value,
     _event_for_card,
@@ -41,6 +43,7 @@ from echo_adventure.echo import (
     _live_operational_score,
     _queue_pressure_value,
     apply_echo_decisions_for_day,
+    select_echo_choice_for_state,
 )
 from echo_adventure.enums import DecisionType, EventType, JobStatus, TargetType, WorkCenterStatus
 from echo_adventure.metrics import update_state_metrics
@@ -231,6 +234,65 @@ class EchoPolicyHelperTests(unittest.TestCase):
 
         self.assertEqual(objective[0], 2.0)
         self.assertTrue(math.isinf(objective[1]))
+
+    def test_static_projection_choice_limit_caps_total_applied_choices(self):
+        state = make_state()
+        cards = [
+            make_card("CARD-A", choices=[make_choice("A")]),
+            make_card("CARD-B", choices=[make_choice("A")]),
+            make_card("CARD-C", choices=[make_choice("A")]),
+        ]
+        state.decision_cards = {card.id: card for card in cards}
+        state.campaign_decision_graph.cards_by_day = {state.current_day: [card.id for card in cards]}
+        state.campaign_decision_graph.root_card_ids = [card.id for card in cards]
+        state.campaign_decision_graph.max_active_cards_per_day = 3
+        config = unit_config(echo_choice_projection_limit=1, max_active_decision_cards_per_day=3)
+
+        _apply_static_echo_choices(state, config)
+
+        self.assertEqual(len(state.campaign_selected_choices), 1)
+        self.assertEqual(len(state.decision_history), 1)
+
+    def test_forecast_choice_objective_respects_positive_lookahead_days(self):
+        state = make_state()
+        card = make_card("CARD", choices=[make_choice("A")])
+        choice = card.choices[0]
+        state.decision_cards = {card.id: card}
+        advance_calls = 0
+
+        def fake_advance_day(projected_state, scheduler):
+            nonlocal advance_calls
+            advance_calls += 1
+            projected_state.current_shift += projected_state.shifts_per_day
+
+        with patch("echo_adventure.echo._apply_static_echo_choices"), patch(
+            "echo_adventure.echo.advance_day",
+            side_effect=fake_advance_day,
+        ):
+            objective = _forecast_choice_objective(
+                state,
+                card,
+                choice,
+                unit_config(echo_choice_lookahead_days=2),
+                state.decision_cards,
+                {},
+            )
+
+        self.assertEqual(advance_calls, 2)
+        self.assertEqual(objective[0], 1.0)
+
+    def test_live_echo_choice_tiebreaks_by_choice_id_after_equal_forecasts(self):
+        state = make_state()
+        card = make_card(
+            "CARD",
+            choices=[make_choice("B", effect_type="wait"), make_choice("A", effect_type="wait")],
+        )
+        state.decision_cards = {card.id: card}
+
+        with patch("echo_adventure.echo._forecast_choice_objective", return_value=(0.0, 1.0, 0.0)):
+            selected = select_echo_choice_for_state(state, card, unit_config(), state.decision_cards)
+
+        self.assertEqual(selected.id, "A")
 
     def test_live_operational_score_branches_for_major_choice_types(self):
         state = make_state()
