@@ -1,6 +1,6 @@
 - [ ] Create a grand list of decision scenarios
 
-- [ ] Change the puzzle so it does not look like a carrot by either:
+- [x] Change the puzzle so it does not look like a carrot by either:
     * Making it look more realistic
     * Use actual pictures of a Virginia or Columbia class submarine
         * Only need to figure out how to split an image like that (my vote is copies)

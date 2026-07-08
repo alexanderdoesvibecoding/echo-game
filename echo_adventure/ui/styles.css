@@ -1213,11 +1213,21 @@ html[data-theme="dark"] .chart-tooltip-field {
   padding: 18px 16px;
 }
 .puzzle-assembled-row {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(var(--slice-total), minmax(0, 1fr));
   align-items: center;
   width: min(100%, 900px);
   margin: 0 auto;
+}
+.puzzle-assembled-row.has-incomplete::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: url("/ui/assets/virginia-submarine-cutout.png") center / 100% 100% no-repeat;
+  opacity: 0.33;
+  pointer-events: none;
 }
 .puzzle-loose-row {
   display: flex;
@@ -1230,6 +1240,7 @@ html[data-theme="dark"] .chart-tooltip-field {
 }
 .puzzle-image-slice {
   position: relative;
+  z-index: 1;
   aspect-ratio: var(--slice-aspect);
   min-width: 0;
   overflow: hidden;

@@ -88,6 +88,14 @@ function submarineImageSlices(total) {
   }));
 }
 
+function scrambleKey(index, total) {
+  return (Math.imul(index + 1, 2654435761) ^ Math.imul(total + 17, 2246822519)) >>> 0;
+}
+
+function scrambledUnplacedItems(items, total) {
+  return [...items].sort((a, b) => scrambleKey(a.index, total) - scrambleKey(b.index, total));
+}
+
 function sliceAspect(slice) {
   return PUZZLE_IMAGE_ASPECT / Math.max(1, slice.total);
 }
@@ -137,10 +145,11 @@ export function renderSubmarinePuzzle(puzzle, instanceId) {
   const unplacedItems = tiles
     .map((tile, index) => ({ tile, index, slice: slices[index] }))
     .filter((item) => !item.tile.completed);
+  const scrambledItems = scrambledUnplacedItems(unplacedItems, total);
   const placedMarkup = tiles.map((tile, index) => (
     tile.completed ? renderPuzzleSection(tile, slices[index], "placed") : renderPuzzlePlaceholder(tile, slices[index])
   )).join("");
-  const unplacedMarkup = unplacedItems
+  const unplacedMarkup = scrambledItems
     .map(item => renderPuzzleSection(item.tile, item.slice, "unplaced"))
     .join("");
   const placedToday = tiles.filter(tile => tile.completed && tile.newlyCompleted);
@@ -154,7 +163,7 @@ export function renderSubmarinePuzzle(puzzle, instanceId) {
         <strong>Assembly</strong>
       </div>
       <div class="puzzle-stage" aria-label="Submarine puzzle showing assembled and waiting image sections">
-        <div class="puzzle-assembled-row" style="--slice-total:${total}">
+        <div class="puzzle-assembled-row${unplacedItems.length ? " has-incomplete" : ""}" style="--slice-total:${total}">
           ${placedMarkup}
         </div>
         ${unplacedItems.length ? `<div class="puzzle-loose-row">${unplacedMarkup}</div>` : ""}
