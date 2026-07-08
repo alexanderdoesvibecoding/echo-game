@@ -1291,7 +1291,7 @@ html[data-theme="dark"] .chart-tooltip-field {
   border-radius: 6px;
 }
 html[data-theme="dark"] .puzzle-stage {
-  background: linear-gradient(180deg, #17212a 0%, #111821 100%);
+  background: linear-gradient(180deg, #d9e8f0 0%, #f4f9fc 100%);
 }
 html[data-theme="dark"] .puzzle-added {
   border-color: rgba(86, 180, 233, 0.24);
