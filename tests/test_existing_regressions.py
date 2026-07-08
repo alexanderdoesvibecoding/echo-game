@@ -173,15 +173,31 @@ class StaticViewAssetTests(unittest.TestCase):
         self.assertIn("width: 100%", styles)
         self.assertNotIn("width: min(100%, 640px)", styles)
 
+    def test_submarine_puzzle_uses_image_only_slices(self):
+        source = STATIC_ASSETS["/ui/renderSummary.js"][1].read_text(encoding="utf-8")
+
+        self.assertIn("/ui/assets/virginia-submarine-cutout.png", STATIC_ASSETS)
+        self.assertIn('PUZZLE_SUBMARINE_IMAGE = "/ui/assets/virginia-submarine-cutout.png"', source)
+        self.assertIn("puzzle-image-slice", source)
+        self.assertIn("submarineImageSlices", source)
+        self.assertNotIn("<clipPath", source)
+        self.assertNotIn("<path", source)
+        self.assertNotIn("<svg", source)
+
     def test_welcome_and_day_progress_share_submarine_visual(self):
         modal_source = STATIC_ASSETS["/ui/modals.js"][1].read_text(encoding="utf-8")
         clock_source = STATIC_ASSETS["/ui/dayClock.js"][1].read_text(encoding="utf-8")
+        visual_source = STATIC_ASSETS["/ui/submarineVisual.js"][1].read_text(encoding="utf-8")
 
         self.assertIn("/ui/submarineVisual.js", STATIC_ASSETS)
         self.assertIn('id="welcomeSubmarineVisual"', INDEX_HTML)
         self.assertIn('from "./submarineVisual.js"', modal_source)
         self.assertIn('from "./submarineVisual.js"', clock_source)
         self.assertIn("day-progress-submarine", clock_source)
+        self.assertIn("/ui/assets/virginia-submarine-cutout.png", visual_source)
+        self.assertIn("<img", visual_source)
+        self.assertNotIn("<svg", visual_source)
+        self.assertNotIn("<path", visual_source)
 
 
 class FinalDecisionGraphPayloadTests(unittest.TestCase):

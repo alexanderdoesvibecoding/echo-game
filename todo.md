@@ -20,7 +20,7 @@
     - [x] Make the tip of the progress bar a submarine
     - [x] Make it progress faster through the day by making it slide very fast
 
-- [ ] Change the final chart to be day by day (instead of question by question), and the hover will show each of the
+- [x] Change the final chart to be day by day (instead of question by question), and the hover will show each of the
   daily decisions, what you picked, and what you should have picked
 
 - [x] Remove decision audit from the end-of-game summary (as it is now captured in the chart)

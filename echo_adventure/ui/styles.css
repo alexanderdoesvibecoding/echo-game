@@ -801,7 +801,7 @@ tr:last-child td { border-bottom: none; }
   position: absolute;
   top: 50%;
   z-index: 2;
-  width: 52px;
+  width: 78px;
   pointer-events: none;
   transform: translate(-50%, -50%);
   transition: left 180ms linear;
@@ -1208,56 +1208,58 @@ html[data-theme="dark"] .chart-tooltip-field {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: linear-gradient(180deg, #eef3f8 0%, #fafcff 100%);
+  display: grid;
+  gap: 18px;
+  padding: 18px 16px;
 }
-.puzzle-stage svg {
+.puzzle-assembled-row {
+  display: grid;
+  grid-template-columns: repeat(var(--slice-total), minmax(0, 1fr));
+  align-items: center;
+  width: min(100%, 900px);
+  margin: 0 auto;
+}
+.puzzle-loose-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(7px, 1.6vw, 18px);
+  min-width: 0;
+  overflow-x: auto;
+  padding: 4px 2px 2px;
+}
+.puzzle-image-slice {
+  position: relative;
+  aspect-ratio: var(--slice-aspect);
+  min-width: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+.puzzle-image-slice img {
+  position: absolute;
+  top: 0;
+  left: calc(-100% * var(--slice-index));
   display: block;
+  width: calc(100% * var(--slice-count));
+  max-width: none;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+}
+.puzzle-assembled-row .puzzle-image-slice {
   width: 100%;
-  height: auto;
 }
-.puzzle-slot {
-  fill: rgba(255, 255, 255, 0.48);
-  stroke: rgba(102, 112, 109, 0.42);
-  stroke-width: 1.6;
-  stroke-dasharray: 6 5;
+.puzzle-image-placeholder {
+  opacity: 0;
 }
-.puzzle-piece {
-  transition: opacity 180ms ease, filter 180ms ease, stroke-width 180ms ease;
+.puzzle-loose-row .puzzle-image-slice {
+  flex: 0 0 auto;
+  width: var(--slice-width);
+  filter: drop-shadow(0 7px 9px rgba(32, 37, 36, 0.2));
 }
-.puzzle-piece.placed {
-  fill: #728481;
-  stroke: #f7faf7;
-  stroke-width: 1.5;
-}
-.puzzle-piece.unplaced {
-  fill: #fbfaf4;
-  stroke: rgba(102, 112, 109, 0.76);
-  stroke-width: 1.7;
-  filter: drop-shadow(0 7px 9px rgba(32, 37, 36, 0.16));
-}
-.puzzle-piece.newly-placed {
-  stroke: var(--ink);
-  stroke-width: 2.4;
-  filter: drop-shadow(0 4px 5px rgba(32, 37, 36, 0.18));
-}
-.piece-detail {
-  fill: none;
-  stroke: rgba(32, 37, 36, 0.34);
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  pointer-events: none;
-}
-.piece-detail-fill {
-  fill: rgba(247, 250, 247, 0.65);
-  stroke: rgba(32, 37, 36, 0.38);
-  stroke-width: 3;
-  pointer-events: none;
-}
-.puzzle-label {
-  font-weight: 800;
-  pointer-events: none;
-  text-anchor: middle;
-  dominant-baseline: middle;
+.puzzle-image-slice.newly-placed {
+  filter: drop-shadow(0 0 7px rgba(0, 114, 178, 0.34));
 }
 .puzzle-added {
   display: flex;
@@ -1279,25 +1281,6 @@ html[data-theme="dark"] .chart-tooltip-field {
 }
 html[data-theme="dark"] .puzzle-stage {
   background: linear-gradient(180deg, #17212a 0%, #111821 100%);
-}
-html[data-theme="dark"] .puzzle-slot {
-  fill: rgba(37, 45, 56, 0.42);
-  stroke: rgba(165, 176, 184, 0.42);
-}
-html[data-theme="dark"] .puzzle-piece.placed {
-  fill: #7f9490;
-  stroke: #111821;
-}
-html[data-theme="dark"] .puzzle-piece.unplaced {
-  fill: #252d38;
-  stroke: rgba(165, 176, 184, 0.78);
-}
-html[data-theme="dark"] .piece-detail {
-  stroke: rgba(240, 243, 245, 0.38);
-}
-html[data-theme="dark"] .piece-detail-fill {
-  fill: rgba(240, 243, 245, 0.14);
-  stroke: rgba(240, 243, 245, 0.42);
 }
 html[data-theme="dark"] .puzzle-added {
   border-color: rgba(86, 180, 233, 0.24);
@@ -1420,8 +1403,12 @@ html[data-theme="dark"] .puzzle-added {
 .summary-modal .submarine-puzzle {
   gap: 6px;
 }
-.summary-modal .puzzle-stage svg {
-  height: clamp(220px, 38vh, 360px);
+.summary-modal .puzzle-stage {
+  gap: 12px;
+  padding: 12px;
+}
+.summary-modal .puzzle-assembled-row {
+  width: min(100%, 840px);
 }
 .summary-modal .puzzle-added {
   margin-top: 4px;
@@ -1474,10 +1461,12 @@ html[data-theme="dark"] .puzzle-added {
   border-radius: 8px;
   background: linear-gradient(180deg, #eaf4fb 0%, #f8fbfe 100%);
 }
-.welcome-visual svg {
+.welcome-visual img {
   display: block;
-  width: 100%;
+  width: min(100%, 680px);
   height: auto;
+  margin: 0 auto;
+  padding: 18px 12px;
 }
 .welcome-blurb {
   color: var(--ink);
