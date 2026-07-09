@@ -11,8 +11,3 @@ The browser app serves these files as:
 
 - `/ui/assets/logos/echo-logo-full.png`
 - `/ui/assets/logos/echo-logo-small.png`
-
-If the checkerboard appears again after replacing these files, it means the
-checker pattern was exported into the image. Re-export the logo from the source
-design on a white canvas/background, or export true transparency without the
-editor's checkerboard preview layer.
