@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Shipyard Scheduler Choose Your Own Adventure Game</title>
+  <title>ECHO Adventure</title>
+  <link rel="icon" type="image/png" href="/ui/assets/logos/echo-logo-small.png">
   <link rel="stylesheet" href="/ui/styles.css">
 </head>
 <body>
@@ -20,10 +21,13 @@
           <button id="themeMenuBtn">Light/Dark Mode</button>
         </div>
       </div>
-      <div>
-        <h1>Shipyard Scheduler Choose Your Own Adventure Game</h1>
-        <div class="status-line">
-          <span class="badge" id="dayBadge">Date</span>
+      <div class="brand-lockup">
+        <img class="brand-mark" src="/ui/assets/logos/echo-logo-small.png" alt="" aria-hidden="true">
+        <div class="brand-copy">
+          <h1>ECHO Adventure</h1>
+          <div class="status-line">
+            <span class="badge" id="dayBadge">Date</span>
+          </div>
         </div>
       </div>
     </div>
@@ -75,7 +79,10 @@
 
   <div id="welcomeModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="welcomeModalTitle">
     <div class="modal welcome-modal">
-      <h1 id="welcomeModalTitle">Welcome</h1>
+      <h1 id="welcomeModalTitle" class="welcome-title">
+        <img class="welcome-logo" src="/ui/assets/logos/echo-logo-full.png" alt="" aria-hidden="true">
+        <span class="sr-only">Welcome to ECHO Adventure</span>
+      </h1>
       <div class="welcome-copy">
         <div class="welcome-visual" id="welcomeSubmarineVisual"></div>
         <p class="welcome-blurb" id="welcomeBlurb">Your job is to get these jobs done on time. Each decision you make can risk or reward other jobs.</p>

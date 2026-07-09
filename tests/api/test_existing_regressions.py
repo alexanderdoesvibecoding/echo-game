@@ -117,6 +117,10 @@ class StaticViewAssetTests(unittest.TestCase):
     def test_index_html_references_external_static_assets(self):
         self.assertIn('/ui/styles.css', INDEX_HTML)
         self.assertIn('/ui/app.js', INDEX_HTML)
+        self.assertIn('/ui/assets/logos/echo-logo-small.png', INDEX_HTML)
+        self.assertIn('/ui/assets/logos/echo-logo-full.png', INDEX_HTML)
+        self.assertIn("/ui/assets/logos/echo-logo-small.png", STATIC_ASSETS)
+        self.assertIn("/ui/assets/logos/echo-logo-full.png", STATIC_ASSETS)
         self.assertNotIn('<style>', INDEX_HTML)
         self.assertNotIn('\n  <script>\n', INDEX_HTML)
         for _, asset_path in STATIC_ASSETS.values():
