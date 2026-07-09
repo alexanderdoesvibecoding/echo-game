@@ -28,7 +28,7 @@
 - [x] Give the user a date. In the welcome say “must be done by December 30th” instead of just having vague “day 4,
   shift 3”
 
-- [ ] Come up with a logo/brand, something that can go on the welcome screen
+- [x] Come up with a logo/brand, something that can go on the welcome screen
 
 - [x] Make subjobs behind schedule hoverable to see which they are
 
