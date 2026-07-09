@@ -1,6 +1,6 @@
 Weather
 
-- Takes out 1-3 workstations for 3-9 shifts
+- Takes out 1–3 workstations for 3–9 shifts
 - Options:
     - Move subjobs on those machines to other machines if possible
         - Pushing the subjobs on those machines out
@@ -8,7 +8,7 @@ Weather
 
 Workstation breakdown
 
-- Takes out a machine for 3-9 shifts
+- Takes out a machine for 3–9 shifts
 - Options:
     - Move subjobs on those machines to other machines if possible
     - Wait it out for those subjobs
@@ -19,7 +19,7 @@ Materials not here
 - Options:
     - Wait for materials for a couple shifts
     - Use another subjobs
-        - Delays another subjob a couple shifts (which may be fine if its not waiting)
+        - Delays another subjob a couple shifts (which may be fine if it's not waiting)
 
 ECHO recommendation (rare)
 
@@ -37,5 +37,5 @@ Worker took an off day
     - Find a replacement
         - Spawns sub decision for if this replacement worker messed it up
             - The subjob takes a couple shifts longer because of rework
-        - The worker needn’t fail though so often the subjob can continue normally when a replacement is used
-    - Hold the job until suitable worker returns next shift
+        - The worker needn’t fail, though; so often the subjob can continue normally when a replacement is used
+    - Hold the job until a suitable worker returns next shift
