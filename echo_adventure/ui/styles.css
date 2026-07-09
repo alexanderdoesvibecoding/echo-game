@@ -222,9 +222,9 @@ header {
 .topbar {
   display: grid;
   grid-template-columns: auto minmax(240px, 1fr) auto;
-  gap: 18px;
+  gap: 16px;
   align-items: center;
-  padding: 16px 22px;
+  padding: 12px 22px;
   position: relative;
 }
 
@@ -233,6 +233,40 @@ h1 { font-size: 20px; font-weight: 760; }
 h2 { font-size: 15px; font-weight: 760; }
 h3 { font-size: 13px; font-weight: 760; color: var(--muted); text-transform: uppercase; }
 .subtle { color: var(--muted); }
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.brand-mark {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  object-fit: contain;
+  padding: 5px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 18px rgba(31, 36, 40, 0.08);
+}
+.brand-copy {
+  min-width: 0;
+}
+.brand-copy h1 {
+  color: #12365b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html[data-theme="dark"] .brand-copy h1 {
+  color: #ffffff;
+}
+html[data-theme="dark"] .brand-mark,
+html[data-theme="dark"] .welcome-logo {
+  border-color: #3a4352;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.28);
+}
 .settings-wrap { position: relative; }
 .settings-button {
   width: 38px;
@@ -1310,6 +1344,17 @@ html[data-theme="dark"] .puzzle-added {
   margin-top: 6px;
 }
 .hidden { display: none !important; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .error {
   margin: 0 22px;
   padding: 10px 12px;
@@ -1330,6 +1375,13 @@ html[data-theme="dark"] .puzzle-added {
 }
 @media (max-width: 680px) {
   .topbar { grid-template-columns: auto 1fr; }
+  .brand-lockup { gap: 9px; }
+  .brand-mark {
+    width: 40px;
+    height: 40px;
+    padding: 4px;
+  }
+  .brand-copy h1 { font-size: 18px; }
   main { padding: 12px; }
   .metrics, .split, .summary-grid { grid-template-columns: 1fr; }
   .summary-metrics-bar { grid-template-columns: 1fr; }
@@ -1456,6 +1508,19 @@ html[data-theme="dark"] .puzzle-added {
 }
 .welcome-modal {
   max-width: 760px;
+}
+.welcome-title {
+  display: flex;
+  justify-content: center;
+}
+.welcome-logo {
+  display: block;
+  width: min(100%, 380px);
+  height: auto;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 .welcome-copy {
   display: grid;

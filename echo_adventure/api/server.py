@@ -15,6 +15,14 @@ from .view import INDEX_HTML, UI_DIR
 STATIC_ASSETS = {
     "/ui/api.js": ("application/javascript; charset=utf-8", UI_DIR / "api.js"),
     "/ui/app.js": ("application/javascript; charset=utf-8", UI_DIR / "app.js"),
+    "/ui/assets/logos/echo-logo-full.png": (
+        "image/png",
+        UI_DIR / "assets" / "logos" / "echo-logo-full.png",
+    ),
+    "/ui/assets/logos/echo-logo-small.png": (
+        "image/png",
+        UI_DIR / "assets" / "logos" / "echo-logo-small.png",
+    ),
     "/ui/assets/virginia-submarine-cutout.png": ("image/png", UI_DIR / "assets" / "virginia-submarine-cutout.png"),
     "/ui/dayClock.js": ("application/javascript; charset=utf-8", UI_DIR / "dayClock.js"),
     "/ui/html.js": ("application/javascript; charset=utf-8", UI_DIR / "html.js"),
