@@ -83,11 +83,11 @@ The player-facing copy describes consequences qualitatively. Internally, promise
 The final reveal includes:
 
 - Player and ECHO final snapshots
-- Final decision score over answered questions
+- A cumulative score over decisions and realized completion payoffs
 - Metric comparison
 - Outcome drivers
 
-The final score shown in the comparison table is the same accumulated decision score shown by the decision chart. Schedule performance is shown separately through deadline, completion, late-work, risk, idle-time, and reschedule metrics.
+Both score lines begin at zero. Ordinary choices use small bounded point changes, named follow-ups award their payoff only when that seeded branch actually occurs, and early completion adds a visible payoff so neither scheduler benefits from delaying completion to farm more questions. ECHO also receives a visible fixed benchmark-mastery payoff on completion so the benchmark wins strict ties. The final score shown in the comparison table is the same accumulated score shown by the chart.
 
 ## Browser UI And API
 
@@ -192,8 +192,8 @@ The benchmark run uses the same generated scenario as the player, but a separate
 
 ECHO decision selection has two layers:
 
-- Static graph scoring uses every named edge and its probability to estimate expected downstream cost.
-- Live-board forecasting deep-copies the state, applies the exact same parameterized effects and seeded follow-up resolution used by the player path, projects each current choice through the remaining run, then ranks outcomes by completion, completion shift, projected decision score, remaining jobs, lateness, reschedules, idle time, and risk. Because the fixed run seed determines each edge outcome, ECHO can project the exact branch for that run while static fallback scoring remains probability-aware.
+- Static graph scoring uses every named edge and its probability to estimate expected downstream points.
+- Live-board forecasting deep-copies the state, applies the exact same parameterized effects and seeded follow-up resolution used by the player path, and maximizes the realized completed-run score before using completion timing and operating metrics as tie-breakers. Because the fixed run seed determines each edge outcome, ECHO can distinguish a temporary loss with a real later payoff from the same choice on a seed where that payoff will not occur.
 
 Relevant ECHO knobs in `GameConfig`:
 

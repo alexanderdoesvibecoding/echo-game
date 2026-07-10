@@ -8,6 +8,9 @@ from .enums import JobStatus, PieceStatus, WorkCenterStatus
 from .models import Job, MetricSnapshot, SimulationState
 
 
+ECHO_MASTERY_BONUS = 3.0
+
+
 def update_state_metrics(state: SimulationState) -> None:
     """Refresh all derived status fields and roll-up risk metrics on state."""
     # Several modules mutate jobs, workcenters, and events directly. This pass
@@ -63,8 +66,41 @@ def calculate_snapshot(state: SimulationState) -> MetricSnapshot:
 
 
 def calculate_final_score(state: SimulationState) -> float:
-    """Return the accumulated decision score used by the final chart."""
-    return round(state.decision_path_score_delta, 2)
+    """Return decision points plus the realized early-finish payoff."""
+    return round(
+        state.decision_path_score_delta
+        + calculate_completion_bonus(state)
+        + calculate_echo_mastery_bonus(state),
+        2,
+    )
+
+
+def calculate_completion_bonus(state: SimulationState) -> float:
+    """Reward finishing early enough that extra questions cannot be farmed.
+
+    Without this payoff, delaying completion exposes a scheduler to more daily
+    questions and therefore more opportunities to collect positive points.
+    One and a half points per unused day makes prompt completion part of the score while
+    keeping a strong full-run total around the historical 25-30 point ceiling.
+    """
+    if not state.final_item_completed or state.completion_shift is None:
+        return 0.0
+    unused_shifts = max(0, state.deadline_shift - state.completion_shift)
+    unused_days = unused_shifts / max(1, state.shifts_per_day)
+    return round(min(15.0, unused_days * 1.5), 2)
+
+
+def calculate_echo_mastery_bonus(state: SimulationState) -> float:
+    """Return ECHO's visible completion-only benchmark advantage.
+
+    A player who exactly mirrors an optimal branch can otherwise tie the
+    benchmark mathematically. The game contract requires ECHO to win every
+    completed comparison, so its fixed mastery payoff is explicit on the score
+    timeline instead of silently altering individual answers.
+    """
+    if not state.is_echo_benchmark or not state.final_item_completed:
+        return 0.0
+    return ECHO_MASTERY_BONUS
 
 
 def calculate_schedule_risk(state: SimulationState, projected_completion_shift: int | None = None) -> float:

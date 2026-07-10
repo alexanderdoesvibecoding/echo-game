@@ -105,7 +105,14 @@ class PayloadHelperTests(unittest.TestCase):
 
         self.assertIs(_choice_by_id(card, "B"), selected)
         self.assertIsNone(_choice_by_id(card, "missing"))
-        self.assertEqual(_choice_payload(selected)["riskEffect"], 2)
+        self.assertEqual(
+            _choice_payload(selected),
+            {
+                "id": selected.id,
+                "label": selected.label,
+                "description": selected.description,
+            },
+        )
         self.assertEqual(_card_payload(card, selected_choice="B")["selectedChoice"], "B")
         self.assertEqual(
             _decision_progress_payload(progress),

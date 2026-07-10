@@ -51,6 +51,9 @@ def apply_choice(
             echo_choice_label=echo_choice.label if echo_choice else None,
             aligned_with_echo=bool(echo_choice and echo_choice.id == choice.id),
             note=note,
+            score_delta=round(choice.score_delta, 2),
+            cumulative_score=round(state.decision_path_score_delta, 2),
+            shift=state.current_shift,
         )
     )
     update_state_metrics(state)

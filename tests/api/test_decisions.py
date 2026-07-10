@@ -26,6 +26,7 @@ from echo_adventure.decisions.selectors import (
     _visible_events,
 )
 from echo_adventure.enums import DecisionType, EventType, JobStatus, TargetType, WorkCenterStatus
+from echo_adventure.models import DecisionEffect
 
 from .helpers import (
     make_card,
@@ -37,7 +38,7 @@ from .helpers import (
 
 
 class DecisionGraphTests(unittest.TestCase):
-    def test_project_choice_branch_state_adds_stable_deduped_tags(self):
+    def test_project_choice_branch_state_reports_named_follow_up_ids(self):
         choice = make_choice(
             effect_type="wait",
             risk_effect=5,
@@ -46,13 +47,10 @@ class DecisionGraphTests(unittest.TestCase):
 
         primary, tags = project_choice_branch_state(choice)
 
-        self.assertEqual(primary, "wait_escalation")
-        self.assertEqual(len(tags), len(set(tags)))
-        self.assertIn("risk_debt_created", tags)
-        self.assertIn("crew_overloaded", tags)
-        self.assertIn("supplier_risk_ignored", tags)
+        self.assertEqual(primary, "")
+        self.assertEqual(tags, [])
 
-    def test_apply_campaign_choice_updates_branch_tags_unlocks_path_and_signature(self):
+    def test_apply_campaign_choice_updates_score_path_and_signature(self):
         state = make_state()
         future = make_card("FUTURE", day=2)
         state.decision_cards = {"FUTURE": future}
@@ -66,14 +64,13 @@ class DecisionGraphTests(unittest.TestCase):
         apply_campaign_choice(state, card, choice)
 
         self.assertEqual(state.campaign_selected_choices, {"CARD-1": "A"})
-        self.assertEqual(state.campaign_branch_tag_order["critical_path_protected"], 0)
-        self.assertEqual(state.campaign_branch_tag_order["crew_overloaded"], 1)
-        self.assertEqual(state.unlocked_decision_card_ids, {"FUTURE"})
+        self.assertEqual(state.campaign_branch_tag_order, {})
+        self.assertEqual(state.unlocked_decision_card_ids, set())
         self.assertEqual(state.decision_path, ["CARD-1:A"])
         self.assertEqual(state.decision_path_signature, decision_path_signature(state))
         self.assertEqual(state.decision_path_score_delta, 1.25)
 
-    def test_active_campaign_cards_filter_by_unlocks_tags_exclusions_and_event_priority(self):
+    def test_active_campaign_cards_sort_named_candidates_by_campaign_priority(self):
         state = make_state()
         event_card = make_card("EVT-CARD", day=1, campaign_priority=50)
         root = make_card("ROOT", day=1, campaign_priority=20)
@@ -106,7 +103,7 @@ class DecisionGraphTests(unittest.TestCase):
 
         cards = active_campaign_decision_cards(state, 1, {})
 
-        self.assertEqual([card.id for card in cards], ["EVT-CARD", "ROUTE", "ROOT"])
+        self.assertEqual([card.id for card in cards], ["EXCLUDED", "ROUTE", "ROOT"])
 
     def test_decision_progress_merges_session_and_campaign_selected_choices(self):
         state = make_state()
@@ -132,7 +129,7 @@ class DecisionGraphTests(unittest.TestCase):
 
         self.assertEqual(state.unlocked_decision_card_ids, {"KNOWN"})
 
-    def test_unlocked_branch_card_is_still_filtered_by_exclusion_tags(self):
+    def test_legacy_tag_metadata_does_not_hide_named_campaign_cards(self):
         state = make_state()
         card = make_card(
             "ROUTE",
@@ -146,7 +143,7 @@ class DecisionGraphTests(unittest.TestCase):
         state.unlocked_decision_card_ids = {card.id}
         state.campaign_branch_tags = {"critical_path_protected", "crew_overloaded"}
 
-        self.assertEqual(active_campaign_decision_cards(state, 2, {}), [])
+        self.assertEqual([item.id for item in active_campaign_decision_cards(state, 2, {})], [card.id])
 
     def test_context_labels_use_short_impact_copy(self):
         state = make_state()
@@ -192,7 +189,7 @@ class DecisionScoringTests(unittest.TestCase):
         score = score_echo_choice(root_choice, graph)
 
         self.assertIsInstance(score, float)
-        self.assertGreater(score, 0)
+        self.assertEqual(score, 0.0)
 
     def test_select_echo_choice_tiebreaks_by_choice_id(self):
         card = make_card(
@@ -286,65 +283,43 @@ class DecisionSelectorTests(unittest.TestCase):
 class DecisionEffectTests(unittest.TestCase):
     def test_apply_choice_wait_records_history_and_adds_pressure(self):
         state = make_state()
-        event = make_event("EVT-WAIT", start_shift=1, duration_shifts=2)
-        event.started = True
-        state.event_timeline = [event]
-        state.active_events = [event.id]
-        card = make_card("CARD-WAIT", target_ids=[event.id], card_type=DecisionType.CRITICAL_PATH)
+        job = state.jobs["JOB-01-001"]
+        before = job.remaining_duration_shifts
+        card = make_card("CARD-WAIT", target_ids=[job.id], card_type=DecisionType.CRITICAL_PATH)
         choice = make_choice(
             "WAIT",
-            effect_type="wait",
-            immediate_effects={"type": "wait", "event_id": event.id},
-            risk_effect=4,
-            reschedule_effect=1,
-            branch_tags_added=["wait_escalation"],
             score_delta=-0.5,
         )
+        choice.effects = [
+            DecisionEffect("delay", {"selector": "target", "shifts": 1, "count": 1}),
+            DecisionEffect("reschedule", {"count": 1}),
+        ]
         card.choices = [choice]
         state.decision_cards[card.id] = card
 
         note = apply_choice(state, card, choice, echo_choice=choice)
 
-        self.assertIn("Held", note)
-        self.assertGreater(event.duration_shifts, 2)
+        self.assertIn("Response recorded", note)
+        self.assertGreater(job.remaining_duration_shifts, before)
         self.assertEqual(state.reschedule_count, 1)
         self.assertEqual(state.decision_history[-1].choice_id, "WAIT")
+        self.assertEqual(state.decision_history[-1].score_delta, -0.5)
         self.assertIn("CARD-WAIT:WAIT", state.decision_path)
 
-    def test_apply_choice_expedite_reduces_current_and_related_future_event(self):
+    def test_apply_choice_recover_reduces_target_remaining_duration(self):
         state = make_state()
-        source = make_event(
-            "EVT-SOURCE",
-            event_type=EventType.DELAYED_MATERIAL,
-            target_id="JOB-01-001",
-            severity=4,
-            duration_shifts=5,
-        )
-        future = make_event(
-            "EVT-FUTURE",
-            event_type=EventType.SUPPLIER_ESCALATION,
-            target_id="JOB-01-002",
-            start_shift=8,
-            severity=4,
-            duration_shifts=4,
-        )
-        state.event_timeline = [source, future]
-        state.active_events = [source.id]
-        card = make_card("CARD-EXP", target_ids=[source.id])
-        choice = make_choice(
-            "EXP",
-            effect_type="expedite_event",
-            immediate_effects={"type": "expedite_event", "event_id": source.id},
-        )
+        job = state.jobs["JOB-01-001"]
+        job.started_once = True
+        job.remaining_duration_shifts = 4
+        card = make_card("CARD-RECOVER", target_ids=[job.id])
+        choice = make_choice("RECOVER")
+        choice.effects = [DecisionEffect("recover", {"selector": "target", "shifts": 2, "count": 1})]
         card.choices = [choice]
 
         note = apply_choice(state, card, choice, echo_choice=choice)
 
-        self.assertIn("Expedited", note)
-        self.assertEqual(source.duration_shifts, 3)
-        self.assertEqual(source.severity, 3)
-        self.assertLess(future.severity, 4)
-        self.assertIn(source.id, future.effects["upstream_mitigations"])
+        self.assertIn("Response recorded", note)
+        self.assertEqual(job.remaining_duration_shifts, 2)
 
     def test_apply_choice_reroute_moves_disrupted_job_to_alternate(self):
         state = make_state()
@@ -355,33 +330,28 @@ class DecisionEffectTests(unittest.TestCase):
         state.workcenters["WC-A1"].status = WorkCenterStatus.DOWN
         card = make_card("CARD-REROUTE", target_ids=[job.id])
         choice = make_choice("REROUTE", effect_type="reroute")
+        choice.effects = [DecisionEffect("reroute", {"selector": "target", "count": 1})]
         card.choices = [choice]
 
         note = apply_choice(state, card, choice, echo_choice=choice)
 
-        self.assertIn("Rerouted", note)
+        self.assertIn("Response recorded", note)
         self.assertEqual(job.assigned_workcenter_id, "WC-B1")
         self.assertIn(job.id, state.workcenters["WC-B1"].queue)
 
-    def test_apply_choice_prioritizes_unexpected_job_request(self):
+    def test_apply_choice_updates_target_priority(self):
         state = make_state()
-        event = make_unexpected_job_event(severity=3)
-        state.event_timeline = [event]
-        card = make_card("CARD-NEW", target_ids=[event.id])
-        choice = make_choice(
-            "PRIORITIZE",
-            effect_type="prioritize_new_job",
-            immediate_effects={"type": "prioritize_new_job", "event_id": event.id},
-        )
+        job = state.jobs["JOB-01-001"]
+        before = job.priority
+        card = make_card("CARD-PRIORITY", target_ids=[job.id])
+        choice = make_choice("PRIORITIZE")
+        choice.effects = [DecisionEffect("priority", {"selector": "target", "delta": 10, "count": 1})]
         card.choices = [choice]
 
         note = apply_choice(state, card, choice, echo_choice=choice)
 
-        self.assertIn("prioritized", note)
-        self.assertEqual(len(state.pieces), 3)
-        piece_id = event.effects["unexpected_piece_id"]
-        first_job = state.jobs[state.pieces[piece_id].job_ids[0]]
-        self.assertGreaterEqual(first_job.priority, 90)
+        self.assertIn("Response recorded", note)
+        self.assertEqual(job.priority, before + 10)
 
     def test_apply_choice_unknown_effect_records_safe_fallback(self):
         state = make_state()
@@ -395,7 +365,7 @@ class DecisionEffectTests(unittest.TestCase):
 
         note = apply_choice(state, card, choice, echo_choice=choice)
 
-        self.assertEqual(note, "Recorded the scheduling preference for today.")
+        self.assertEqual(note, "Response recorded; the affected schedule and shop constraints were updated.")
         self.assertEqual(state.decision_history[-1].choice_id, "UNKNOWN")
         self.assertIn("CARD-UNKNOWN:UNKNOWN", state.decision_path)
 

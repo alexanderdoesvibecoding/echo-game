@@ -17,6 +17,7 @@ const {
   syncDayCycleForState,
 } = await import("../../echo_adventure/ui/dayClock.js");
 const {
+  buildDailyDecisionGroups,
   hideDecisionChartTooltip,
   showDecisionChartTooltip,
 } = await import("../../echo_adventure/ui/renderFinal.js");
@@ -241,6 +242,39 @@ test("renderFinal decision chart tooltip locks and force-unlocks at runtime", ()
 
   assert.equal(tooltip.classList.contains("active"), false);
   assert.equal(tooltip.classList.contains("locked"), false);
+});
+
+test("final score groups start both competitors at zero and preserve delayed payoffs", () => {
+  const groups = buildDailyDecisionGroups([
+    {
+      sequence: 1,
+      day: 1,
+      dateLabel: "July 1",
+      playerQuestionId: "PLAYER-1",
+      echoQuestionId: "ECHO-1",
+      playerDelta: 1,
+      echoDelta: -1.5,
+      playerCumulativeScore: 1,
+      echoCumulativeScore: -1.5,
+    },
+    {
+      sequence: 2,
+      day: 2,
+      dateLabel: "July 2",
+      playerQuestionId: "PLAYER-2",
+      echoQuestionId: "ECHO-2",
+      playerDelta: 0.25,
+      echoDelta: 3,
+      playerCumulativeScore: 1.25,
+      echoCumulativeScore: 1.5,
+    },
+  ]);
+
+  assert.equal(groups[0].dateLabel, "Start");
+  assert.equal(groups[0].playerCumulativeScore, 0);
+  assert.equal(groups[0].echoCumulativeScore, 0);
+  assert.equal(groups[1].echoCumulativeScore, -1.5);
+  assert.equal(groups[2].echoCumulativeScore, 1.5);
 });
 
 test("modals and theme controls mutate browser-local UI state", () => {

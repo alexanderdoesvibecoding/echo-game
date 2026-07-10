@@ -7,7 +7,13 @@ import logging
 import math
 
 from .config import GameConfig
-from .decisions import active_decision_cards, apply_choice, score_echo_choice, select_echo_choice
+from .decisions import (
+    active_decision_cards,
+    apply_choice,
+    score_echo_choice,
+    select_echo_choice,
+    select_realized_echo_choice,
+)
 from .decisions.selectors import (
     _event_by_id,
     _jobs_for_card,
@@ -51,10 +57,18 @@ def apply_echo_decisions_for_day(
                 completed_days.add(day)
             return applied
         for card in open_cards:
+            if state.final_item_completed:
+                if completed_days is not None:
+                    completed_days.add(day)
+                return applied
             choice = select_echo_choice_for_state(state, card, config, state.decision_cards)
             apply_choice(state, card, choice, actor="ECHO", echo_choice=choice)
             selected[card.id] = choice.id
             applied += 1
+            if state.final_item_completed:
+                if completed_days is not None:
+                    completed_days.add(day)
+                return applied
 
     if completed_days is not None:
         completed_days.add(day)
@@ -67,7 +81,7 @@ def select_echo_choice_for_state(
     config: GameConfig,
     graph: dict[str, DecisionCard] | None = None,
 ) -> DecisionChoice:
-    """Choose ECHO's response from the full campaign tree and live-board forecast."""
+    """Choose ECHO's response from the realized campaign and live forecast."""
     graph = graph or state.decision_cards
     update_state_metrics(state)
     scored = []
@@ -86,7 +100,14 @@ def _forecast_choice_objective(
     graph: dict[str, DecisionCard],
     tree_score_memo: dict[str, float],
 ) -> tuple[float, ...]:
-    """Rank a choice by projected finish first, then projected final score."""
+    """Rank a choice by successful completion, then projected score.
+
+    A choice that leaves the project unfinished cannot be the correct answer.
+    Among branches that finish, ECHO maximizes the realized point ledger and
+    then protects the earlier completion before other operational tie-breakers.
+    The early-finish payoff prevents extra questions from becoming a reason to
+    linger.
+    """
     heuristic_score = _heuristic_choice_score(state, card, choice, graph, tree_score_memo)
     projected = copy.deepcopy(state)
     projected_card = projected.decision_cards.get(card.id)
@@ -139,8 +160,8 @@ def _forecast_choice_objective(
     completion_rank = 0.0 if projected.final_item_completed else 1.0
     return (
         completion_rank,
-        float(completion_shift),
         -final_score,
+        float(completion_shift),
         float(snapshot.jobs_remaining),
         float(snapshot.jobs_late),
         float(snapshot.jobs_behind_schedule),
@@ -173,10 +194,14 @@ def _apply_static_echo_choices(state: SimulationState, config: GameConfig) -> No
         else:
             cards_to_apply = open_cards
         for card in cards_to_apply:
-            choice = select_echo_choice(card)
+            if state.final_item_completed:
+                return
+            choice = select_realized_echo_choice(state, card, state.decision_cards)
             apply_choice(state, card, choice, actor="ECHO-forecast", echo_choice=choice)
             selected[card.id] = choice.id
             applied += 1
+            if state.final_item_completed:
+                return
             if projection_limit is not None and applied >= projection_limit:
                 return
 
@@ -189,9 +214,9 @@ def _heuristic_choice_score(
     tree_score_memo: dict[str, float],
 ) -> float:
     """Return the low-is-good fallback score used when projection cannot finish."""
-    static_score = score_echo_choice(choice, graph, tree_score_memo) * 0.65
+    static_score = score_echo_choice(choice, graph, tree_score_memo)
     live_score = _live_operational_score(state, card, choice)
-    return live_score + static_score
+    return live_score - static_score * 10.0
 
 
 def _failed_forecast_objective(heuristic_score: float) -> tuple[float, ...]:

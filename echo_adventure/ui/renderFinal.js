@@ -27,7 +27,7 @@ function dateLabelParts(label) {
   return { month: match[1], day: match[2] };
 }
 
-function buildDailyDecisionGroups(decisionPoints) {
+export function buildDailyDecisionGroups(decisionPoints) {
   const groups = [];
   const groupsByKey = new Map();
   let previousPlayerCumulative = 0;
@@ -53,6 +53,8 @@ function buildDailyDecisionGroups(decisionPoints) {
         decisions: [],
         playerDailyDelta: 0,
         echoDailyDelta: 0,
+        playerDecisionCount: 0,
+        echoDecisionCount: 0,
       };
       groupsByKey.set(key, group);
       groups.push(group);
@@ -60,6 +62,8 @@ function buildDailyDecisionGroups(decisionPoints) {
 
     group.playerDailyDelta += playerDelta;
     group.echoDailyDelta += echoDelta;
+    if (decisionPoint.playerQuestionId || decisionPoint.playerScoreEvent) group.playerDecisionCount += 1;
+    if (decisionPoint.echoQuestionId || decisionPoint.echoScoreEvent) group.echoDecisionCount += 1;
     group.decisions.push({
       sequence,
       label: decisionPoint.label || `Q${sequence}`,
@@ -68,6 +72,8 @@ function buildDailyDecisionGroups(decisionPoints) {
       playerDelta: formatScore(playerDelta),
       echoDelta: formatScore(echoDelta),
       affected: decisionPoint.affectedLabel || "-",
+      playerEventKind: decisionPoint.playerEventKind || "decision",
+      echoEventKind: decisionPoint.echoEventKind || "decision",
     });
 
     previousPlayerCumulative = playerCumulative !== null
@@ -89,14 +95,28 @@ function buildDailyDecisionGroups(decisionPoints) {
     group.echoCumulativeScore = echoRunning;
   });
 
-  return groups;
+  return [
+    {
+      day: 0,
+      dateLabel: "Start",
+      decisions: [],
+      playerDailyDelta: 0,
+      echoDailyDelta: 0,
+      playerCumulativeScore: 0,
+      echoCumulativeScore: 0,
+      playerDecisionCount: 0,
+      echoDecisionCount: 0,
+      isBaseline: true,
+    },
+    ...groups,
+  ];
 }
 
 function renderDecisionScoreChart(history) {
   const decisionPoints = Array.isArray(history?.decisionPoints) ? history.decisionPoints : [];
+  if (!decisionPoints.length) return `<div class="subtle">No decision score history recorded.</div>`;
   const dailyGroups = buildDailyDecisionGroups(decisionPoints);
   const count = dailyGroups.length;
-  if (!count) return `<div class="subtle">No decision score history recorded.</div>`;
 
   const width = 760;
   const height = 320;
@@ -143,11 +163,11 @@ function renderDecisionScoreChart(history) {
   }).join("");
   const dayAttrs = (group) => {
     const decisionCount = group.decisions.length;
-    const decisionWord = decisionCount === 1 ? "decision" : "decisions";
+    const decisionWord = decisionCount === 1 ? "score event" : "score events";
     const ariaLabel = [
       `${group.dateLabel}: ${decisionCount} ${decisionWord}.`,
-      `Your cumulative decision score ${formatScore(group.playerCumulativeScore)}.`,
-      `ECHO cumulative decision score ${formatScore(group.echoCumulativeScore)}.`,
+      `Your cumulative score ${formatScore(group.playerCumulativeScore)}.`,
+      `ECHO cumulative score ${formatScore(group.echoCumulativeScore)}.`,
     ].join(" ");
     return `
       tabindex="0"
@@ -167,6 +187,9 @@ function renderDecisionScoreChart(history) {
     `;
   };
   const decisionMarker = (series, index) => {
+    const group = dailyGroups[index];
+    if (series === "Player" && group.playerDecisionCount === 0) return "";
+    if (series === "ECHO" && group.echoDecisionCount === 0) return "";
     const values = series === "Player" ? playerScore : echoScore;
     const value = Number(values[index]) || 0;
     const [x, y] = point(value, index);
@@ -203,7 +226,7 @@ function renderDecisionScoreChart(history) {
         <span class="chart-key chart-echo"><span class="chart-swatch"></span>ECHO score</span>
       </div>
       <div class="chart-frame">
-        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Line chart comparing cumulative decision score by day for player and ECHO">
+        <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Line chart comparing cumulative score by day for player and ECHO">
           ${yGrid}
           <line class="chart-axis" x1="${pad.left}" y1="${height - pad.bottom}" x2="${width - pad.right}" y2="${height - pad.bottom}"></line>
           <line class="chart-axis" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${height - pad.bottom}"></line>
@@ -231,7 +254,7 @@ function renderFinalMetricBar(player, automated) {
   const formatRisk = (value) => `${Math.round(Number(value || 0))}/100`;
   const metricCards = [
     {
-      label: "Decision Score",
+      label: "Score",
       playerValue: formatScore(player.finalScore),
       echoValue: formatScore(automated.finalScore),
       tone: Number(player.finalScore || 0) >= Number(automated.finalScore || 0) ? "good" : "warn",
@@ -306,6 +329,8 @@ export function showDecisionChartTooltip(event, marker, options = {}) {
     decisions = [];
   }
   const decisionMarkup = decisions.map((decision, index) => {
+    const playerCompletion = decision.playerEventKind === "completion";
+    const echoCompletion = decision.echoEventKind === "completion";
     return `
       <section class="chart-tooltip-decision">
         <div class="chart-tooltip-decision-title">
@@ -314,11 +339,11 @@ export function showDecisionChartTooltip(event, marker, options = {}) {
         </div>
         <dl class="chart-tooltip-fields">
           <div class="chart-tooltip-field">
-            <dt>Your answer:</dt>
+            <dt>${playerCompletion ? "Your payoff:" : "Your answer:"}</dt>
             <dd>${escapeHtml(decision.playerChoice || "-")}</dd>
           </div>
           <div class="chart-tooltip-field">
-            <dt>ECHO chose</dt>
+            <dt>${echoCompletion ? "ECHO payoff" : "ECHO chose"}</dt>
             <dd>${escapeHtml(decision.echoChoice || "-")}</dd>
           </div>
           <div class="chart-tooltip-field">
@@ -339,8 +364,8 @@ export function showDecisionChartTooltip(event, marker, options = {}) {
   }).join("") || `<div class="subtle">No decisions recorded for this day.</div>`;
   tooltip.innerHTML = `
     <div class="chart-tooltip-title">
-      <strong>${escapeHtml(data.dateLabel || data.label || "Day")} decisions</strong>
-      <span>${escapeHtml(data.decisionCount || "0")} total</span>
+      <strong>${escapeHtml(data.dateLabel || data.label || "Day")} score</strong>
+      <span>${escapeHtml(data.decisionCount || "0")} score events</span>
     </div>
     <div class="chart-tooltip-hint">${locked ? "Locked - click this day again to unlock" : "Click to lock this panel"}</div>
     <div class="chart-tooltip-summary">

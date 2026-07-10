@@ -463,7 +463,14 @@ def _generate_domain_resources(
             if resource.kind == ResourceKind.CONTROLLED_AREA
         )
         capable_workers = [worker for worker in shop_workers[job.shop_id] if job.required_capability in worker.skills]
-        job.worker_id = (capable_workers or shop_workers[job.shop_id])[0].id
+        if not capable_workers:
+            # A generated required capability must have at least one qualified
+            # operator. Falling back to an unqualified worker created a
+            # permanent domain block that neither scheduler could resolve.
+            qualified = min(shop_workers[job.shop_id], key=lambda worker: (len(worker.skills), worker.id))
+            qualified.skills = sorted(set([*qualified.skills, job.required_capability]))
+            capable_workers = [qualified]
+        job.worker_id = capable_workers[0].id
         job.fixture_id = fixture_by_shop[job.shop_id]
         material = next(
             stock
@@ -509,6 +516,19 @@ def _generate_domain_resources(
             }
         ]
         job.support_resource_ids = [*local_support, *capability_support]
+
+    # Material is consumable runtime state, so every generated scenario must
+    # contain enough baseline stock to execute every required subjob. Random
+    # 4-9 unit lots could strand a dependency chain permanently even when no
+    # material-shortage decision occurred. Keep a small decision buffer above
+    # the exact generated demand; decisions can still hold, move, or invalidate
+    # stock, but the untouched benchmark is always feasible.
+    demand_by_material: dict[str, int] = {}
+    for job in jobs.values():
+        if job.material_id:
+            demand_by_material[job.material_id] = demand_by_material.get(job.material_id, 0) + 1
+    for material_id, demand in demand_by_material.items():
+        materials[material_id].quantity = max(materials[material_id].quantity, demand + 3)
 
     return workers, resources, materials, documents, methods
 

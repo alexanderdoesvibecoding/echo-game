@@ -15,7 +15,12 @@ from .graph import (
     unlock_future_decision_nodes,
 )
 
-from .scoring import score_echo_choice, select_echo_choice
+from .scoring import (
+    score_echo_choice,
+    score_realized_echo_choice,
+    select_echo_choice,
+    select_realized_echo_choice,
+)
 
 __all__ = [
     "active_campaign_decision_cards",
@@ -27,6 +32,8 @@ __all__ = [
     "generate_campaign_decision_graph",
     "project_choice_branch_state",
     "score_echo_choice",
+    "score_realized_echo_choice",
     "select_echo_choice",
+    "select_realized_echo_choice",
     "unlock_future_decision_nodes",
 ]

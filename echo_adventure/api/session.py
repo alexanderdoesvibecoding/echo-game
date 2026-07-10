@@ -53,6 +53,7 @@ class GameSession(PayloadMixin, ReviewMixin):
         self.scenario = generate_scenario(self.config)
         self.player_state = initialize_state(self.scenario, self.config.shifts_per_day)
         self.automated_state = initialize_state(self.scenario, self.config.shifts_per_day)
+        self.automated_state.is_echo_benchmark = True
         # Manual scheduler reflects player-driven priorities; automated is the
         # hidden ECHO benchmark revealed at the end.
         self.manual_scheduler = ManualScheduler()

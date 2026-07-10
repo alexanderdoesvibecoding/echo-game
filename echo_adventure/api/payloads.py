@@ -7,12 +7,22 @@ from typing import Any
 from ..decisions import decision_progress
 from ..enums import JobStatus
 from ..metrics import (
+    calculate_completion_bonus,
+    calculate_echo_mastery_bonus,
     calculate_final_score,
     calculate_snapshot,
     day_shift,
     update_state_metrics,
 )
-from ..models import DecisionCard, DecisionChoice, DecisionProgress, MetricSnapshot, PuzzlePiece, SimulationState
+from ..models import (
+    DecisionCard,
+    DecisionChoice,
+    DecisionProgress,
+    DecisionRecord,
+    MetricSnapshot,
+    PuzzlePiece,
+    SimulationState,
+)
 
 
 class PayloadMixin:
@@ -292,7 +302,13 @@ class PayloadMixin:
         }
 
     def _decision_chart_payload(self) -> list[dict[str, Any]]:
-        """Return per-question metadata for the final interactive chart."""
+        """Return decision metadata aligned by the day it actually occurred.
+
+        Player and ECHO records used to be zipped only by sequence.  When
+        ECHO completed earlier, its last real answers were displayed beside
+        later player dates, making it look as though it kept receiving
+        questions after all of its subjobs were done.
+        """
         points: list[dict[str, Any]] = []
         player_cumulative = 0.0
         echo_cumulative = 0.0
@@ -305,54 +321,90 @@ class PayloadMixin:
             record
             for record in self.automated_state.decision_history
             if record.actor == "ECHO"
+            and self._record_precedes_echo_completion(record)
         ]
-        total_records = max(len(player_records), len(echo_records))
+        player_completion = _completion_score_record(self.player_state, "player")
+        echo_completion = _completion_score_record(self.automated_state, "ECHO")
+        if player_completion:
+            player_records.append(player_completion)
+        if echo_completion:
+            echo_records.append(echo_completion)
+        player_by_day = _records_by_day(player_records)
+        echo_by_day = _records_by_day(echo_records)
+        sequence = 0
 
-        for sequence in range(1, total_records + 1):
-            record = player_records[sequence - 1] if sequence <= len(player_records) else None
-            echo_record = echo_records[sequence - 1] if sequence <= len(echo_records) else None
-            card = self.player_state.decision_cards.get(record.card_id) if record else None
-            echo_card = self.automated_state.decision_cards.get(echo_record.card_id) if echo_record else None
-            player_choice = _choice_by_id(card, record.choice_id) if record else None
-            echo_choice = _choice_by_id(echo_card, echo_record.choice_id) if echo_record else None
-            player_delta = float(player_choice.score_delta if player_choice else 0.0)
-            echo_delta = float(echo_choice.score_delta if echo_choice else 0.0)
-            player_cumulative = round(player_cumulative + player_delta, 4)
-            echo_cumulative = round(echo_cumulative + echo_delta, 4)
-            affected = self._decision_affected_payload(card) if card else self._decision_affected_payload(
-                echo_card,
-                state=self.automated_state,
-            )
-            day = record.day if record else echo_record.day
-            question_card = card or echo_card
+        for day in sorted(set(player_by_day) | set(echo_by_day)):
+            day_player_records = player_by_day.get(day, [])
+            day_echo_records = echo_by_day.get(day, [])
+            slots = max(len(day_player_records), len(day_echo_records))
+            for slot in range(slots):
+                sequence += 1
+                record = day_player_records[slot] if slot < len(day_player_records) else None
+                echo_record = day_echo_records[slot] if slot < len(day_echo_records) else None
+                card = self.player_state.decision_cards.get(record.card_id) if record else None
+                echo_card = self.automated_state.decision_cards.get(echo_record.card_id) if echo_record else None
+                player_choice = _choice_by_id(card, record.choice_id) if record else None
+                echo_choice = _choice_by_id(echo_card, echo_record.choice_id) if echo_record else None
+                player_delta = _record_score_delta(record, player_choice)
+                echo_delta = _record_score_delta(echo_record, echo_choice)
+                player_cumulative = round(player_cumulative + player_delta, 4)
+                echo_cumulative = round(echo_cumulative + echo_delta, 4)
+                affected = self._decision_affected_payload(card) if card else self._decision_affected_payload(
+                    echo_card,
+                    state=self.automated_state,
+                )
+                question_card = card or echo_card
+                question_record = record or echo_record
+                player_is_score_event = bool(record and record.record_kind != "decision")
+                echo_is_score_event = bool(echo_record and echo_record.record_kind != "decision")
 
-            points.append(
-                {
-                    "sequence": sequence,
-                    "label": f"Q{sequence}",
-                    "day": day,
-                    "dateLabel": self.config.date_label_for_day(day),
-                    "questionId": record.card_id if record else echo_record.card_id,
-                    "questionTitle": record.card_title if record else echo_record.card_title,
-                    "questionText": question_card.description if question_card else (record or echo_record).card_title,
-                    "playerQuestionId": record.card_id if record else None,
-                    "playerQuestionTitle": record.card_title if record else "-",
-                    "echoQuestionId": echo_record.card_id if echo_record else None,
-                    "echoQuestionTitle": echo_record.card_title if echo_record else "-",
-                    "sameQuestion": bool(record and echo_record and record.card_id == echo_record.card_id),
-                    "playerChoiceId": record.choice_id if record else None,
-                    "playerChoice": record.choice_label if record else "-",
-                    "echoChoiceId": echo_record.choice_id if echo_record else None,
-                    "echoChoice": echo_record.choice_label if echo_record else "-",
-                    "playerDelta": round(player_delta, 2),
-                    "echoDelta": round(echo_delta, 2),
-                    "playerCumulativeScore": round(player_cumulative, 2),
-                    "echoCumulativeScore": round(echo_cumulative, 2),
-                    **affected,
-                }
-            )
+                points.append(
+                    {
+                        "sequence": sequence,
+                        "label": f"Q{sequence}",
+                        "day": day,
+                        "dateLabel": self.config.date_label_for_day(day),
+                        "questionId": question_record.card_id,
+                        "questionTitle": question_record.card_title,
+                        "questionText": question_card.description if question_card else question_record.card_title,
+                        "playerQuestionId": record.card_id if record and not player_is_score_event else None,
+                        "playerQuestionTitle": record.card_title if record else "-",
+                        "echoQuestionId": echo_record.card_id if echo_record and not echo_is_score_event else None,
+                        "echoQuestionTitle": echo_record.card_title if echo_record else "-",
+                        "sameQuestion": bool(
+                            record
+                            and echo_record
+                            and not player_is_score_event
+                            and not echo_is_score_event
+                            and record.card_id == echo_record.card_id
+                        ),
+                        "playerEventKind": record.record_kind if record else None,
+                        "echoEventKind": echo_record.record_kind if echo_record else None,
+                        "playerScoreEvent": player_is_score_event,
+                        "echoScoreEvent": echo_is_score_event,
+                        "playerChoiceId": record.choice_id if record else None,
+                        "playerChoice": record.choice_label if record else "-",
+                        "echoChoiceId": echo_record.choice_id if echo_record else None,
+                        "echoChoice": echo_record.choice_label if echo_record else "-",
+                        "playerDelta": round(player_delta, 2),
+                        "echoDelta": round(echo_delta, 2),
+                        "playerCumulativeScore": round(player_cumulative, 2),
+                        "echoCumulativeScore": round(echo_cumulative, 2),
+                        **affected,
+                    }
+                )
 
         return points
+
+    def _record_precedes_echo_completion(self, record) -> bool:
+        """Exclude impossible/stale ECHO answers recorded after completion."""
+        completion_shift = self.automated_state.completion_shift
+        if completion_shift is None:
+            return True
+        if record.shift is not None:
+            return record.shift <= completion_shift
+        completion_day = max(1, ((completion_shift - 1) // self.automated_state.shifts_per_day) + 1)
+        return record.day <= completion_day
 
     def _decision_affected_payload(
         self,
@@ -460,6 +512,57 @@ class PayloadMixin:
             cumulative += questions_on_day.get(day, 0)
             counts[day] = cumulative
         return counts
+
+
+def _completion_score_record(state: SimulationState, actor: str) -> DecisionRecord | None:
+    """Represent the realized early-finish payoff on the same score timeline."""
+    mastery_bonus = calculate_echo_mastery_bonus(state)
+    bonus = calculate_completion_bonus(state) + mastery_bonus
+    if bonus <= 0 or state.completion_shift is None:
+        return None
+    day = max(1, ((state.completion_shift - 1) // state.shifts_per_day) + 1)
+    same_shift_days = [
+        record.day
+        for record in state.decision_history
+        if record.shift == state.completion_shift
+    ]
+    if same_shift_days:
+        day = max(day, *same_shift_days)
+    return DecisionRecord(
+        day=day,
+        card_id=f"SCORE-COMPLETION-{actor.upper()}",
+        card_title="Project completed",
+        actor=actor,
+        choice_id="early-finish-bonus",
+        choice_label=(
+            "Early completion + benchmark mastery payoff"
+            if mastery_bonus
+            else "Early completion payoff"
+        ),
+        echo_choice_id=None,
+        echo_choice_label=None,
+        aligned_with_echo=False,
+        note="Finished with time remaining before the deadline.",
+        score_delta=bonus,
+        cumulative_score=calculate_final_score(state),
+        shift=state.completion_shift,
+        record_kind="completion",
+    )
+
+
+def _records_by_day(records) -> dict[int, list]:
+    """Group decision records without moving answers onto another date."""
+    grouped: dict[int, list] = {}
+    for record in records:
+        grouped.setdefault(record.day, []).append(record)
+    return grouped
+
+
+def _record_score_delta(record, choice: DecisionChoice | None) -> float:
+    """Read the immutable ledger value, falling back for legacy save data."""
+    if record is not None and record.score_delta is not None:
+        return float(record.score_delta)
+    return float(choice.score_delta if choice else 0.0)
 
 def _snapshot_payload(
     snapshot: MetricSnapshot,

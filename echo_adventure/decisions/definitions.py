@@ -7,6 +7,8 @@ effects and are resolved deterministically by the effect engine.
 
 from __future__ import annotations
 
+import math
+
 from ..models import (
     DecisionChoice,
     DecisionDefinition,
@@ -24,6 +26,14 @@ def F(target: str, probability: float, delay_shifts: int = 3, context: str = "")
 
 
 def _effect_score(effects: tuple[DecisionEffect, ...]) -> float:
+    """Return a bounded, human-scale score for immediate choice effects.
+
+    Effect ``count`` values describe selector breadth, and a few definitions
+    intentionally use 99 to mean "all matching work."  Treating that sentinel
+    as 99 independent score penalties produced choices worth almost -200
+    points.  Scores are game feedback, not another duration total, so breadth
+    has diminishing returns and one answer is always kept within +/-5 points.
+    """
     value = 0.0
     for effect in effects:
         params = effect.params
@@ -34,20 +44,54 @@ def _effect_score(effects: tuple[DecisionEffect, ...]) -> float:
             amount = float(shifts or 0)
         count_value = params.get("count", 1)
         if isinstance(count_value, (tuple, list)):
-            count = max(1, round((int(count_value[0]) + int(count_value[-1])) / 2))
+            count = max(1.0, (float(count_value[0]) + float(count_value[-1])) / 2.0)
         else:
-            count = max(1, int(count_value))
-        if params.get("mode") == "total":
-            count = 1
-        if effect.kind in {"recover", "release", "open_capacity", "qualify", "approve", "verify"}:
-            value += amount * count
-        elif effect.kind in {"delay", "block", "downtime", "rework", "hold"}:
-            value -= amount * count
+            count = max(1.0, float(count_value or 1))
+        breadth = 1.0 if params.get("mode") == "total" else min(3.0, math.sqrt(count))
+        workload = amount * breadth
+
+        if effect.kind in {"recover", "open_capacity"}:
+            value += workload * 0.65
+        elif effect.kind == "release":
+            value += breadth * 0.45
+        elif effect.kind in {"qualify", "approve", "verify"}:
+            value += breadth * 0.35
+        elif effect.kind == "delay":
+            value -= workload * 0.45
+        elif effect.kind in {"block", "downtime"}:
+            value -= workload * 0.55
+        elif effect.kind == "rework":
+            value -= workload * 0.75
+        elif effect.kind == "hold":
+            value -= workload * 0.40
         elif effect.kind == "risk":
-            value -= float(params.get("delta", 0)) * 0.35
-        elif effect.kind in {"reroute", "queue_front", "batch", "nest"}:
-            value += 0.5
-    return round(value, 2)
+            value -= float(params.get("delta", 0)) * breadth * 0.09
+        elif effect.kind == "reschedule":
+            # Queue churn is often the mechanism of the correct recovery, not
+            # a bad outcome by itself. Lateness/delay effects already price a
+            # harmful reshuffle, so do not charge it twice in visible points.
+            value += 0.0
+        elif effect.kind == "reroute":
+            value += breadth * 0.30
+        elif effect.kind in {"queue_front", "batch", "nest"}:
+            value += breadth * 0.25
+        elif effect.kind in {"material_transfer", "replace_worker"}:
+            value += 0.35
+        elif effect.kind == "worker_load":
+            value -= min(4.0, float(params.get("amount", 1) or 1)) * 0.10
+        elif effect.kind == "resource":
+            action = str(params.get("action", ""))
+            if action in {"open", "service", "calibrate", "certify", "temporary_fixture", "temporary_rack"}:
+                value += 0.45
+            elif action in {"unavailable", "hold", "needs_review"}:
+                value -= 0.45 + amount * 0.15
+        elif effect.kind in {"inspection", "document", "material", "worker", "priority"}:
+            # These effects are operationally meaningful, but their direction
+            # depends on the action. Keep them as small tie-breaker gains.
+            value += 0.15
+    # Half-point-scale normalization keeps a strong whole campaign near the
+    # historical 25-30 point ceiling once the early-finish payoff is included.
+    return round(max(-5.0, min(5.0, value)) * 0.5, 2)
 
 
 def C(
@@ -55,6 +99,7 @@ def C(
     description: str,
     *effects: DecisionEffect,
     follow: tuple[FollowUpEdge, ...] = (),
+    score: float | None = None,
 ) -> DecisionChoice:
     operations = tuple(effects)
     risk_effect = sum(int(effect.params.get("delta", 0)) for effect in operations if effect.kind == "risk")
@@ -67,7 +112,7 @@ def C(
         risk_effect=risk_effect,
         reschedule_effect=reschedules,
         future_unlock_card_ids=[f"DEF-{edge.target_definition_id}" for edge in follow],
-        score_delta=_effect_score(operations),
+        score_delta=round(max(-5.0, min(5.0, score if score is not None else _effect_score(operations))), 2),
         effects=list(operations),
         follow_up_edges=list(follow),
     )
@@ -121,7 +166,7 @@ BASE_DEFINITIONS = (
     ),
     D(
         "echo-recommendation", "ECHO sees a possible schedule move", "ECHO recommends a disruptive, board-wide reshuffle whose benefit may not be immediately visible.", "critical",
-        C("Take advice", "Reshuffle active and queued work to expose hidden capacity.", E("delay", selector="all_active", shifts=(1, 2), count=99), E("reschedule", count=3), follow=(F("echo-slack-pocket-found", 0.68),)),
+        C("Take advice", "Reshuffle active and queued work to expose hidden capacity.", E("delay", selector="all_active", shifts=(1, 2), count=99), E("reschedule", count=3), follow=(F("echo-slack-pocket-found", 0.68),), score=-1.5),
         C("Ignore the AI", "Leave today's board unchanged and pass on the possible opening."),
         severity=3, weight=0.22,
     ),
@@ -586,7 +631,7 @@ FOLLOW_UP_DEFINITIONS = (
     ),
     D(
         "echo-slack-pocket-found", "ECHO found hidden slack", "The reshuffle exposed useful idle capacity hidden by the old queue.", "critical",
-        C("Trust the full reshuffle", "Use the whole opening across several jobs and accept visible queue churn.", E("recover", selector="all_active", shifts=(4, 6), count=8, mode="total"), E("queue_front", selector="critical", count=4), E("reschedule", count=3)),
+        C("Trust the full reshuffle", "Use the whole opening across several jobs and accept visible queue churn.", E("recover", selector="all_active", shifts=(4, 6), count=8, mode="total"), E("queue_front", selector="critical", count=4), E("reschedule", count=3), score=3.0),
         C("Use only the safe moves", "Capture the clearest savings without committing to the full board change.", E("recover", selector="critical", shifts=(2, 3), count=4, mode="total"), E("reschedule", count=1)),
         C("Roll back the advice", "Restore the earlier dispatch plan and leave the reshuffle cost unrecovered.", E("reschedule", count=2)),
         is_follow_up=True,
