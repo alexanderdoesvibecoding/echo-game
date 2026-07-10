@@ -20,6 +20,7 @@ This is expected to be a sweeping change. Do not treat the current decision code
 6. Shift gains and losses should be literal. If a choice says it loses 2 shifts, add 2 shifts of duration/blocking/downtime. If it gains 5 shifts, literally subtract or recover 5 shifts where the design says it should.
 7. Shared follow-ups are allowed and expected. Multiple earlier choices can unlock the same later decision.
 8. Keep the run deterministic for a fixed seed. Probabilistic follow-ups should use seeded deterministic randomness, not ambient randomness.
+9. Fix the existing issue where decisions can be about subjobs that are already complete. Decision target selection, follow-up unlocking, and UI payloads must filter out completed subjobs or retarget the decision to relevant incomplete work.
 
 ## Important Current Architecture
 
@@ -67,6 +68,7 @@ Requirements:
 - Player should not see future cards until they unlock.
 - Multiple choices may point to the same follow-up card.
 - Follow-up cards should retain their source context where useful, but they should be reusable from multiple sources.
+- Active cards must never target already-complete subjobs. If a prebuilt graph card points at completed work by the time it becomes visible, retarget it, suppress it, or transform it into a relevant completion/closeout card.
 
 Suggested model:
 
@@ -167,24 +169,22 @@ Better end state:
 6. Implement a typed, parameterized effect engine.
 7. Port every decision in `decisions.md` into definitions and effects.
 8. Implement probabilistic follow-up scheduling/unlocking.
-9. Update ECHO static scoring and live projection for new effects and follow-up probabilities.
-10. Update API payloads/UI only as needed to expose new cards and avoid crashes.
-11. Add focused tests for graph edges, probabilistic follow-ups, literal shift effects, no-choice cards, shared follow-ups, and ECHO lookahead.
-12. Run the app once locally to make sure a standard run loads and decisions can be answered.
+9. Fix stale decision targeting so visible decisions do not reference completed subjobs; apply the same retarget/suppress logic to player state and ECHO projection state.
+10. Update ECHO static scoring and live projection for new effects and follow-up probabilities.
+11. Update API payloads/UI only as needed to expose new cards and avoid crashes.
+12. Do not read, modify, add, or update tests. Ignore the `tests/` folder entirely for this implementation pass.
+13. Run the app once locally, if practical, to make sure a standard run loads and decisions can be answered.
 
-## Testing Expectations
+## Validation Expectations
 
-Add or update tests for:
+Do not read or update tests for this work. Use lightweight manual or script-level validation outside the `tests/` folder:
 
-- Every `Can unlock` target in `decisions.md` resolves to a real decision id.
-- Follow-up probability is deterministic for a fixed seed.
-- Shared follow-up cards can be unlocked from multiple prior choices.
-- No-choice cards have exactly one inert choice but still apply their unavoidable effect once.
-- Literal shift loss/gain effects change durations/downtime/blocking by the promised amount.
-- ECHO picks a worse-immediate/better-later option when projection shows it is better.
-- ECHO avoids a tempting immediate option when projection shows bad follow-up consequences.
-- ECHO projection remains deterministic.
-- Existing daily decision API and UI payloads still work.
+- Confirm the app starts.
+- Confirm a new standard run can be created.
+- Confirm daily decision cards render and can be answered.
+- Confirm no visible decision is about an already-complete subjob.
+- Confirm ECHO projection does not crash with the new decision graph.
+- Record any validation that was skipped.
 
 ## Non-Goals
 
@@ -193,6 +193,7 @@ Add or update tests for:
 - Do not make probabilistic follow-ups unknowable to ECHO.
 - Do not turn no-choice decisions into invisible background events.
 - Do not rely only on abstract risk score when the decision text promises specific shift gains or losses.
+- Do not read, modify, add, or update tests as part of this implementation pass.
 
 ## Final Deliverable
 
@@ -203,4 +204,4 @@ When done, report:
 - How follow-up probabilities work.
 - How ECHO knows and evaluates the graph.
 - Any decisions that were approximated rather than fully modeled.
-- What tests were run.
+- What manual validation was run, and what validation was skipped.
