@@ -11,7 +11,7 @@ from ..decisions import (
     apply_choice as apply_decision_choice,
     decision_progress,
 )
-from ..echo import apply_echo_decisions_for_day, select_echo_choice_for_state
+from ..echo import apply_echo_decisions_for_day
 from ..metrics import calculate_snapshot, update_state_metrics
 from ..models import DecisionCard, MetricSnapshot
 from ..scenario_generator import generate_scenario
@@ -89,20 +89,14 @@ class GameSession(PayloadMixin, ReviewMixin):
             if not choice:
                 raise ValueError("Choice is not valid for that decision.")
             # Decision effects can mutate current queues and future event
-            # chains. The returned note is the human-readable audit trail.
-            echo_choice = select_echo_choice_for_state(
-                self.player_state,
-                card,
-                self.config,
-                self.player_state.decision_cards,
-            )
+            # chains. ECHO's actual decisions are made against automated_state,
+            # not against the player's currently displayed card.
             notes_before = len(self.player_state.daily_notes)
-            note = apply_decision_choice(self.player_state, card, choice, actor="player", echo_choice=echo_choice)
+            note = apply_decision_choice(self.player_state, card, choice, actor="player", compare_echo=False)
             if self.day_start_snapshot is not None:
                 del self.player_state.daily_notes[notes_before:]
             self.applied_choices[card.id] = choice.id
-            comparison = "Matched ECHO." if choice.id == echo_choice.id else f"ECHO would choose {echo_choice.label}."
-            self.choice_notes.append(f"{card.title}: {choice.label}. {comparison} {note}")
+            self.choice_notes.append(f"{card.title}: {choice.label}. {note}")
             self._ensure_cards()
             return {"note": note, "allDecisionsMade": self.ready_to_advance()}
 

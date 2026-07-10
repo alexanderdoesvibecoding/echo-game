@@ -213,6 +213,27 @@ class EchoPolicyHelperTests(unittest.TestCase):
         state.final_item_completed = True
         self.assertEqual(apply_echo_decisions_for_day(state, config, set()), 0)
 
+    def test_echo_uses_its_own_active_decision_not_player_prompt(self):
+        player_state = make_state()
+        echo_state = make_state()
+        config = unit_config(max_active_decision_cards_per_day=1)
+        player_card = make_card("PLAYER-CARD", choices=[make_choice("P")])
+        echo_card = make_card("ECHO-CARD", choices=[make_choice("E")])
+        player_state.decision_cards = {player_card.id: player_card, echo_card.id: echo_card}
+        echo_state.decision_cards = {player_card.id: player_card, echo_card.id: echo_card}
+        player_state.campaign_decision_graph.cards_by_day = {player_state.current_day: [player_card.id]}
+        echo_state.campaign_decision_graph.cards_by_day = {echo_state.current_day: [echo_card.id]}
+        player_state.campaign_decision_graph.max_active_cards_per_day = 1
+        echo_state.campaign_decision_graph.max_active_cards_per_day = 1
+
+        applied = apply_echo_decisions_for_day(echo_state, config, set())
+
+        self.assertEqual(applied, 1)
+        self.assertEqual(echo_state.campaign_selected_choices, {echo_card.id: "E"})
+        self.assertNotIn(player_card.id, echo_state.campaign_selected_choices)
+        self.assertEqual(echo_state.decision_history[-1].card_id, echo_card.id)
+        self.assertEqual(player_state.campaign_selected_choices, {})
+
     def test_forecast_choice_objective_falls_back_for_missing_card_or_choice(self):
         state = make_state()
         config = unit_config(echo_choice_lookahead_days=1)

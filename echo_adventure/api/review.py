@@ -63,12 +63,6 @@ class ReviewMixin:
             reasons.append(
                 f"{decision_review['followUpsSeen']} named follow-up decision(s) surfaced from earlier shop choices."
             )
-        if decision_review["totalChoices"]:
-            reasons.append(
-                f"Your response matched ECHO on {decision_review['alignedChoices']} of "
-                f"{decision_review['totalChoices']} decision(s)."
-            )
-
         return {
             "outcome": outcome,
             "headline": headline,
@@ -79,6 +73,7 @@ class ReviewMixin:
     def _decision_review_payload(self) -> dict[str, Any]:
         """Summarize named branches without exposing hidden operational arithmetic."""
         player_records = [record for record in self.player_state.decision_history if record.actor == "player"]
+        echo_records = [record for record in self.automated_state.decision_history if record.actor == "ECHO"]
         follow_up_titles = [
             record.card_title
             for record in player_records
@@ -89,9 +84,16 @@ class ReviewMixin:
             for card_id in self.player_state.follow_up_sources
             if card_id in self.player_state.decision_cards
         ]
+        aligned_choices = sum(
+            1
+            for player_record, echo_record in zip(player_records, echo_records)
+            if player_record.card_id == echo_record.card_id and player_record.choice_id == echo_record.choice_id
+        )
         return {
             "totalChoices": len(player_records),
-            "alignedChoices": sum(1 for record in player_records if record.aligned_with_echo),
+            "alignedChoices": aligned_choices,
+            "echoChoices": len(echo_records),
+            "divergentChoices": max(len(player_records), len(echo_records)) - aligned_choices,
             "followUpsTriggered": len(triggered_titles),
             "followUpsSeen": len(follow_up_titles),
             "triggeredTitles": list(dict.fromkeys(triggered_titles))[:8],

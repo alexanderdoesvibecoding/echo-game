@@ -9,7 +9,7 @@ from echo_adventure.decisions import select_echo_choice
 from echo_adventure.enums import DecisionType, EventType, JobStatus, TargetType
 from echo_adventure.events import apply_event_start, resolve_event
 from echo_adventure.metrics import update_state_metrics
-from echo_adventure.models import DecisionCard, DecisionChoice, Event
+from echo_adventure.models import DecisionCard, DecisionChoice, DecisionRecord, Event
 from echo_adventure.scenario_generator import generate_scenario
 from echo_adventure.simulation import initialize_state
 from echo_adventure.api.payloads import _piece_display_id
@@ -126,7 +126,7 @@ class StaticViewAssetTests(unittest.TestCase):
         for _, asset_path in STATIC_ASSETS.values():
             self.assertTrue(asset_path.exists())
 
-    def test_final_chart_renderer_uses_daily_score_groups_and_correct_answer_copy(self):
+    def test_final_chart_renderer_uses_daily_score_groups_and_echo_path_copy(self):
         source = STATIC_ASSETS["/ui/renderFinal.js"][1].read_text(encoding="utf-8")
 
         self.assertIn("buildDailyDecisionGroups", source)
@@ -135,8 +135,7 @@ class StaticViewAssetTests(unittest.TestCase):
         self.assertIn("chart-day-label", source)
         self.assertIn("data-decisions", source)
         self.assertIn("by day for player and ECHO", source)
-        self.assertIn("Should have picked", source)
-        self.assertIn("Correct answer (ECHO)", source)
+        self.assertIn("ECHO chose", source)
         self.assertIn("Your answer:", source)
         self.assertIn("cumulative decision score", source)
         self.assertIn('id="finalMetricsBar"', INDEX_HTML)
@@ -207,12 +206,49 @@ class StaticViewAssetTests(unittest.TestCase):
 
 
 class FinalDecisionGraphPayloadTests(unittest.TestCase):
-    def test_decision_chart_payload_includes_player_and_echo_choice_details(self):
+    def test_decision_chart_payload_uses_actual_echo_history_not_player_prompt(self):
         session = GameSession(seed=123)
         card = session.current_cards[0]
         choice = card.choices[0]
 
         session.apply_choice(card.id, choice.id)
+        player_record = session.player_state.decision_history[-1]
+        self.assertIsNone(player_record.echo_choice_id)
+
+        echo_choice = DecisionChoice(
+            id="E",
+            label="ECHO branch choice",
+            description="ECHO takes another path.",
+            immediate_effects={"type": "note"},
+            risk_effect=0,
+            reschedule_effect=0,
+            score_delta=3.5,
+        )
+        echo_card = DecisionCard(
+            id="ECHO-ONLY",
+            day=card.day,
+            type=DecisionType.MANUFACTURING,
+            title="ECHO-only branch",
+            description="Only ECHO sees this prompt.",
+            target_ids=list(card.target_ids),
+            severity=1,
+            choices=[echo_choice],
+        )
+        session.automated_state.decision_cards[echo_card.id] = echo_card
+        session.automated_state.decision_history.append(
+            DecisionRecord(
+                day=card.day,
+                card_id=echo_card.id,
+                card_title=echo_card.title,
+                actor="ECHO",
+                choice_id=echo_choice.id,
+                choice_label=echo_choice.label,
+                echo_choice_id=echo_choice.id,
+                echo_choice_label=echo_choice.label,
+                aligned_with_echo=True,
+                note="ECHO selected its own branch.",
+            )
+        )
 
         points = session._decision_chart_payload()
         self.assertEqual(len(points), 1)
@@ -222,8 +258,12 @@ class FinalDecisionGraphPayloadTests(unittest.TestCase):
         self.assertEqual(point["questionId"], card.id)
         self.assertEqual(point["questionTitle"], card.title)
         self.assertEqual(point["questionText"], card.description)
+        self.assertEqual(point["playerQuestionId"], card.id)
+        self.assertEqual(point["echoQuestionId"], echo_card.id)
+        self.assertFalse(point["sameQuestion"])
         self.assertEqual(point["playerChoice"], choice.label)
-        self.assertIn(point["echoChoice"], [candidate.label for candidate in card.choices])
+        self.assertEqual(point["echoChoice"], echo_choice.label)
+        self.assertNotIn(point["echoChoice"], [candidate.label for candidate in card.choices])
         self.assertIn("playerDelta", point)
         self.assertIn("echoDelta", point)
         self.assertIn("playerCumulativeScore", point)

@@ -318,8 +318,8 @@ export function showDecisionChartTooltip(event, marker, options = {}) {
             <dd>${escapeHtml(decision.playerChoice || "-")}</dd>
           </div>
           <div class="chart-tooltip-field">
-            <dt>Should have picked</dt>
-            <dd>${escapeHtml(decision.echoChoice || "-")} <span>Correct answer (ECHO)</span></dd>
+            <dt>ECHO chose</dt>
+            <dd>${escapeHtml(decision.echoChoice || "-")}</dd>
           </div>
           <div class="chart-tooltip-field">
             <dt>Your score change</dt>

@@ -274,7 +274,12 @@ class PayloadMixin:
             for record in self.player_state.decision_history
             if record.actor == "player"
         )
-        total_questions = max(1, player_question_count)
+        echo_question_count = sum(
+            1
+            for record in self.automated_state.decision_history
+            if record.actor == "ECHO"
+        )
+        total_questions = max(1, player_question_count, echo_question_count)
         questions = list(range(total_questions + 1))
 
         return {
@@ -296,30 +301,49 @@ class PayloadMixin:
             for record in self.player_state.decision_history
             if record.actor == "player"
         ]
+        echo_records = [
+            record
+            for record in self.automated_state.decision_history
+            if record.actor == "ECHO"
+        ]
+        total_records = max(len(player_records), len(echo_records))
 
-        for sequence, record in enumerate(player_records, start=1):
-            card = self.player_state.decision_cards.get(record.card_id)
-            player_choice = _choice_by_id(card, record.choice_id)
-            echo_choice = _choice_by_id(card, record.echo_choice_id)
+        for sequence in range(1, total_records + 1):
+            record = player_records[sequence - 1] if sequence <= len(player_records) else None
+            echo_record = echo_records[sequence - 1] if sequence <= len(echo_records) else None
+            card = self.player_state.decision_cards.get(record.card_id) if record else None
+            echo_card = self.automated_state.decision_cards.get(echo_record.card_id) if echo_record else None
+            player_choice = _choice_by_id(card, record.choice_id) if record else None
+            echo_choice = _choice_by_id(echo_card, echo_record.choice_id) if echo_record else None
             player_delta = float(player_choice.score_delta if player_choice else 0.0)
             echo_delta = float(echo_choice.score_delta if echo_choice else 0.0)
             player_cumulative = round(player_cumulative + player_delta, 4)
             echo_cumulative = round(echo_cumulative + echo_delta, 4)
-            affected = self._decision_affected_payload(card)
+            affected = self._decision_affected_payload(card) if card else self._decision_affected_payload(
+                echo_card,
+                state=self.automated_state,
+            )
+            day = record.day if record else echo_record.day
+            question_card = card or echo_card
 
             points.append(
                 {
                     "sequence": sequence,
                     "label": f"Q{sequence}",
-                    "day": record.day,
-                    "dateLabel": self.config.date_label_for_day(record.day),
-                    "questionId": record.card_id,
-                    "questionTitle": record.card_title,
-                    "questionText": card.description if card else record.card_title,
-                    "playerChoiceId": record.choice_id,
-                    "playerChoice": record.choice_label,
-                    "echoChoiceId": record.echo_choice_id,
-                    "echoChoice": record.echo_choice_label or "-",
+                    "day": day,
+                    "dateLabel": self.config.date_label_for_day(day),
+                    "questionId": record.card_id if record else echo_record.card_id,
+                    "questionTitle": record.card_title if record else echo_record.card_title,
+                    "questionText": question_card.description if question_card else (record or echo_record).card_title,
+                    "playerQuestionId": record.card_id if record else None,
+                    "playerQuestionTitle": record.card_title if record else "-",
+                    "echoQuestionId": echo_record.card_id if echo_record else None,
+                    "echoQuestionTitle": echo_record.card_title if echo_record else "-",
+                    "sameQuestion": bool(record and echo_record and record.card_id == echo_record.card_id),
+                    "playerChoiceId": record.choice_id if record else None,
+                    "playerChoice": record.choice_label if record else "-",
+                    "echoChoiceId": echo_record.choice_id if echo_record else None,
+                    "echoChoice": echo_record.choice_label if echo_record else "-",
                     "playerDelta": round(player_delta, 2),
                     "echoDelta": round(echo_delta, 2),
                     "playerCumulativeScore": round(player_cumulative, 2),
@@ -330,8 +354,13 @@ class PayloadMixin:
 
         return points
 
-    def _decision_affected_payload(self, card: DecisionCard | None) -> dict[str, Any]:
+    def _decision_affected_payload(
+        self,
+        card: DecisionCard | None,
+        state: SimulationState | None = None,
+    ) -> dict[str, Any]:
         """Return the most specific visible job/subjob target for a card."""
+        state = state or self.player_state
         empty = {
             "affectedJobId": None,
             "affectedSubjobId": None,
@@ -341,7 +370,7 @@ class PayloadMixin:
             return empty
 
         for target_id in card.target_ids:
-            job = self.player_state.jobs.get(target_id)
+            job = state.jobs.get(target_id)
             if job:
                 return {
                     "affectedJobId": job.piece_id,
@@ -350,7 +379,7 @@ class PayloadMixin:
                 }
 
         for target_id in card.target_ids:
-            piece = self.player_state.pieces.get(target_id)
+            piece = state.pieces.get(target_id)
             if piece:
                 return {
                     "affectedJobId": piece.id,
@@ -359,7 +388,7 @@ class PayloadMixin:
                 }
 
         for target_id in card.target_ids:
-            shop = self.player_state.shops.get(target_id)
+            shop = state.shops.get(target_id)
             if shop:
                 return {
                     "affectedJobId": None,
@@ -368,7 +397,7 @@ class PayloadMixin:
                 }
 
         for target_id in card.target_ids:
-            workcenter = self.player_state.workcenters.get(target_id)
+            workcenter = state.workcenters.get(target_id)
             if workcenter:
                 return {
                     "affectedJobId": None,

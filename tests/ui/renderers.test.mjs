@@ -220,7 +220,7 @@ test("renderFinal decision chart tooltip locks and force-unlocks at runtime", ()
   assert.equal(tooltip.classList.contains("locked"), false);
   assert.match(tooltip.innerHTML, /Click to lock this panel/);
   assert.match(tooltip.innerHTML, /Your answer:/);
-  assert.match(tooltip.innerHTML, /Should have picked/);
+  assert.match(tooltip.innerHTML, /ECHO chose/);
   assert.doesNotMatch(tooltip.innerHTML, /<dt>Question<\/dt>/);
   assert.doesNotMatch(tooltip.innerHTML, /Route work around a blocker/);
 

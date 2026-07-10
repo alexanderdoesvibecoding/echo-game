@@ -25,9 +25,10 @@ def apply_choice(
     choice: DecisionChoice,
     actor: str = "player",
     echo_choice: DecisionChoice | None = None,
+    compare_echo: bool = True,
 ) -> str:
     """Apply card-level and selected effects through the same deterministic path."""
-    if echo_choice is None:
+    if echo_choice is None and compare_echo:
         echo_choice = select_echo_choice(card, state.decision_cards)
 
     if card.id not in state.activated_decision_card_ids:
