@@ -261,6 +261,9 @@ class ServerHelperTests(unittest.TestCase):
             def advance_payload(self):
                 return {"route": "advance"}
 
+            def skip_to_end_payload(self):
+                return {"route": "skip-to-end"}
+
         handler_type = type("FakeHandler", (HandlerHarness, GameRequestHandler), {"session_store": FakeStore()})
 
         self.assert_json_handler_response(handler_type("GET", "/api/state"), 200, {"route": "state"})
@@ -273,6 +276,11 @@ class ServerHelperTests(unittest.TestCase):
             handler_type("POST", "/api/choice", {"cardId": "C", "choiceId": "X"}),
             400,
             {"error": "bad choice C/X"},
+        )
+        self.assert_json_handler_response(
+            handler_type("POST", "/api/test/skip-to-end"),
+            200,
+            {"route": "skip-to-end"},
         )
         self.assert_json_handler_response(handler_type("GET", "/missing"), 404, {"error": "Not found"})
 

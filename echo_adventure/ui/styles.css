@@ -311,6 +311,10 @@ html[data-theme="dark"] .welcome-logo {
   justify-content: flex-start;
   text-align: left;
 }
+.settings-panel .test-only-button {
+  border-color: rgba(213, 94, 0, 0.38);
+  color: var(--danger);
+}
 .settings-form {
   display: grid;
   gap: 12px;

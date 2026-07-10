@@ -123,16 +123,15 @@ function renderPuzzleSection(tile, slice, className) {
   const newlyPlaced = assembled && tile.newlyCompleted ? " newly-placed" : "";
   const loose = className === "unplaced";
   return `
-    <div class="puzzle-image-slice ${className}${newlyPlaced}" style="${sliceStyle(slice, loose)}" role="img" aria-label="${escapeHtml(`${label}: ${title}`)}" title="${escapeHtml(title)}">
+    <div class="puzzle-image-slice ${className}${newlyPlaced}" style="${sliceStyle(slice, loose)}" role="img" aria-label="${escapeHtml(`${label}: ${title}`)}">
       <img src="${PUZZLE_SUBMARINE_IMAGE}" alt="" aria-hidden="true" draggable="false">
     </div>
   `;
 }
 
 function renderPuzzlePlaceholder(tile, slice) {
-  const title = `${tile.name || tile.id}: ${slice.part}. Waiting${tile.due ? `; due ${tile.due}` : ""}.`;
   return `
-    <div class="puzzle-image-slice puzzle-image-placeholder" style="${sliceStyle(slice)}" aria-hidden="true" title="${escapeHtml(title)}"></div>
+    <div class="puzzle-image-slice puzzle-image-placeholder" style="${sliceStyle(slice)}" aria-hidden="true"></div>
   `;
 }
 

@@ -160,6 +160,7 @@ test("renderSummary renders live and modal submarine puzzle state", () => {
   assert.match(puzzleMarkup, /puzzle-loose-row/);
   assert.match(puzzleMarkup, /Placed today:/);
   assert.match(puzzleMarkup, /virginia-submarine-cutout\.png/);
+  assert.doesNotMatch(puzzleMarkup, /\stitle=/);
 
   uiState.state = {
     livePuzzle: puzzle,
