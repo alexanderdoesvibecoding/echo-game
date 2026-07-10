@@ -3,6 +3,35 @@
 import { uiState } from "./state.js";
 import { $, escapeHtml } from "./html.js";
 
+const SUMMARY_COUNTER_DURATION_MS = 900;
+
+function countValueParts(value) {
+  const rawValue = String(value ?? "");
+  const match = rawValue.match(/^(-?\d+(?:\.\d+)?)(\/\d+(?:\.\d+)?)?$/);
+  if (!match) return null;
+  const target = Number(match[1]);
+  if (!Number.isFinite(target)) return null;
+  const decimalPart = match[1].split(".")[1] || "";
+  return {
+    target,
+    decimals: decimalPart.length,
+    suffix: match[2] || "",
+  };
+}
+
+function renderSummaryMetricValue(value) {
+  const safeValue = escapeHtml(value);
+  const count = countValueParts(value);
+  if (!count) return `<strong>${safeValue}</strong>`;
+  return `
+    <strong
+      data-summary-count-to="${escapeHtml(count.target)}"
+      data-summary-count-decimals="${escapeHtml(count.decimals)}"
+      data-summary-count-suffix="${escapeHtml(count.suffix)}"
+    >${safeValue}</strong>
+  `;
+}
+
 function renderSummaryMetricBar(summary, piecesTotal) {
   const risk = Math.round(Number(summary.risk || 0));
   const metrics = [
@@ -51,7 +80,7 @@ function renderSummaryMetricBar(summary, piecesTotal) {
             <span class="subtle metric-label">${escapeHtml(metric.label)}</span>
           </div>
           <div class="metric-value-row summary-metric-value-row">
-            <strong>${escapeHtml(metric.value)}</strong>
+            ${renderSummaryMetricValue(metric.value)}
           </div>
         </div>
       `).join("")}
@@ -172,6 +201,88 @@ export function renderSubmarinePuzzle(puzzle, instanceId) {
   `;
 }
 
+function summaryAnimationKey(payload, summary) {
+  return [
+    uiState.runCycleId,
+    payload.seed,
+    payload.day,
+    payload.currentDate,
+    summary.completedToday,
+    summary.jobsRemaining,
+    summary.piecesCompleted,
+    summary.jobsBehindSchedule,
+    summary.jobsLate,
+    summary.risk,
+    summary.projectedCompletion,
+  ].join("|");
+}
+
+function now() {
+  if (globalThis.performance && typeof globalThis.performance.now === "function") {
+    return globalThis.performance.now();
+  }
+  return Date.now();
+}
+
+function requestFrame(callback) {
+  const raf = globalThis.requestAnimationFrame || globalThis.window?.requestAnimationFrame;
+  if (typeof raf === "function") {
+    return raf(callback);
+  }
+  const timeout = globalThis.window?.setTimeout || globalThis.setTimeout;
+  if (typeof timeout === "function") {
+    return timeout(() => callback(now()), 16);
+  }
+  callback(now() + SUMMARY_COUNTER_DURATION_MS);
+  return null;
+}
+
+function formatCounterValue(value, decimals, suffix) {
+  const rounded = decimals > 0 ? value.toFixed(decimals) : String(Math.round(value));
+  return `${rounded}${suffix}`;
+}
+
+export function animateSummaryCounters(container, options = {}) {
+  if (!container || typeof container.querySelectorAll !== "function") return;
+  const counters = Array.from(container.querySelectorAll("[data-summary-count-to]"));
+  if (!counters.length) return;
+
+  const duration = Math.max(0, Number(options.duration ?? SUMMARY_COUNTER_DURATION_MS));
+  const startTime = now();
+  const entries = counters
+    .map((element) => ({
+      element,
+      target: Number(element.dataset.summaryCountTo || 0),
+      decimals: Math.max(0, Number(element.dataset.summaryCountDecimals || 0)),
+      suffix: element.dataset.summaryCountSuffix || "",
+    }))
+    .filter((entry) => Number.isFinite(entry.target));
+
+  entries.forEach((entry) => {
+    entry.element.textContent = formatCounterValue(0, entry.decimals, entry.suffix);
+  });
+
+  if (!entries.length || duration === 0) {
+    entries.forEach((entry) => {
+      entry.element.textContent = formatCounterValue(entry.target, entry.decimals, entry.suffix);
+    });
+    return;
+  }
+
+  const step = (timestamp) => {
+    const progress = Math.min(1, Math.max(0, (timestamp - startTime) / duration));
+    const eased = 1 - Math.pow(1 - progress, 3);
+    entries.forEach((entry) => {
+      entry.element.textContent = formatCounterValue(entry.target * eased, entry.decimals, entry.suffix);
+    });
+    if (progress < 1) {
+      requestFrame(step);
+    }
+  };
+
+  requestFrame(step);
+}
+
 export function renderSummaryModal() {
   const payload = uiState.pendingAdvanceState || uiState.state;
   const summary = payload.lastSummary;
@@ -180,13 +291,19 @@ export function renderSummaryModal() {
   if (!overlay || !body) return;
   if (!summary || !uiState.modalVisible) {
     overlay.classList.remove("active");
+    uiState.summaryAnimationKey = null;
     return;
   }
   // The day has already been simulated on the server, but the summary modal
   // lets the player read consequences before committing that uiState.state locally.
   overlay.classList.add("active");
-  body.innerHTML = `<div class="summary-grid">${renderSummaryGrid(summary, payload.pieces.length, "summary-modal")}</div>`;
-  body.scrollTop = 0;
+  const animationKey = summaryAnimationKey(payload, summary);
+  if (uiState.summaryAnimationKey !== animationKey || !body.innerHTML) {
+    uiState.summaryAnimationKey = animationKey;
+    body.innerHTML = `<div class="summary-grid">${renderSummaryGrid(summary, payload.pieces.length, "summary-modal")}</div>`;
+    body.scrollTop = 0;
+    animateSummaryCounters(body);
+  }
 }
 
 export function renderSummary() {

@@ -10,6 +10,7 @@ const { $, escapeHtml, fmtNum } = await import("../../echo_adventure/ui/html.js"
 const { renderSubmarineImage, SUBMARINE_IMAGE_SRC } = await import("../../echo_adventure/ui/submarineVisual.js");
 const { uiState } = await import("../../echo_adventure/ui/state.js");
 const {
+  animateSummaryCounters,
   renderSubmarinePuzzle,
   renderSummary,
   renderSummaryModal,
@@ -44,6 +45,7 @@ function resetUiState() {
     dayDecisionThresholds: [],
     pendingAdvanceState: null,
     modalVisible: false,
+    summaryAnimationKey: null,
     pendingChoice: null,
     metricSnapshot: null,
     metricDeltas: {},
@@ -193,7 +195,27 @@ test("renderSummary renders live and modal submarine puzzle state", () => {
 
   assert.equal(dom.element("summaryModalOverlay").classList.contains("active"), true);
   assert.match(dom.element("summaryModalBody").innerHTML, /Subjobs Today/);
+  assert.match(dom.element("summaryModalBody").innerHTML, /data-summary-count-to="1"/);
+  assert.match(dom.element("summaryModalBody").innerHTML, /data-summary-count-suffix="\/2"/);
   assert.match(dom.element("summaryModalBody").innerHTML, /Completed &lt;one&gt; subjob\./);
+});
+
+test("animateSummaryCounters climbs numeric summary values to their targets", () => {
+  const first = { dataset: { summaryCountTo: "7", summaryCountDecimals: "0", summaryCountSuffix: "" }, textContent: "" };
+  const ratio = { dataset: { summaryCountTo: "3", summaryCountDecimals: "0", summaryCountSuffix: "/6" }, textContent: "" };
+  const risk = { dataset: { summaryCountTo: "42", summaryCountDecimals: "0", summaryCountSuffix: "/100" }, textContent: "" };
+  const container = {
+    querySelectorAll(selector) {
+      assert.equal(selector, "[data-summary-count-to]");
+      return [first, ratio, risk];
+    },
+  };
+
+  animateSummaryCounters(container, { duration: 0 });
+
+  assert.equal(first.textContent, "7");
+  assert.equal(ratio.textContent, "3/6");
+  assert.equal(risk.textContent, "42/100");
 });
 
 test("renderDecisions controls inline state, modal selection, and dismissal", () => {

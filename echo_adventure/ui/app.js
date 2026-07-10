@@ -72,6 +72,7 @@ async function startNewRun() {
     uiState.pendingChoice = null;
     uiState.decisionModalVisible = false;
     uiState.decisionModalDismissedKey = null;
+    uiState.summaryAnimationKey = null;
     uiState.welcomeModalVisible = true;
     uiState.newRunModalVisible = false;
     showNewRunError("");

@@ -1607,42 +1607,8 @@ html[data-theme="dark"] .puzzle-added {
   line-height: 1.45;
   max-width: 620px;
 }
-.welcome-critical {
-  display: grid;
-  gap: 8px;
-}
-.welcome-critical-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.welcome-critical-list li {
-  min-height: 48px;
-  padding: 8px 9px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fbfcfe;
-}
-.welcome-critical-list strong {
-  display: block;
-  color: var(--ink);
-  font-size: 13px;
-}
-.welcome-critical-list span {
-  display: block;
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 12px;
-}
 html[data-theme="dark"] .welcome-visual {
   background: linear-gradient(180deg, #16212a 0%, #111821 100%);
-}
-html[data-theme="dark"] .welcome-critical-list li {
-  background: #252d38;
-  border-color: #3a4352;
 }
 .info-icon {
   display: inline-flex;

@@ -50,6 +50,7 @@ function resetUiState() {
     dayDecisionThresholds: [],
     pendingAdvanceState: null,
     modalVisible: false,
+    summaryAnimationKey: null,
     pendingChoice: null,
     metricSnapshot: null,
     metricDeltas: {},

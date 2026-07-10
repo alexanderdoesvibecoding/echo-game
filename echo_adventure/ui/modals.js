@@ -1,7 +1,7 @@
 "use strict";
 
 import { uiState } from "./state.js";
-import { $, escapeHtml } from "./html.js";
+import { $ } from "./html.js";
 import { renderSubmarineImage } from "./submarineVisual.js";
 
 const callbacks = {
@@ -23,7 +23,6 @@ export function renderWelcomeModal() {
 function renderWelcomeContent() {
   const visual = $("welcomeSubmarineVisual");
   const blurb = $("welcomeBlurb");
-  const list = $("welcomeCriticalPath");
 
   if (visual) {
     visual.innerHTML = renderSubmarineImage({
@@ -33,22 +32,12 @@ function renderWelcomeContent() {
     });
   }
 
-  if (!blurb || !list) return;
+  if (!blurb) return;
 
   const jobCount = Array.isArray(uiState.state?.pieces) ? uiState.state.pieces.length : 0;
   const jobText = jobCount ? `${jobCount} job${jobCount === 1 ? "" : "s"}` : "jobs";
   const deadline = uiState.state?.deadlineDate ? ` by ${uiState.state.deadlineDate}` : " on time";
   blurb.textContent = `Your job is to get these ${jobText} done${deadline}. Each decision you make can risk or reward other jobs.`;
-
-  const criticalRows = Array.isArray(uiState.state?.criticalPath) ? uiState.state.criticalPath : [];
-  list.innerHTML = criticalRows.length
-    ? criticalRows.map(job => `
-      <li>
-        <strong>${escapeHtml(job.id)} - ${escapeHtml(job.impact || "Job")}</strong>
-        <span>${escapeHtml(job.shop || "-")} - ${Number(job.remaining || 0)} work period${Number(job.remaining || 0) === 1 ? "" : "s"} left - ${escapeHtml(job.slack ?? "-")} work period${Number(job.slack || 0) === 1 ? "" : "s"} of cushion</span>
-      </li>
-    `).join("")
-    : `<li><strong>No critical path jobs yet</strong><span>The first schedule pass is still loading.</span></li>`;
 }
 
 export function closeWelcomeModal() {
