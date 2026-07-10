@@ -1,4 +1,4 @@
-- [ ] Create a grand list of decision scenarios
+- [x] Create a grand list of decision scenarios
 
 - [x] Change the puzzle so it does not look like a carrot by either:
     * Making it look more realistic
@@ -32,4 +32,4 @@
 
 - [x] Make subjobs behind schedule hoverable to see which they are
 
-- [ ] Fix the issue where decisions can be about subjobs that are already complete
+- [x] Fix the issue where decisions can be about subjobs that are already complete

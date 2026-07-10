@@ -512,6 +512,7 @@ export function renderDecisionModal() {
         <span class="badge warn">Open</span>
       </div>
       <p>${escapeHtml(nextCard.description)}</p>
+      ${nextCard.context ? `<div class="subtle">Affected area: ${escapeHtml(nextCard.context)}</div>` : ""}
     </div>
     <div class="decision-choices decision-modal-choices">
       ${nextCard.choices.map(choice => `

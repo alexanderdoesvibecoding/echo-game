@@ -7,6 +7,7 @@ import math
 from dataclasses import dataclass
 
 from .enums import JobStatus, WorkCenterStatus
+from .domain import claim_job_resources, job_domain_ready, refresh_domain_constraints, release_job_resources
 from .events import refresh_event_state
 from .metrics import calculate_snapshot, update_state_metrics
 from .models import MetricSnapshot, Scenario, SimulationState
@@ -35,6 +36,11 @@ def initialize_state(scenario: Scenario, shifts_per_day: int) -> SimulationState
         pieces=copy.deepcopy(scenario.pieces),
         jobs=copy.deepcopy(scenario.jobs),
         event_timeline=copy.deepcopy(scenario.event_timeline),
+        workers=copy.deepcopy(scenario.workers),
+        shared_resources=copy.deepcopy(scenario.shared_resources),
+        material_stocks=copy.deepcopy(scenario.material_stocks),
+        documents=copy.deepcopy(scenario.documents),
+        inspection_methods=copy.deepcopy(scenario.inspection_methods),
         decision_cards=copy.deepcopy(scenario.decision_cards),
         campaign_decision_graph=copy.deepcopy(scenario.campaign_decision_graph),
         unlocked_decision_card_ids=set(scenario.campaign_decision_graph.root_card_ids),
@@ -87,6 +93,8 @@ def advance_shift(state: SimulationState, scheduler: Scheduler) -> None:
     # Events are applied before planning so schedulers see fresh downtime,
     # blocks, and warnings when assigning or resequencing work.
     refresh_event_state(state)
+    for releasable_job_id in refresh_domain_constraints(state):
+        complete_job(state, releasable_job_id)
     update_state_metrics(state)
     scheduler.plan_shift(state)
     _start_available_jobs(state)
@@ -98,6 +106,19 @@ def advance_shift(state: SimulationState, scheduler: Scheduler) -> None:
 def complete_job(state: SimulationState, job_id: str) -> None:
     """Complete a job, unless completion inspection creates rework."""
     job = state.jobs[job_id]
+    if job.acceptance_hold:
+        job.status = JobStatus.BLOCKED
+        job.remaining_duration_shifts = 0
+        job.block_reason = "Decision: acceptance hold"
+        state.blocked_jobs.add(job.id)
+        return
+    if job.document_id and (document := state.documents.get(job.document_id)):
+        if not document.available or not document.approved or job.id in document.held_job_ids:
+            job.status = JobStatus.BLOCKED
+            job.remaining_duration_shifts = 0
+            job.block_reason = "Decision: acceptance document hold"
+            state.blocked_jobs.add(job.id)
+            return
     if _maybe_require_completion_rework(state, job):
         return
     job.status = JobStatus.COMPLETE
@@ -107,6 +128,7 @@ def complete_job(state: SimulationState, job_id: str) -> None:
     state.completed_jobs.add(job_id)
     state.blocked_jobs.discard(job_id)
     state.remove_job_from_queues(job_id)
+    release_job_resources(state, job)
     for wc in state.workcenters.values():
         if wc.current_job_id == job_id:
             wc.current_job_id = None
@@ -179,6 +201,11 @@ def _start_available_jobs(state: SimulationState) -> None:
             if job.block_reason or not state.is_dependency_complete(job_id):
                 job.status = JobStatus.BLOCKED if job.block_reason else JobStatus.NOT_READY
                 continue
+            if not job_domain_ready(state, job):
+                job.status = JobStatus.BLOCKED
+                job.block_reason = "Decision: waiting on manufacturing resource"
+                state.blocked_jobs.add(job.id)
+                continue
             if job.required_capability not in wc.capabilities:
                 continue
             if not job.started_once:
@@ -191,6 +218,7 @@ def _start_available_jobs(state: SimulationState) -> None:
                 job.remaining_duration_shifts = max(1, adjusted)
                 job.started_once = True
             job.status = JobStatus.RUNNING
+            claim_job_resources(state, job)
             job.assigned_workcenter_id = wc.id
             wc.current_job_id = job_id
             wc.status = WorkCenterStatus.BUSY

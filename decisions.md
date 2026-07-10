@@ -1,4 +1,4 @@
-Weather
+Severe Weather
 
 - Takes out 1-3 exposed workstations for 3-9 shifts
 - Affected subjobs pause unless they can be moved to other capable stations
@@ -11,7 +11,7 @@ Weather
         - Keeps other queues stable
         - Can unlock Weather cleared early
 
-Workstation breakdown
+Workstation Breakdown
 
 - Takes out one machine for 3-9 shifts
 - Any running subjob on that machine pauses until the station is repaired or rerouted
@@ -24,7 +24,7 @@ Workstation breakdown
         - Keeps the routing simple
         - Affected work waits for the machine to return
 
-Materials not here
+Materials Have Not Arrived
 
 - A required kit, blank, fastener set, or supplied part is not at the station
 - The affected subjob halts until usable material is found
@@ -41,7 +41,7 @@ Materials not here
         - Pulls a different ready subjob forward
         - Leaves this subjob blocked until its material arrives
 
-ECHO recommendation (rare)
+ECHO Recommendation (Rare)
 
 - ECHO has a schedule recommendation that changes the whole board
 - The move looks disruptive before the benefit is visible
@@ -53,7 +53,7 @@ ECHO recommendation (rare)
         - Nothing changes now
         - Any hidden scheduling opportunity is missed
 
-Worker took an off day
+Worker Took the Day Off
 
 - The assigned worker is out for the shift
 - The affected subjob is not worked unless someone else is put on it
@@ -730,7 +730,7 @@ Family run unlocked
 
 Bulk lot released
 
-- Flows from either Consumables short if the player chose Wait for restock, or Materials not here if the player chose Wait for materials
+- Flows from either Consumables short if the player chose Wait for restock, or Materials Have Not Arrived if the player chose Wait for materials
 - The restock arrives as a full lot with matched batch paperwork
 - Options:
     - Run the full lot immediately
@@ -970,7 +970,7 @@ Wrong revision loaded
 
 Phantom stock confirmed
 
-- Flows from either Count variance if the player chose Consume visible stock, or Materials not here if the player chose Use another subjob's material
+- Flows from either Count variance if the player chose Consume visible stock, or Materials Have Not Arrived if the player chose Use another subjob's material
 - The missing inventory was real, not a count error
 - Options:
     - Strip parts from slack jobs
@@ -1060,7 +1060,7 @@ Sticker audit hit
 
 Weather cleared early
 
-- Flows from Weather if the player chose Wait it out
+- Flows from Severe Weather if the player chose Wait it out
 - The weather cell moves through faster than forecast and the exposed stations can reopen cleanly
 - Options:
     - Restart the held work first
@@ -1075,7 +1075,7 @@ Weather cleared early
 
 Setup mismatch found
 
-- Flows from Workstation breakdown if the player chose Move affected subjobs
+- Flows from Workstation Breakdown if the player chose Move affected subjobs
 - The receiving machine can do the work, but its setup datum does not match the broken machine's plan
 - Options:
     - Rework the moved setup
@@ -1090,7 +1090,7 @@ Setup mismatch found
 
 ECHO slack pocket found
 
-- Flows from ECHO recommendation if the player chose Take advice
+- Flows from ECHO Recommendation if the player chose Take advice
 - The reshuffle exposed idle capacity that the manual queue was hiding
 - Options:
     - Trust the full reshuffle
@@ -1105,7 +1105,7 @@ ECHO slack pocket found
 
 Replacement handoff check
 
-- Flows from Worker took an off day if the player chose Find a replacement
+- Flows from Worker Took the Day Off if the player chose Find a replacement
 - The replacement worker's handoff needs review before the next dependency trusts the work
 - Options:
     - Check the handoff now
@@ -1120,7 +1120,7 @@ Replacement handoff check
 
 Returning worker shortcut
 
-- Flows from Worker took an off day if the player chose Hold until the worker returns
+- Flows from Worker Took the Day Off if the player chose Hold until the worker returns
 - The returning worker already knows a faster safe setup for the paused work
 - Options:
     - Use the shortcut

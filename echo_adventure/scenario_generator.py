@@ -7,13 +7,19 @@ import random
 
 from .config import GameConfig
 from .decisions import generate_campaign_decision_graph
+from .enums import ResourceKind
 from .events import generate_event_timeline
 from .models import (
+    DocumentArtifact,
+    InspectionMethod,
     Job,
+    MaterialStock,
     PuzzlePiece,
     Scenario,
+    SharedResource,
     Shop,
     SimulationState,
+    Worker,
     WorkCenter,
     build_pending_job,
 )
@@ -71,6 +77,12 @@ def generate_scenario(config: GameConfig) -> Scenario:
     rng = random.Random(seed)
     shops, workcenters = _generate_shops_and_workcenters(config, rng)
     pieces, jobs = _generate_pieces_and_jobs(config, rng, shops, workcenters)
+    workers, shared_resources, material_stocks, documents, inspection_methods = _generate_domain_resources(
+        rng,
+        shops,
+        workcenters,
+        jobs,
+    )
     _assign_planned_completion_rework(config, rng, jobs)
     events = generate_event_timeline(rng, config, shops, workcenters, pieces, jobs)
     scenario = Scenario(
@@ -82,6 +94,11 @@ def generate_scenario(config: GameConfig) -> Scenario:
         jobs=jobs,
         event_timeline=events,
         deadline_shift=config.deadline_shift,
+        workers=workers,
+        shared_resources=shared_resources,
+        material_stocks=material_stocks,
+        documents=documents,
+        inspection_methods=inspection_methods,
     )
     validate_scenario(scenario, config)
     graph_state = SimulationState(
@@ -94,6 +111,11 @@ def generate_scenario(config: GameConfig) -> Scenario:
         pieces=copy.deepcopy(scenario.pieces),
         jobs=copy.deepcopy(scenario.jobs),
         event_timeline=copy.deepcopy(scenario.event_timeline),
+        workers=copy.deepcopy(scenario.workers),
+        shared_resources=copy.deepcopy(scenario.shared_resources),
+        material_stocks=copy.deepcopy(scenario.material_stocks),
+        documents=copy.deepcopy(scenario.documents),
+        inspection_methods=copy.deepcopy(scenario.inspection_methods),
     )
     scenario.decision_cards, scenario.campaign_decision_graph = generate_campaign_decision_graph(graph_state, config)
     return scenario
@@ -312,6 +334,183 @@ def _assign_piece_due_days(config: GameConfig, piece_count: int) -> dict[int, in
         offset = round(((piece_index - 1) / (piece_count - 1)) * last_available_index)
         due_days[piece_index] = available_days[offset]
     return due_days
+
+
+def _generate_domain_resources(
+    rng: random.Random,
+    shops: dict[str, Shop],
+    workcenters: dict[str, WorkCenter],
+    jobs: dict[str, Job],
+) -> tuple[
+    dict[str, Worker],
+    dict[str, SharedResource],
+    dict[str, MaterialStock],
+    dict[str, DocumentArtifact],
+    dict[str, InspectionMethod],
+]:
+    """Create deterministic resources that named decisions can mutate directly."""
+    workers: dict[str, Worker] = {}
+    resources: dict[str, SharedResource] = {}
+    materials: dict[str, MaterialStock] = {}
+    documents: dict[str, DocumentArtifact] = {}
+    methods: dict[str, InspectionMethod] = {}
+
+    support_kinds = (
+        ResourceKind.RACK,
+        ResourceKind.CART,
+        ResourceKind.STAGING_LANE,
+        ResourceKind.WASTE_CONTAINER,
+    )
+    for shop_index, shop in enumerate(sorted(shops.values(), key=lambda item: item.id), start=1):
+        for worker_index in range(1, 4):
+            worker_id = f"WORKER-{shop_index:02d}-{worker_index:02d}"
+            primary = shop.capabilities[(worker_index - 1) % len(shop.capabilities)]
+            extra = rng.sample(shop.capabilities, k=min(2, len(shop.capabilities)))
+            workers[worker_id] = Worker(
+                id=worker_id,
+                name=f"{shop.name} Operator {worker_index}",
+                shop_id=shop.id,
+                skills=sorted(set([primary, *extra])),
+            )
+
+        area_id = f"RESOURCE-AREA-{shop_index:02d}"
+        resources[area_id] = SharedResource(
+            id=area_id,
+            name=f"{shop.name} controlled work area",
+            kind=ResourceKind.CONTROLLED_AREA,
+            shop_id=shop.id,
+            capabilities=list(shop.capabilities),
+        )
+        for kind_index, kind in enumerate(support_kinds, start=1):
+            resource_id = f"RESOURCE-{kind.name}-{shop_index:02d}"
+            resources[resource_id] = SharedResource(
+                id=resource_id,
+                name=f"{shop.name} {kind.value}",
+                kind=kind,
+                shop_id=shop.id,
+                capabilities=list(shop.capabilities),
+                capacity=2 if kind in {ResourceKind.RACK, ResourceKind.CART} else 1,
+                available_capacity=2 if kind in {ResourceKind.RACK, ResourceKind.CART} else 1,
+            )
+
+        for capability in shop.capabilities:
+            material_id = f"MATERIAL-{shop_index:02d}-{capability.upper()}"
+            materials[material_id] = MaterialStock(
+                id=material_id,
+                name=f"{capability.replace('_', ' ').title()} shop stock",
+                shop_id=shop.id,
+                capability=capability,
+                quantity=rng.randint(4, 9),
+                lot_id=f"LOT-{shop_index:02d}-{capability[:3].upper()}",
+            )
+
+    global_resources = (
+        (ResourceKind.CRANE, "Shared heavy-lift crane", 1),
+        (ResourceKind.SOFTWARE_SEAT, "Shared engineering software seats", 2),
+        (ResourceKind.LABEL_PRINTER, "Controlled label printer", 1),
+        (ResourceKind.BATCH_SLOT, "Shared batch process slot", 2),
+        (ResourceKind.WASH_TANK, "Surface preparation tank", 1),
+        (ResourceKind.UTILITY_SLOT, "Off-peak utility slot", 1),
+        (ResourceKind.REFERENCE_SAMPLE, "Reference sample library", 1),
+    )
+    all_capabilities = sorted({cap for shop in shops.values() for cap in shop.capabilities})
+    for index, (kind, name, capacity) in enumerate(global_resources, start=1):
+        resource_id = f"RESOURCE-GLOBAL-{index:02d}"
+        resources[resource_id] = SharedResource(
+            id=resource_id,
+            name=name,
+            kind=kind,
+            shop_id=None,
+            capabilities=all_capabilities,
+            capacity=capacity,
+            available_capacity=capacity,
+        )
+
+    fixture_by_shop: dict[str, str] = {}
+    tool_by_shop: dict[str, str] = {}
+    gauge_by_shop: dict[str, str] = {}
+    for shop_index, shop in enumerate(sorted(shops.values(), key=lambda item: item.id), start=1):
+        for kind, target in (
+            (ResourceKind.FIXTURE, fixture_by_shop),
+            (ResourceKind.TOOL, tool_by_shop),
+            (ResourceKind.GAUGE, gauge_by_shop),
+        ):
+            resource_id = f"RESOURCE-{kind.name}-{shop_index:02d}"
+            resources[resource_id] = SharedResource(
+                id=resource_id,
+                name=f"{shop.name} shared {kind.value}",
+                kind=kind,
+                shop_id=shop.id,
+                capabilities=list(shop.capabilities),
+            )
+            target[shop.id] = resource_id
+
+    shop_workers: dict[str, list[Worker]] = {}
+    for worker in workers.values():
+        shop_workers.setdefault(worker.shop_id, []).append(worker)
+    global_support = [resource for resource in resources.values() if resource.shop_id is None]
+    shop_support = {
+        shop_id: [resource for resource in resources.values() if resource.shop_id == shop_id]
+        for shop_id in shops
+    }
+
+    for job in sorted(jobs.values(), key=lambda item: item.id):
+        family_variant = (int(job.piece_id.split("-")[-1]) - 1) % 3 + 1
+        job.family = f"{job.required_capability}-family-{family_variant}"
+        job.area_id = next(
+            resource.id
+            for resource in shop_support[job.shop_id]
+            if resource.kind == ResourceKind.CONTROLLED_AREA
+        )
+        capable_workers = [worker for worker in shop_workers[job.shop_id] if job.required_capability in worker.skills]
+        job.worker_id = (capable_workers or shop_workers[job.shop_id])[0].id
+        job.fixture_id = fixture_by_shop[job.shop_id]
+        material = next(
+            stock
+            for stock in materials.values()
+            if stock.shop_id == job.shop_id and stock.capability == job.required_capability
+        )
+        job.material_id = material.id
+
+        document_id = f"DOCUMENT-{job.id}"
+        documents[document_id] = DocumentArtifact(
+            id=document_id,
+            name=f"Traveler and release packet for {job.id}",
+            kind="traveler",
+            family=job.family,
+        )
+        job.document_id = document_id
+
+        method_id = f"METHOD-{job.family.upper()}"
+        if method_id not in methods:
+            methods[method_id] = InspectionMethod(
+                id=method_id,
+                name=f"Accepted method for {job.family.replace('-', ' ')}",
+                family=job.family,
+                capability=job.required_capability,
+            )
+        job.inspection_method_id = method_id
+
+        local_support = [
+            resource.id
+            for resource in shop_support[job.shop_id]
+            if resource.kind in {ResourceKind.RACK, ResourceKind.CART, ResourceKind.STAGING_LANE}
+        ]
+        capability_support = [
+            resource.id
+            for resource in global_support
+            if job.required_capability in resource.capabilities
+            and resource.kind in {
+                ResourceKind.CRANE,
+                ResourceKind.SOFTWARE_SEAT,
+                ResourceKind.BATCH_SLOT,
+                ResourceKind.WASH_TANK,
+                ResourceKind.UTILITY_SLOT,
+            }
+        ]
+        job.support_resource_ids = [*local_support, *capability_support]
+
+    return workers, resources, materials, documents, methods
 
 
 def _day_to_due_shift(day: int, config: GameConfig) -> int:

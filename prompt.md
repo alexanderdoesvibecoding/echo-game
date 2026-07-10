@@ -36,7 +36,7 @@ Current useful primitives:
 Current limitations to fix:
 
 - Domain resources such as workers, fixtures, tools, gauges, documents, consumables, cranes, racks, carts, software seats, batches, clean rooms, and setup libraries are not first-class objects.
-- The campaign graph is generic branch-tag based. The new design needs named graph edges such as `Weather -> Weather cleared early`.
+- The campaign graph is generic branch-tag based. The new design needs named graph edges such as `Severe Weather -> Weather cleared early`.
 - The current effect system has only generic effect names such as `wait`, `reroute`, `resequence`, `pull_forward`, etc. The new decisions need parameterized effects and some domain-specific handlers.
 - ECHO's static and live scoring know only current effect names. New effects must be scored, and ECHO projection must see real state changes.
 

@@ -11,6 +11,8 @@ from .enums import (
     EventType,
     JobStatus,
     PieceStatus,
+    ResourceKind,
+    ResourceStatus,
     TargetType,
     WorkCenterStatus,
 )
@@ -47,6 +49,8 @@ class WorkCenter:
     queue: list[str] = field(default_factory=list)
     downtime_remaining: int = 0
     blocked_reason: str | None = None
+    decision_downtime_until: int = 0
+    decision_downtime_reason: str | None = None
 
     @property
     def load(self) -> int:
@@ -122,6 +126,19 @@ class Job:
     completed_shift: int | None = None
     queue_time: int = 0
     rework_count: int = 0
+    family: str = "general"
+    area_id: str | None = None
+    worker_id: str | None = None
+    fixture_id: str | None = None
+    material_id: str | None = None
+    document_id: str | None = None
+    inspection_method_id: str | None = None
+    support_resource_ids: list[str] = field(default_factory=list)
+    material_consumed: bool = False
+    decision_blocked_until: int = 0
+    decision_block_reason: str | None = None
+    acceptance_hold: bool = False
+    acceptance_hold_until: int = 0
 
     planned_completion_rework_shifts: int = 0
     completion_rework_consumed: bool = False
@@ -210,6 +227,120 @@ class Event:
 
 
 @dataclass
+class Worker:
+    """A worker whose qualifications and availability constrain shop work."""
+
+    id: str
+    name: str
+    shop_id: str
+    skills: list[str]
+    qualified_families: list[str] = field(default_factory=list)
+    available: bool = True
+    unavailable_until: int = 0
+    assigned_job_id: str | None = None
+    fatigue: int = 0
+    support_load: int = 0
+
+
+@dataclass
+class SharedResource:
+    """A finite fixture, tool, support asset, slot, or controlled area."""
+
+    id: str
+    name: str
+    kind: ResourceKind
+    shop_id: str | None
+    capabilities: list[str]
+    capacity: int = 1
+    available_capacity: int = 1
+    status: ResourceStatus = ResourceStatus.AVAILABLE
+    unavailable_until: int = 0
+    holder_job_ids: list[str] = field(default_factory=list)
+    certified: bool = True
+    calibrated: bool = True
+    condition: str = "ready"
+
+
+@dataclass
+class MaterialStock:
+    """Verified material or consumable stock tied to a shop/capability lane."""
+
+    id: str
+    name: str
+    shop_id: str
+    capability: str
+    quantity: int
+    verified: bool = True
+    lot_id: str = ""
+    reserved_job_ids: list[str] = field(default_factory=list)
+    donor_material_id: str | None = None
+
+
+@dataclass
+class DocumentArtifact:
+    """A controlled traveler, setup sheet, program, label, or release packet."""
+
+    id: str
+    name: str
+    kind: str
+    family: str
+    revision: int = 1
+    approved: bool = True
+    available: bool = True
+    held_job_ids: list[str] = field(default_factory=list)
+    reusable: bool = False
+    unavailable_until: int = 0
+
+
+@dataclass
+class InspectionMethod:
+    """A measurement/acceptance method with calibration and approval state."""
+
+    id: str
+    name: str
+    family: str
+    capability: str
+    calibrated: bool = True
+    accepted: bool = True
+    drift_level: int = 0
+    quarantined_job_ids: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class DecisionEffect:
+    """One typed operation in the parameterized manufacturing effect engine."""
+
+    kind: str
+    params: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class FollowUpEdge:
+    """A seeded probabilistic edge to a named shared follow-up definition."""
+
+    target_definition_id: str
+    probability: float
+    delay_shifts: int = 3
+    context: str = ""
+
+
+@dataclass(frozen=True)
+class DecisionDefinition:
+    """Stable product definition used to build runtime decision cards."""
+
+    id: str
+    title: str
+    description: str
+    target_selector: str
+    choices: tuple[DecisionChoice, ...]
+    severity: int = 3
+    is_follow_up: bool = False
+    weight: float = 1.0
+    unavoidable_effects: tuple[DecisionEffect, ...] = ()
+    unavoidable_follow_up_edges: tuple[FollowUpEdge, ...] = ()
+
+
+@dataclass
 class DecisionChoice:
     """One selectable player response and its immediate scoring effects."""
 
@@ -223,6 +354,8 @@ class DecisionChoice:
     future_unlock_card_ids: list[str] = field(default_factory=list)
     branch_tags_added: list[str] = field(default_factory=list)
     score_delta: float = 0.0
+    effects: list[DecisionEffect] = field(default_factory=list)
+    follow_up_edges: list[FollowUpEdge] = field(default_factory=list)
 
 
 @dataclass
@@ -241,6 +374,12 @@ class DecisionCard:
     required_tags: list[str] = field(default_factory=list)
     excluded_tags: list[str] = field(default_factory=list)
     campaign_priority: int = 100
+    definition_id: str = ""
+    target_selector: str = "any"
+    context_label: str = ""
+    unavoidable_effects: list[DecisionEffect] = field(default_factory=list)
+    unavoidable_follow_up_edges: list[FollowUpEdge] = field(default_factory=list)
+    is_follow_up: bool = False
 
 
 @dataclass
@@ -283,6 +422,8 @@ class CampaignDecisionGraph:
     cards_by_day: dict[int, list[str]] = field(default_factory=dict)
     event_card_ids_by_day: dict[int, list[str]] = field(default_factory=dict)
     max_active_cards_per_day: int = 0
+    definition_card_ids: dict[str, str] = field(default_factory=dict)
+    follow_up_card_ids: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -317,6 +458,11 @@ class Scenario:
     jobs: dict[str, Job]
     event_timeline: list[Event]
     deadline_shift: int
+    workers: dict[str, Worker] = field(default_factory=dict)
+    shared_resources: dict[str, SharedResource] = field(default_factory=dict)
+    material_stocks: dict[str, MaterialStock] = field(default_factory=dict)
+    documents: dict[str, DocumentArtifact] = field(default_factory=dict)
+    inspection_methods: dict[str, InspectionMethod] = field(default_factory=dict)
     decision_cards: dict[str, DecisionCard] = field(default_factory=dict)
     campaign_decision_graph: CampaignDecisionGraph = field(default_factory=CampaignDecisionGraph)
 
@@ -334,6 +480,11 @@ class SimulationState:
     pieces: dict[str, PuzzlePiece]
     jobs: dict[str, Job]
     event_timeline: list[Event]
+    workers: dict[str, Worker] = field(default_factory=dict)
+    shared_resources: dict[str, SharedResource] = field(default_factory=dict)
+    material_stocks: dict[str, MaterialStock] = field(default_factory=dict)
+    documents: dict[str, DocumentArtifact] = field(default_factory=dict)
+    inspection_methods: dict[str, InspectionMethod] = field(default_factory=dict)
     decision_cards: dict[str, DecisionCard] = field(default_factory=dict)
     campaign_decision_graph: CampaignDecisionGraph = field(default_factory=CampaignDecisionGraph)
     unlocked_decision_card_ids: set[str] = field(default_factory=set)
@@ -360,6 +511,10 @@ class SimulationState:
     idle_disrupted_time: int = 0
     daily_notes: list[str] = field(default_factory=list)
     decision_history: list[DecisionRecord] = field(default_factory=list)
+    scheduled_decision_card_shifts: dict[str, int] = field(default_factory=dict)
+    follow_up_sources: dict[str, str] = field(default_factory=dict)
+    follow_up_outcomes: dict[str, bool] = field(default_factory=dict)
+    activated_decision_card_ids: set[str] = field(default_factory=set)
 
     @property
     def current_day(self) -> int:
@@ -475,7 +630,7 @@ class SimulationState:
             job.status = JobStatus.QUEUED
             job.remaining_duration_shifts += 1
             self.reschedule_count += 1
-            self.daily_notes.append(f"{job.id} was moved while active; one shift of disruption was added.")
+            self.daily_notes.append(f"{job.id} was moved while active and absorbed restart disruption.")
         if old_assignment and old_assignment != workcenter_id:
             self.reschedule_count += 1
         self.remove_job_from_queues(job_id)
@@ -504,5 +659,5 @@ class SimulationState:
         wc.status = WorkCenterStatus.AVAILABLE
         wc.queue.insert(0, current_id)
         self.reschedule_count += 1
-        self.daily_notes.append(f"{current_id} was preempted on {wc.name}; one shift of disruption was added.")
+        self.daily_notes.append(f"{current_id} was preempted on {wc.name} and absorbed restart disruption.")
         return self.assign_job(incoming_job_id, workcenter_id, front=True)

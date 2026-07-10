@@ -495,6 +495,8 @@ def _card_payload(card: DecisionCard, selected_choice: str | None) -> dict[str, 
         "type": card.type.value,
         "title": card.title,
         "description": card.description,
+        "context": card.context_label,
+        "isFollowUp": card.is_follow_up,
         "severity": card.severity,
         "selectedChoice": selected_choice,
         "choices": [_choice_payload(choice) for choice in card.choices],
@@ -513,13 +515,11 @@ def _decision_progress_payload(progress: DecisionProgress) -> dict[str, Any]:
 
 
 def _choice_payload(choice: DecisionChoice) -> dict[str, Any]:
-    """Convert a decision choice while preserving simulation effect hints."""
+    """Convert a choice without exposing internal shift/risk arithmetic."""
     return {
         "id": choice.id,
         "label": choice.label,
         "description": choice.description,
-        "riskEffect": choice.risk_effect,
-        "rescheduleEffect": choice.reschedule_effect,
     }
 
 

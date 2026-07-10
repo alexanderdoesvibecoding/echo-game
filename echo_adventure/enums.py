@@ -93,3 +93,35 @@ class DecisionType(str, Enum):
     STRATEGIC_PRIORITY = "Strategic prioritization"
     UNEXPECTED_JOB = "Unexpected job request"
     ECHO_RECOMMENDATION = "ECHO recommendation"
+    MANUFACTURING = "Manufacturing decision"
+    FOLLOW_UP = "Follow-up decision"
+
+
+class ResourceKind(str, Enum):
+    """Kinds of finite shop resources used by manufacturing decisions."""
+
+    FIXTURE = "fixture"
+    TOOL = "tool"
+    GAUGE = "gauge"
+    LABEL_PRINTER = "label printer"
+    CRANE = "crane"
+    RACK = "rack"
+    CART = "cart"
+    SOFTWARE_SEAT = "software seat"
+    BATCH_SLOT = "batch slot"
+    WASH_TANK = "wash tank"
+    UTILITY_SLOT = "utility slot"
+    CONTROLLED_AREA = "controlled area"
+    STAGING_LANE = "staging lane"
+    WASTE_CONTAINER = "waste container"
+    REFERENCE_SAMPLE = "reference sample"
+
+
+class ResourceStatus(str, Enum):
+    """Availability state shared by finite manufacturing resources."""
+
+    AVAILABLE = "available"
+    RESERVED = "reserved"
+    UNAVAILABLE = "unavailable"
+    HELD = "held"
+    NEEDS_REVIEW = "needs review"

@@ -39,11 +39,11 @@ Shared follow-ups are also viable. Multiple choices can point at the same `Decis
 
 | Decision | Fit | Notes |
 | --- | --- | --- |
-| Weather | Native + Graph/ECHO | Weather events and workcenter disruption already exist. `Wait it out -> Weather cleared early` needs explicit future unlock. |
-| Workstation breakdown | Native + Graph/ECHO | Machine down and reroute are native. Setup mismatch follow-up needs a named edge and probably a setup penalty effect. |
-| Materials not here | Native + Graph/ECHO | Missing/delayed material exists. Using another job's material needs donor-job selection; shared follow-ups are feasible. |
-| ECHO recommendation (rare) | Native-ish + Graph/ECHO | ECHO recommendation exists, but current effect is probabilistic and not "all subjobs lose 1-2 shifts." The slack-pocket payoff needs explicit graph/effect work. |
-| Worker took an off day | Domain + Graph/ECHO | No worker model exists. Can fake with job delay/rework, but replacements, worker return, and qualifications need worker/crew state. |
+| Severe Weather | Native + Graph/ECHO | Weather events and workcenter disruption already exist. `Wait it out -> Weather cleared early` needs explicit future unlock. |
+| Workstation Breakdown | Native + Graph/ECHO | Machine down and reroute are native. Setup mismatch follow-up needs a named edge and probably a setup penalty effect. |
+| Materials Have Not Arrived | Native + Graph/ECHO | Missing/delayed material exists. Using another job's material needs donor-job selection; shared follow-ups are feasible. |
+| ECHO Recommendation (Rare) | Native-ish + Graph/ECHO | ECHO recommendation exists, but current effect is probabilistic and not "all subjobs lose 1-2 shifts." The slack-pocket payoff needs explicit graph/effect work. |
+| Worker Took the Day Off | Domain + Graph/ECHO | No worker model exists. Can fake with job delay/rework, but replacements, worker return, and qualifications need worker/crew state. |
 | Calibration drift | Domain + Graph/ECHO | Could fake via inspection/metrology job delays. Real drift/quarantine/release wants measurement-domain state. |
 | Traveler mismatch | Domain + Graph/ECHO | Current engineering hold/data revision can approximate. Route/traveler versions are not modeled. |
 | Shared fixture claim | Domain + Graph/ECHO | Candidate workcenters exist, but fixtures are not resource objects. Real implementation needs fixture availability/certification state. |

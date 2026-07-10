@@ -26,7 +26,7 @@ The default `normal` preset is tuned as a short focused campaign:
 - Broad routing coverage across capable workcenters
 - No random base disruptions
 - No completion-time rework
-- 3 to 4 generated daily decision candidates, with up to 3 active prompts surfaced
+- 3 sampled named manufacturing decisions per day, with due named follow-ups taking priority
 
 Random base disruptions, extra quality rework events, completion-time rework, and larger scenarios are still available through `GameConfig` for experiments.
 
@@ -76,7 +76,9 @@ Each day:
 4. After all scheduled decisions are answered and the day reaches the end, read the daily summary.
 5. Advance from the summary and continue until every job is finished or the deadline arrives.
 
-Daily decisions are generated as a bounded campaign graph during scenario creation. Choices can unlock later questions, add branch tags, alter future risk, and mutate the live schedule. The server tracks decision progress and rejects full-day advancement until all currently required decisions are answered.
+Daily decisions are sampled from a stable catalog of named manufacturing situations. Some base situations can repeat across a run. Choices can schedule shared named follow-ups through seeded probability edges, while all definitions—including cards not sampled into the current run—remain in the prebuilt graph available to ECHO. The server tracks decision progress and rejects full-day advancement until all currently required decisions are answered.
+
+The player-facing copy describes consequences qualitatively. Internally, promised gains and delays are applied as literal deterministic shift changes, blocks, downtime, capacity openings, or releases.
 
 The final reveal includes:
 
@@ -170,6 +172,10 @@ The simulation advances in shifts. A day is a fixed number of shifts from `GameC
 
 `advance_day` plans the day, then processes up to one day's worth of shifts unless the project completes or the deadline is reached first. `GameSession` wraps this with summary bookkeeping, active-card resets, and benchmark advancement.
 
+### Manufacturing Resources
+
+The scenario includes real worker qualifications and availability, shared fixtures/tools/support assets, material and consumable stock, controlled documents and revisions, and inspection methods. A typed shared-resource model also covers cranes, racks, carts, software seats, batch slots, tanks, utility windows, controlled areas, staging lanes, label printers, waste containers, and reference samples. Most of this state stays behind the scenes; decision cards expose only the affected job/shop context needed to understand the choice.
+
 ### Events And Cascades
 
 Events represent disruptions, warnings, and changing operating conditions. The catalog includes material problems, machine downtime, quality rework, priority changes, inspection delays, engineering holds, urgent inserted work, weather, facility outages, supplier escalation, logistics backlog, tooling damage, crew shortage, rework spillover, certification audits, engineering data revisions, unexpected job requests, and ECHO recommendations.
@@ -186,8 +192,8 @@ The benchmark run uses the same generated scenario as the player, but a separate
 
 ECHO decision selection has two layers:
 
-- Static campaign-tree scoring reads reachable downstream decision paths so a choice with a bad hidden tail can be avoided.
-- Live-board forecasting expands each card through the same shared target selectors used by player-side decision effects, projects each current choice through the remaining run with the automated scheduler, then ranks outcomes by completion, completion shift, projected decision score, remaining jobs, lateness, reschedules, idle time, and risk.
+- Static graph scoring uses every named edge and its probability to estimate expected downstream cost.
+- Live-board forecasting deep-copies the state, applies the exact same parameterized effects and seeded follow-up resolution used by the player path, projects each current choice through the remaining run, then ranks outcomes by completion, completion shift, projected decision score, remaining jobs, lateness, reschedules, idle time, and risk. Because the fixed run seed determines each edge outcome, ECHO can project the exact branch for that run while static fallback scoring remains probability-aware.
 
 Relevant ECHO knobs in `GameConfig`:
 
@@ -203,16 +209,18 @@ echo_adventure/
   app.py                 Package entry point for the browser game
   config.py              GameConfig, balance profiles, presets, seed handling
   models.py              Dataclasses for shops, jobs, events, decisions, and state
+  domain.py              Worker, material, document, and shared-resource runtime constraints
   enums.py               Status, event, target, and decision enums
   scenario_generator.py  Scenario construction, validation, due dates, graph setup
   simulation.py          Shift/day advancement and job processing
   events.py              Event timeline generation, handlers, cascades
-  decisions/             Decision graph, cards, effects, scoring, selectors
+  decisions/             Named decision definitions, graph, effects, scoring, selectors
     __init__.py          Backward-compatible public decision API
-    graph.py             Campaign graph generation and active-card filtering
-    cards.py             Decision-card factories, templates, and text
-    effects.py           Choice application and effect handlers
-    scoring.py           Static ECHO choice and path scoring
+    definitions.py       Stable manufacturing cards, choices, effects, and named edges
+    graph.py             Sampling, shared follow-up scheduling, and stale-target filtering
+    cards.py             Legacy generic card factories (not used by the named campaign)
+    effects.py           Typed parameterized choice effects shared by player and ECHO
+    scoring.py           Probability-aware static ECHO graph scoring
     selectors.py         Shared target expansion for decision effects and ECHO scoring
   echo.py                Hidden ECHO decision policy, live forecasts, and benchmark decision flow
   metrics.py             Snapshots, final score, risk, critical path, status refresh
