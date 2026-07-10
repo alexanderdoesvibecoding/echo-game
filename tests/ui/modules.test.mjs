@@ -65,8 +65,9 @@ function decisionState(overrides = {}) {
       {
         id: "CARD-1",
         type: "Critical Path",
-        title: "Critical path & routing",
+        title: "Two jobs need the same key fixture",
         description: "Route <urgent> work around a blocker.",
+        context: "Job 04",
         severity: 4,
         selectedChoice: null,
         choices: [
@@ -227,16 +228,23 @@ test("renderDecisions controls inline state, modal selection, and dismissal", ()
 
   assert.equal(uiState.decisionModalVisible, true);
   assert.equal(dom.element("decisionModalOverlay").classList.contains("active"), true);
-  assert.equal(dom.element("decisionModalTitle").textContent, "Decision Event");
-  assert.equal(dom.element("decisionModalMeta").textContent, "December 24");
-  assert.match(dom.element("decisionModalBody").innerHTML, /Critical path &amp; routing/);
-  assert.match(dom.element("decisionModalBody").innerHTML, /Route &lt;urgent&gt; work/);
+  assert.match(dom.element("decisionModalTitle").innerHTML, /Two jobs need the same key fixture/);
+  assert.equal(dom.element("decisionModalTitle").getAttribute("aria-label"), "Two jobs need the same key fixture");
+  assert.match(dom.element("decisionModalTitle").innerHTML, /decision-icon-svg/);
+  assert.equal(dom.element("decisionModalMeta").textContent, "Impact: Job 04");
+  assert.match(dom.element("decisionModalBody").innerHTML, /Reroute now/);
+  assert.match(dom.element("decisionModalBody").innerHTML, /choice-icon/);
+  assert.doesNotMatch(dom.element("decisionModalBody").innerHTML, /Route &lt;urgent&gt; work/);
+  assert.doesNotMatch(dom.element("decisionModalBody").innerHTML, /Affected area:/);
+  assert.doesNotMatch(dom.element("decisionModalBody").innerHTML, /Elevated urgency/);
+  assert.doesNotMatch(dom.element("decisionModalBody").innerHTML, /Open/);
   assert.match(dom.element("decisionModalFooter").innerHTML, /disabled/);
 
   selectPendingChoice("A");
 
   assert.equal(uiState.pendingChoice, "A");
-  assert.match(dom.element("decisionModalFooter").innerHTML, /Submit/);
+  assert.match(dom.element("decisionModalBody").innerHTML, /aria-checked="true"/);
+  assert.match(dom.element("decisionModalFooter").innerHTML, /Confirm decision/);
   assert.doesNotMatch(dom.element("decisionModalFooter").innerHTML, /disabled/);
 
   closeDecisionModal();

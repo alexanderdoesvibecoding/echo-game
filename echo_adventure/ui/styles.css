@@ -147,6 +147,15 @@ html[data-theme="dark"] .choice.selected {
   border-color: var(--green);
 }
 
+html[data-theme="dark"] .decision-option .choice-radio {
+  background: #1a202a;
+  border-color: #667085;
+}
+
+html[data-theme="dark"] .decision-option.selected .choice-radio {
+  border-color: var(--green);
+}
+
 html[data-theme="dark"] .decision-icon {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
@@ -837,7 +846,7 @@ tr:last-child td { border-bottom: none; }
   z-index: 2;
   width: 78px;
   pointer-events: none;
-  transform: translate(-50%, -50%);
+  transform: translateY(-50%);
   transition: left 180ms linear;
 }
 .day-progress-submarine-image {
@@ -1085,8 +1094,8 @@ tr:last-child td { border-bottom: none; }
   position: fixed;
   z-index: 80;
   display: none;
-  width: min(880px, calc(100vw - 48px));
-  max-height: min(72vh, 680px);
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(64vh, 560px);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 14px;
@@ -1102,7 +1111,7 @@ tr:last-child td { border-bottom: none; }
 }
 .chart-tooltip.active {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 .chart-tooltip.locked {
   border-color: rgba(0, 114, 178, 0.44);
@@ -1135,7 +1144,7 @@ tr:last-child td { border-bottom: none; }
 }
 .chart-tooltip-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 .chart-tooltip-summary div {
@@ -1166,7 +1175,7 @@ tr:last-child td { border-bottom: none; }
 }
 .chart-tooltip-decision {
   display: grid;
-  gap: 8px;
+  gap: 7px;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1196,9 +1205,6 @@ tr:last-child td { border-bottom: none; }
   border: 1px solid rgba(215, 222, 231, 0.7);
   border-radius: 6px;
   background: rgba(247, 248, 251, 0.86);
-}
-.chart-tooltip-field:first-child {
-  grid-column: 1 / -1;
 }
 .chart-tooltip-fields dd {
   margin: 3px 0 0;
@@ -1477,17 +1483,23 @@ html[data-theme="dark"] .puzzle-added {
   margin-top: 4px;
 }
 .decision-modal {
-  max-width: 720px;
+  max-width: 560px;
+}
+.decision-modal-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
 }
 .decision-modal-meta {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 15px;
+  font-weight: 700;
 }
 .decision-modal-body {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 .decision-prompt {
   border: 1px solid var(--line);
@@ -1502,9 +1514,54 @@ html[data-theme="dark"] .puzzle-added {
 .decision-modal-choices {
   grid-template-columns: 1fr;
   padding: 0;
+  gap: 8px;
 }
 .decision-modal-choices .choice {
-  min-height: 68px;
+  min-height: 52px;
+  margin: 0;
+  padding: 12px;
+}
+.decision-option {
+  border-color: var(--line);
+  background: #fff;
+}
+.decision-option.selected {
+  border-color: var(--green);
+  background: #eef8f4;
+  box-shadow: inset 0 0 0 1px var(--green);
+}
+.decision-option-content {
+  display: grid;
+  grid-template-columns: 22px auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+.decision-option .choice-icon {
+  margin: 0;
+}
+.choice-radio {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #9aa6b2;
+  border-radius: 50%;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.choice-radio::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  opacity: 0;
+}
+.decision-option.selected .choice-radio {
+  border-color: var(--green);
+}
+.decision-option.selected .choice-radio::after {
+  opacity: 1;
 }
 .welcome-modal {
   max-width: 760px;

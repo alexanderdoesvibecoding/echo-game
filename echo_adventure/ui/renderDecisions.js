@@ -499,45 +499,36 @@ export function renderDecisionModal() {
     return;
   }
 
-  title.textContent = "Decision Event";
-  meta.textContent = uiState.state.currentDate || "";
+  const impact = nextCard.context || "Overall schedule";
+  title.innerHTML = `
+    <span class="decision-modal-heading">
+      ${renderDecisionIcon(nextCard, "small")}
+      <span>${escapeHtml(nextCard.title)}</span>
+    </span>
+  `;
+  title.setAttribute("aria-label", nextCard.title);
+  meta.textContent = `Impact: ${impact}`;
   body.innerHTML = `
-    <div class="decision-prompt">
-      <div class="decision-title decision-title-with-icon decision-prompt-head">
-        ${renderDecisionIcon(nextCard, "large")}
-        <div class="decision-title-copy">
-          <h2>${escapeHtml(nextCard.title)}</h2>
-          <div class="subtle">${escapeHtml(nextCard.type)} | ${escapeHtml(decisionUrgencyLabel(nextCard.severity))}</div>
-        </div>
-        <span class="badge warn">Open</span>
-      </div>
-      <p>${escapeHtml(nextCard.description)}</p>
-      ${nextCard.context ? `<div class="subtle">Affected area: ${escapeHtml(nextCard.context)}</div>` : ""}
-    </div>
-    <div class="decision-choices decision-modal-choices">
+    <div class="decision-choices decision-modal-choices" role="radiogroup" aria-label="Decision choices">
       ${nextCard.choices.map(choice => `
-        <button class="choice ${uiState.pendingChoice === choice.id ? "selected" : ""}" onclick="selectPendingChoice('${choice.id}')">
-          <span class="choice-content">
+        <button
+          type="button"
+          role="radio"
+          aria-checked="${uiState.pendingChoice === choice.id ? "true" : "false"}"
+          class="choice decision-option ${uiState.pendingChoice === choice.id ? "selected" : ""}"
+          onclick="selectPendingChoice('${choice.id}')"
+        >
+          <span class="decision-option-content">
+            <span class="choice-radio" aria-hidden="true"></span>
             ${renderChoiceIcon(choice)}
-            <span>
-              <strong>${escapeHtml(choice.label)}</strong>
-              <small>${escapeHtml(choice.description)}</small>
-            </span>
+            <strong>${escapeHtml(choice.label)}</strong>
           </span>
         </button>
       `).join("")}
     </div>
   `;
   footer.innerHTML = `
-    <button ${!uiState.pendingChoice ? "disabled" : ""} class="primary" onclick="submitDecision('${nextCard.id}')">Submit</button>
+    <button ${!uiState.pendingChoice ? "disabled" : ""} class="primary" onclick="submitDecision('${nextCard.id}')">Confirm decision</button>
   `;
   overlay.classList.add("active");
-}
-
-function decisionUrgencyLabel(severity) {
-  if (severity >= 5) return "Severe urgency";
-  if (severity >= 4) return "High urgency";
-  if (severity >= 3) return "Elevated urgency";
-  if (severity >= 2) return "Moderate urgency";
-  return "Low urgency";
 }

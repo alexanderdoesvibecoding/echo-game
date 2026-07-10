@@ -7,6 +7,7 @@ import { renderSubmarineImage } from "./submarineVisual.js";
 
 const DEFAULT_DAY_CYCLE_DURATION_MS = 8000;
 const DAY_CYCLE_TICK_MS = 220;
+const DAY_PROGRESS_SUBMARINE_WIDTH_PX = 78;
 
 const callbacks = {
   render: () => {},
@@ -277,6 +278,7 @@ async function advanceShift(marker) {
 export function renderDayClock(statusText, paused = false) {
   const percent = dayCyclePercent();
   const markerPercent = Number(percent.toFixed(2));
+  const submarineOffset = Number(((markerPercent / 100) * DAY_PROGRESS_SUBMARINE_WIDTH_PX).toFixed(2));
   const gradientWidth = dayProgressGradientWidth(percent);
   return `
     <div class="day-clock">
@@ -286,7 +288,7 @@ export function renderDayClock(statusText, paused = false) {
       </div>
       <div class="day-progress-track" aria-label="Workday progress, ${Math.round(percent)} percent">
         <div class="day-progress-fill ${paused ? "paused" : ""}" style="width:${percent}%; --day-progress-gradient-width:${gradientWidth}"></div>
-        <div class="day-progress-submarine" style="left:${markerPercent}%">
+        <div class="day-progress-submarine" style="left:calc(${markerPercent}% - ${submarineOffset}px)">
           ${renderSubmarineImage({
             idPrefix: "dayProgressSubmarine",
             className: "day-progress-submarine-image",

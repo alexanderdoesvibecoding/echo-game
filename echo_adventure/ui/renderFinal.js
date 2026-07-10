@@ -63,8 +63,6 @@ function buildDailyDecisionGroups(decisionPoints) {
     group.decisions.push({
       sequence,
       label: decisionPoint.label || `Q${sequence}`,
-      questionTitle: decisionPoint.questionTitle || decisionPoint.questionId || "-",
-      questionText: decisionPoint.questionText || decisionPoint.questionTitle || "-",
       playerChoice: decisionPoint.playerChoice || "-",
       echoChoice: decisionPoint.echoChoice || "-",
       playerDelta: formatScore(playerDelta),
@@ -308,9 +306,6 @@ export function showDecisionChartTooltip(event, marker, options = {}) {
     decisions = [];
   }
   const decisionMarkup = decisions.map((decision, index) => {
-    const questionDetail = decision.questionText && decision.questionText !== decision.questionTitle
-      ? `<dd>${escapeHtml(decision.questionText)}</dd>`
-      : "";
     return `
       <section class="chart-tooltip-decision">
         <div class="chart-tooltip-decision-title">
@@ -318,11 +313,6 @@ export function showDecisionChartTooltip(event, marker, options = {}) {
           <span>${escapeHtml(decision.affected || "-")}</span>
         </div>
         <dl class="chart-tooltip-fields">
-          <div class="chart-tooltip-field">
-            <dt>Question</dt>
-            <dd>${escapeHtml(decision.questionTitle || "-")}</dd>
-            ${questionDetail}
-          </div>
           <div class="chart-tooltip-field">
             <dt>Your answer:</dt>
             <dd>${escapeHtml(decision.playerChoice || "-")}</dd>
@@ -377,7 +367,7 @@ function positionDecisionChartTooltip(event, marker, tooltip) {
     : markerRect.top;
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1024;
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 768;
-  const tooltipWidth = tooltip.offsetWidth || Math.min(860, viewportWidth - 48);
+  const tooltipWidth = tooltip.offsetWidth || Math.min(560, viewportWidth - 48);
   const tooltipHeight = tooltip.offsetHeight || 320;
   let left = clientX + 16;
   let top = clientY - tooltipHeight - 12;

@@ -6,9 +6,9 @@ from dataclasses import asdict, dataclass
 from datetime import date, timedelta
 import random
 
-
-NORMAL_CAMPAIGN_START_DATE = "2026-12-23"
-NORMAL_CAMPAIGN_END_DATE = "2026-12-30"
+TOTAL_DAYS = 28
+NORMAL_CAMPAIGN_START_DATE = "2026-07-01"
+NORMAL_CAMPAIGN_END_DATE = "2026-07-15"
 DEFAULT_WORK_PERIOD_LABELS = ("Morning", "Afternoon", "Night")
 _MONTH_NAMES = (
     "January",
@@ -122,7 +122,7 @@ class BalancePreset:
 GAME_PRESETS: dict[str, BalancePreset] = {
     "normal": BalancePreset(
         workload=WorkloadProfile(
-            total_days=8,
+            total_days=TOTAL_DAYS,
             start_date=NORMAL_CAMPAIGN_START_DATE,
             end_date=NORMAL_CAMPAIGN_END_DATE,
             piece_count=6,

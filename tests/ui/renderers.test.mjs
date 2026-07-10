@@ -182,6 +182,8 @@ test("dayClock builds deterministic thresholds and blocks decisions while modals
 
   assert.equal(readyToAdvance(), true);
   assert.match(renderDayClock("Paused for decision", true), /day-progress-fill paused/);
+  uiState.dayCycleProgress = 100;
+  assert.match(renderDayClock("Complete"), /day-progress-submarine" style="left:calc\(100% - 78px\)"/);
 });
 
 test("renderFinal decision chart tooltip locks and force-unlocks at runtime", () => {
@@ -219,6 +221,8 @@ test("renderFinal decision chart tooltip locks and force-unlocks at runtime", ()
   assert.match(tooltip.innerHTML, /Click to lock this panel/);
   assert.match(tooltip.innerHTML, /Your answer:/);
   assert.match(tooltip.innerHTML, /Should have picked/);
+  assert.doesNotMatch(tooltip.innerHTML, /<dt>Question<\/dt>/);
+  assert.doesNotMatch(tooltip.innerHTML, /Route work around a blocker/);
 
   document.dispatchEvent("click", {
     target: marker,

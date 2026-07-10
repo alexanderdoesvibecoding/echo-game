@@ -316,9 +316,26 @@ def _append_domain_targets(state: SimulationState, card: DecisionCard, job: Job)
 
 def _set_card_context(state: SimulationState, card: DecisionCard, job: Job) -> None:
     shop = state.shops.get(job.shop_id)
+    if card.target_selector == "global":
+        card.context_label = "Overall schedule"
+        return
+    if card.target_selector in {"shop", "staging", "controlled", "waste"} and shop:
+        card.context_label = shop.name
+        return
+    if card.target_selector == "workcenter":
+        wc_id = job.assigned_workcenter_id or (job.candidate_workcenter_ids[0] if job.candidate_workcenter_ids else "")
+        if wc_id in state.workcenters:
+            card.context_label = state.workcenters[wc_id].name
+            return
+    card.context_label = _job_impact_label(state, job)
+
+
+def _job_impact_label(state: SimulationState, job: Job) -> str:
     piece = state.pieces.get(job.piece_id)
-    piece_label = piece.name.split(" - ", 1)[0] if piece else job.piece_id
-    card.context_label = f"{piece_label} in {shop.name if shop else job.shop_id}"
+    if piece:
+        return piece.name.split(" - ", 1)[0]
+    suffix = job.piece_id.split("-")[-1] if job.piece_id else ""
+    return f"Job {suffix}" if suffix else job.id
 
 
 def _stable_int(material: str) -> int:

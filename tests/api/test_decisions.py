@@ -4,6 +4,7 @@ import unittest
 
 from echo_adventure.decisions.effects import apply_choice
 from echo_adventure.decisions.graph import (
+    _set_card_context,
     active_campaign_decision_cards,
     apply_campaign_choice,
     decision_path_signature,
@@ -146,6 +147,28 @@ class DecisionGraphTests(unittest.TestCase):
         state.campaign_branch_tags = {"critical_path_protected", "crew_overloaded"}
 
         self.assertEqual(active_campaign_decision_cards(state, 2, {}), [])
+
+    def test_context_labels_use_short_impact_copy(self):
+        state = make_state()
+        job = state.jobs["JOB-01-001"]
+
+        job_card = make_card("JOB-CONTEXT", target_ids=[job.id])
+        job_card.target_selector = "fixture"
+        _set_card_context(state, job_card, job)
+
+        self.assertEqual(job_card.context_label, "Job 01")
+
+        shop_card = make_card("SHOP-CONTEXT", target_ids=[job.id])
+        shop_card.target_selector = "shop"
+        _set_card_context(state, shop_card, job)
+
+        self.assertEqual(shop_card.context_label, "Alpha Shop")
+
+        global_card = make_card("GLOBAL-CONTEXT", target_ids=[job.id])
+        global_card.target_selector = "global"
+        _set_card_context(state, global_card, job)
+
+        self.assertEqual(global_card.context_label, "Overall schedule")
 
 
 class DecisionScoringTests(unittest.TestCase):
