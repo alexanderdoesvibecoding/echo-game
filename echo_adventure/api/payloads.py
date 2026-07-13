@@ -198,10 +198,9 @@ def _choice_payload(choice: DecisionChoice) -> dict[str, Any]:
     return {
         "id": choice.id,
         "label": choice.label,
-        "description": choice.description,
     }
 
 
 def _job_label(job_id: str) -> str:
     suffix = job_id.rsplit("-", 1)[-1]
-    return f"Job {suffix}"
+    return f"Job {int(suffix)}"

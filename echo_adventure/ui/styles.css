@@ -1457,7 +1457,7 @@ html[data-theme="dark"] .puzzle-added {
   padding: 0;
 }
 .summary-modal .summary-metrics-bar {
-  grid-template-columns: repeat(5, minmax(110px, 1fr)) minmax(154px, 1.2fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 .summary-modal .summary-metric {
   min-height: 72px;
@@ -1483,7 +1483,11 @@ html[data-theme="dark"] .puzzle-added {
   margin-top: 4px;
 }
 .decision-modal {
+  display: flex;
+  flex-direction: column;
   max-width: 560px;
+  max-height: calc(100dvh - 48px);
+  overflow: hidden;
 }
 .decision-modal-heading {
   display: grid;
@@ -1491,15 +1495,16 @@ html[data-theme="dark"] .puzzle-added {
   gap: 10px;
   align-items: center;
 }
-.decision-modal-meta {
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 15px;
-  font-weight: 700;
-}
 .decision-modal-body {
   display: grid;
   gap: 12px;
+  min-height: 0;
+  max-height: none !important;
+  overflow-y: auto !important;
+  padding-right: 4px;
+}
+.decision-modal .modal-footer {
+  flex: 0 0 auto;
 }
 .decision-prompt {
   border: 1px solid var(--line);
@@ -1676,75 +1681,8 @@ html[data-theme="dark"] #closeWelcomeBtn {
   display: grid;
   gap: 18px;
 }
-.jobs-only-metrics {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-.jobs-only-metrics .metric {
-  display: grid;
-  gap: 6px;
-}
-.decision-queue {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-}
-.decision-queue-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
-}
-.decision-queue-item > span {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--soft);
-  font-weight: 800;
-}
-.decision-queue-item.complete > span {
-  background: var(--teal);
-  color: white;
-}
-.decision-queue-item div {
-  display: grid;
-  gap: 2px;
-}
-.decision-queue-item small,
-.job-day-card span {
-  color: var(--muted);
-}
 .decision-open-button {
   justify-self: start;
-}
-.job-day-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 10px;
-}
-.job-day-card {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-}
-.job-day-card > div:first-child {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-.job-day-card.complete {
-  border-color: var(--teal);
-  background: color-mix(in srgb, var(--teal) 8%, var(--panel));
-}
-.job-days-value {
-  font-weight: 800;
 }
 .decision-question-copy {
   font-size: 1.05rem;
@@ -1756,10 +1694,19 @@ html[data-theme="dark"] #closeWelcomeBtn {
 }
 .decision-choice {
   display: grid;
-  gap: 5px;
+  align-items: center;
   width: 100%;
+  height: auto;
+  min-height: 56px;
   padding: 14px;
   text-align: left;
+  white-space: normal;
+  overflow: visible;
+}
+.decision-choice strong {
+  display: block;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 .decision-choice.selected {
   border-color: var(--teal);
@@ -1778,9 +1725,4 @@ html[data-theme="dark"] #closeWelcomeBtn {
   padding: 9px 12px;
   border-bottom: 1px solid var(--line);
   text-align: left;
-}
-@media (max-width: 720px) {
-  .jobs-only-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }

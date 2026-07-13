@@ -43,7 +43,6 @@ export function renderFinal() {
     finalMetric("Completion", player.completion || "-", echo.completion || "-"),
     finalMetric("Completion Day", String(player.completionDay || "-"), String(echo.completionDay || "-")),
     finalMetric("Decision Score", String(player.finalScore), String(echo.finalScore)),
-    finalMetric("Jobs Complete", `${player.jobsCompleted}/20`, `${echo.jobsCompleted}/20`),
   ].join("");
   $("finalCompletionChart").innerHTML = renderHistory(final.completionHistory);
   const review = final.review || {};

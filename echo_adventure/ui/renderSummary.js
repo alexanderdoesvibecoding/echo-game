@@ -11,66 +11,39 @@ function countValueParts(value) {
   if (!match) return null;
   const target = Number(match[1]);
   if (!Number.isFinite(target)) return null;
-  const decimalPart = match[1].split(".")[1] || "";
   return {
     target,
-    decimals: decimalPart.length,
+    decimals: (match[1].split(".")[1] || "").length,
     suffix: match[2] || "",
   };
 }
 
 function renderSummaryMetricValue(value) {
-  const safeValue = escapeHtml(value);
   const count = countValueParts(value);
-  if (!count) return `<strong>${safeValue}</strong>`;
+  if (!count) return `<strong>${escapeHtml(value)}</strong>`;
   return `
     <strong
       data-summary-count-to="${escapeHtml(count.target)}"
       data-summary-count-decimals="${escapeHtml(count.decimals)}"
       data-summary-count-suffix="${escapeHtml(count.suffix)}"
-    >${safeValue}</strong>
+    >${escapeHtml(value)}</strong>
   `;
 }
 
 function renderSummaryMetricBar(summary, jobsTotal) {
   const metrics = [
-    {
-      label: "Jobs Today",
-      value: Number(summary.completedToday || 0),
-      tone: Number(summary.completedToday || 0) > 0 ? "good" : "warn",
-    },
-    {
-      label: "Jobs Remaining",
-      value: Number(summary.jobsRemaining || 0),
-      tone: Number(summary.jobsRemaining || 0) > 0 ? "warn" : "good",
-    },
-    {
-      label: "Jobs Complete",
-      value: `${Number(summary.jobsComplete || 0)}/${Math.max(1, Number(jobsTotal || 0))}`,
-      tone: Number(summary.jobsComplete || 0) >= Number(jobsTotal || 0) ? "good" : "warn",
-    },
-    {
-      label: "Remaining Job-Days",
-      value: Number(summary.totalRemainingDays || 0),
-      tone: Number(summary.totalRemainingDays || 0) > 0 ? "warn" : "good",
-    },
-    {
-      label: "Projected Finish",
-      value: summary.projectedCompletion || "-",
-      tone: "good",
-    },
+    { label: "Jobs Completed Today", value: Number(summary.completedToday || 0), tone: summary.completedToday ? "good" : "warn" },
+    { label: "Jobs Remaining", value: Number(summary.jobsRemaining || 0), tone: summary.jobsRemaining ? "warn" : "good" },
+    { label: "Jobs Complete", value: `${Number(summary.jobsComplete || 0)}/${Math.max(1, Number(jobsTotal || 0))}`, tone: summary.jobsRemaining ? "warn" : "good" },
+    { label: "Remaining Job-Days", value: Number(summary.totalRemainingDays || 0), tone: summary.totalRemainingDays ? "warn" : "good" },
+    { label: "Projected Finish", value: summary.projectedCompletion || "-", tone: "good" },
   ];
-
   return `
     <div class="summary-metrics-bar">
       ${metrics.map(metric => `
         <div class="metric summary-metric summary-metric-${metric.tone}">
-          <div class="metric-title-row">
-            <span class="subtle metric-label">${escapeHtml(metric.label)}</span>
-          </div>
-          <div class="metric-value-row summary-metric-value-row">
-            ${renderSummaryMetricValue(metric.value)}
-          </div>
+          <div class="metric-title-row"><span class="subtle metric-label">${escapeHtml(metric.label)}</span></div>
+          <div class="metric-value-row summary-metric-value-row">${renderSummaryMetricValue(metric.value)}</div>
         </div>
       `).join("")}
     </div>
@@ -88,7 +61,7 @@ function renderSummaryGrid(summary, jobsTotal, puzzleInstanceId) {
       <ul class="notes">${notesMarkup}</ul>
     </div>
     <div class="reveal-panel summary-puzzle-panel">
-      ${renderSubmarinePuzzle(summary.puzzle, puzzleInstanceId)}
+      ${renderSubmarinePuzzle(summary.puzzle, puzzleInstanceId, { showCaption: true, showPlacedToday: true })}
     </div>
   `;
 }
@@ -153,7 +126,7 @@ function renderPuzzlePlaceholder(tile, slice) {
   `;
 }
 
-export function renderSubmarinePuzzle(puzzle, instanceId) {
+export function renderSubmarinePuzzle(puzzle, instanceId, options = {}) {
   const tiles = Array.isArray(puzzle?.tiles) ? puzzle.tiles : [];
   if (!tiles.length) return "";
 
@@ -173,19 +146,16 @@ export function renderSubmarinePuzzle(puzzle, instanceId) {
   const placedMarkupToday = placedToday.length
     ? placedToday.map(tile => `<span class="badge">${escapeHtml(tile.label)}</span>`).join("")
     : `<span class="subtle">No jobs were placed today.</span>`;
-
   return `
     <div class="submarine-puzzle">
-      <div class="puzzle-caption">
-        <strong>Assembly</strong>
-      </div>
+      ${options.showCaption ? `<div class="puzzle-caption"><strong>Assembly</strong></div>` : ""}
       <div class="puzzle-stage" aria-label="Submarine puzzle showing assembled and waiting image sections">
         <div class="puzzle-assembled-row${unplacedItems.length ? " has-incomplete" : ""}" style="--slice-total:${total}">
           ${placedMarkup}
         </div>
         ${unplacedItems.length ? `<div class="puzzle-loose-row">${unplacedMarkup}</div>` : ""}
       </div>
-      <div class="puzzle-added"><span>Placed today:</span>${placedMarkupToday}</div>
+      ${options.showPlacedToday ? `<div class="puzzle-added"><span>Placed today:</span>${placedMarkupToday}</div>` : ""}
     </div>
   `;
 }
@@ -303,8 +273,6 @@ export function renderSummary() {
   $("summarySection").classList.toggle("hidden", !puzzle);
   if (!puzzle) return;
   $("summaryGrid").innerHTML = `
-    <div class="reveal-panel summary-puzzle-panel live-submarine-panel">
-      ${renderSubmarinePuzzle(puzzle, "live-submarine")}
-    </div>
+    ${renderSubmarinePuzzle(puzzle, "live-submarine")}
   `;
 }

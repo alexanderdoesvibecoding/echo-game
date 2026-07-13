@@ -22,37 +22,14 @@ export function renderDecisions() {}
 export function renderInlineDecisions() {
   const body = $("inlineDecisionBody");
   if (!body || !uiState.state) return;
-  const snap = uiState.state.snapshot;
-  const progress = decisionProgress();
   const next = currentOpenDecisionCard();
   const status = readyToAdvance()
-    ? "All questions answered — finishing today's work"
-    : `${progress.completed} of ${progress.total} questions answered`;
-  const jobRows = uiState.state.jobs.map(job => `
-    <div class="job-day-card ${job.completed ? "complete" : ""}">
-      <div><strong>${escapeHtml(job.label)}</strong><span>${escapeHtml(job.name.split(" - ").slice(1).join(" - "))}</span></div>
-      <div class="job-days-value">${job.completed ? "Complete" : `${job.remainingDays} day${job.remainingDays === 1 ? "" : "s"}`}</div>
-      <div class="progress"><div class="bar good" style="width:${Math.max(0, Math.min(1, Number(job.progress) || 0)) * 100}%"></div></div>
-    </div>
-  `).join("");
-  const decisions = uiState.state.decisions.map((card, index) => `
-    <div class="decision-queue-item ${card.selectedChoice ? "complete" : ""}">
-      <span>${index + 1}</span>
-      <div><strong>${escapeHtml(card.title)}</strong><small>${card.selectedChoice ? "Answered" : "Waiting"}</small></div>
-    </div>
-  `).join("");
+    ? "Finishing today's work"
+    : "Workday in progress";
   body.innerHTML = `
     <div class="daily-overview">
-      <div class="summary-metrics-bar jobs-only-metrics">
-        <div class="metric"><span class="subtle">Jobs Complete</span><strong>${snap.jobsCompleted}/${uiState.state.jobCount}</strong></div>
-        <div class="metric"><span class="subtle">Jobs Remaining</span><strong>${snap.jobsRemaining}</strong></div>
-        <div class="metric"><span class="subtle">Remaining Job-Days</span><strong>${snap.totalRemainingDays}</strong></div>
-        <div class="metric"><span class="subtle">Projected Finish</span><strong>${escapeHtml(snap.projectedCompletion)}</strong></div>
-      </div>
       ${renderDayClock(status, Boolean(next))}
-      <div class="decision-queue">${decisions}</div>
-      ${next ? `<button class="primary decision-open-button" data-action="open-decision-modal">Open next question</button>` : ""}
-      <div class="job-day-grid">${jobRows}</div>
+      ${next ? `<button class="primary decision-open-button" data-action="open-decision-modal">Open next decision</button>` : ""}
     </div>
   `;
 }
@@ -93,7 +70,6 @@ export function renderDecisionModal() {
   }
   overlay.classList.add("active");
   $("decisionModalTitle").textContent = card.title;
-  $("decisionModalMeta").textContent = `${card.type} · ${card.context}`;
   $("decisionModalBody").innerHTML = `
     <p class="decision-question-copy">${escapeHtml(card.description)}</p>
     <div class="decision-choice-list">
@@ -102,14 +78,12 @@ export function renderDecisionModal() {
         return `
           <button class="decision-choice ${selected ? "selected" : ""}" onclick="selectPendingChoice('${card.id}', '${choice.id}')">
             <strong>${escapeHtml(choice.label)}</strong>
-            <span>${escapeHtml(choice.description)}</span>
           </button>
         `;
       }).join("")}
     </div>
   `;
   $("decisionModalFooter").innerHTML = `
-    <button onclick="closeDecisionModal()">Review board</button>
     <button class="primary" onclick="submitDecision()" ${uiState.pendingChoice ? "" : "disabled"}>Confirm response</button>
   `;
 }

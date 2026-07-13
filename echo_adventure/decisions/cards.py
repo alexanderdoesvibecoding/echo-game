@@ -94,7 +94,7 @@ def _build_card(
         )
     echo_choice = select_echo_choice_from_choices(choices)
     target_ids = list(dict.fromkeys(job_id for choice in choices for job_id in choice.day_changes))
-    context = ", ".join(job.name.split(" - ", 1)[0] for job in broad)
+    context = _format_job_list([job.name for job in broad])
     return DecisionCard(
         id=f"DEC-D{state.current_day:03d}-{ordinal:02d}",
         day=state.current_day,
@@ -133,3 +133,14 @@ def decision_progress(
 def _stable_seed(seed: int, day: int, suffix: str) -> int:
     material = f"{seed}|{day}|{suffix}".encode("utf-8")
     return int(hashlib.sha256(material).hexdigest(), 16)
+
+
+def _format_job_list(job_names: list[str]) -> str:
+    """Format player-facing job lists with 'and' before the final item."""
+    if not job_names:
+        return ""
+    if len(job_names) == 1:
+        return job_names[0]
+    if len(job_names) == 2:
+        return f"{job_names[0]} and {job_names[1]}"
+    return f"{', '.join(job_names[:-1])}, and {job_names[-1]}"

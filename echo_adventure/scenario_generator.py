@@ -8,25 +8,15 @@ from .config import GameConfig
 from .models import Job, Scenario
 
 
-JOB_NAMES = (
-    "Aster", "Beacon", "Cinder", "Delta", "Ember",
-    "Flux", "Garnet", "Helio", "Ion", "Juniper",
-    "Kestrel", "Lumen", "Mosaic", "Nimbus", "Orchid",
-    "Pioneer", "Quasar", "Relay", "Solace", "Tangent",
-)
-
-
 def generate_scenario(config: GameConfig) -> Scenario:
     rng = random.Random(config.seed or 0)
     jobs: dict[str, Job] = {}
     for index in range(1, config.job_count + 1):
         job_id = f"JOB-{index:02d}"
-        duration = rng.randint(config.min_job_duration_days, config.max_job_duration_days)
-        base_name = JOB_NAMES[(index - 1) % len(JOB_NAMES)]
-        name = base_name if index <= len(JOB_NAMES) else f"{base_name} {index}"
+        duration = _weighted_duration(rng, config)
         jobs[job_id] = Job(
             id=job_id,
-            name=f"Job {index:02d} - {name}",
+            name=f"Job {index}",
             initial_duration_days=duration,
             remaining_days=duration,
         )
@@ -37,6 +27,13 @@ def generate_scenario(config: GameConfig) -> Scenario:
     )
     validate_scenario(scenario, config)
     return scenario
+
+
+def _weighted_duration(rng: random.Random, config: GameConfig) -> int:
+    """Favor short jobs while keeping every configured duration possible."""
+    durations = list(range(config.min_job_duration_days, config.max_job_duration_days + 1))
+    weights = [1.0 / (offset + 1) for offset in range(len(durations))]
+    return rng.choices(durations, weights=weights, k=1)[0]
 
 
 def validate_scenario(scenario: Scenario, config: GameConfig) -> None:

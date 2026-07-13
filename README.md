@@ -5,7 +5,7 @@ ECHO Adventure is a local browser game about completing twenty independent jobs.
 ## Game rules
 
 - Every run contains exactly 20 jobs.
-- Each job starts with a random runtime from 5 through 15 days.
+- Each job starts with a random runtime from 5 through 15 days, weighted toward 5–7 days while retaining occasional longer jobs.
 - There are no subjobs, dependencies, shifts, resources, queues, events, or deadline.
 - Every unfinished job loses one remaining day whenever a game day advances.
 - Each day presents a configurable 2–4 questions.
