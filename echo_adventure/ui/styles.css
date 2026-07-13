@@ -382,7 +382,7 @@ section { overflow: visible; }
 .grid { display: grid; gap: 16px; }
 .metrics {
   display: grid;
-  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
   gap: 10px;
   padding: 14px;
 }
@@ -911,7 +911,7 @@ tr:last-child td { border-bottom: none; }
 }
 .summary-metrics-bar {
   display: grid;
-  grid-template-columns: repeat(6, minmax(126px, 1fr)) minmax(180px, 1.25fr);
+  grid-template-columns: repeat(5, minmax(126px, 1fr)) minmax(180px, 1.25fr);
   gap: 8px;
 }
 .final-metric {
@@ -1457,7 +1457,7 @@ html[data-theme="dark"] .puzzle-added {
   padding: 0;
 }
 .summary-modal .summary-metrics-bar {
-  grid-template-columns: repeat(6, minmax(110px, 1fr)) minmax(154px, 1.2fr);
+  grid-template-columns: repeat(5, minmax(110px, 1fr)) minmax(154px, 1.2fr);
 }
 .summary-modal .summary-metric {
   min-height: 72px;
@@ -1607,8 +1607,32 @@ html[data-theme="dark"] .puzzle-added {
   line-height: 1.45;
   max-width: 620px;
 }
+.welcome-modal .modal-footer {
+  justify-content: center;
+  margin-top: 18px;
+}
+#closeWelcomeBtn {
+  min-width: min(100%, 260px);
+  height: 58px;
+  padding: 0 30px;
+  border-radius: 8px;
+  font-size: 22px;
+  font-weight: 800;
+  box-shadow: 0 12px 24px rgba(0, 114, 178, 0.28);
+}
+#closeWelcomeBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 30px rgba(0, 79, 124, 0.32);
+}
+#closeWelcomeBtn:focus-visible {
+  outline: 3px solid rgba(0, 114, 178, 0.34);
+  outline-offset: 3px;
+}
 html[data-theme="dark"] .welcome-visual {
   background: linear-gradient(180deg, #16212a 0%, #111821 100%);
+}
+html[data-theme="dark"] #closeWelcomeBtn {
+  box-shadow: 0 12px 24px rgba(86, 180, 233, 0.22);
 }
 .info-icon {
   display: inline-flex;

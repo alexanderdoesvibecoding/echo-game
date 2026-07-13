@@ -3,7 +3,7 @@
 import { uiState } from "./state.js";
 import { $, escapeHtml } from "./html.js";
 
-const SUMMARY_COUNTER_DURATION_MS = 900;
+const DEFAULT_SUMMARY_COUNTER_DURATION_MS = 1800;
 
 function countValueParts(value) {
   const rawValue = String(value ?? "");
@@ -33,7 +33,6 @@ function renderSummaryMetricValue(value) {
 }
 
 function renderSummaryMetricBar(summary, piecesTotal) {
-  const risk = Math.round(Number(summary.risk || 0));
   const metrics = [
     {
       label: "Subjobs Today",
@@ -59,11 +58,6 @@ function renderSummaryMetricBar(summary, piecesTotal) {
       label: "Late Subjobs",
       value: Number(summary.jobsLate || 0),
       tone: Number(summary.jobsLate || 0) > 0 ? "danger" : "good",
-    },
-    {
-      label: "Risk",
-      value: `${risk}/100`,
-      tone: risk > 70 ? "danger" : risk > 40 ? "warn" : "good",
     },
     {
       label: "Projected Finish",
@@ -212,7 +206,6 @@ function summaryAnimationKey(payload, summary) {
     summary.piecesCompleted,
     summary.jobsBehindSchedule,
     summary.jobsLate,
-    summary.risk,
     summary.projectedCompletion,
   ].join("|");
 }
@@ -233,8 +226,13 @@ function requestFrame(callback) {
   if (typeof timeout === "function") {
     return timeout(() => callback(now()), 16);
   }
-  callback(now() + SUMMARY_COUNTER_DURATION_MS);
+  callback(now() + DEFAULT_SUMMARY_COUNTER_DURATION_MS);
   return null;
+}
+
+function summaryCounterDurationMs(payload = uiState.pendingAdvanceState || uiState.state) {
+  const configured = Number(payload?.dailySummaryCounterDurationMs ?? DEFAULT_SUMMARY_COUNTER_DURATION_MS);
+  return Number.isFinite(configured) ? Math.max(1, configured) : DEFAULT_SUMMARY_COUNTER_DURATION_MS;
 }
 
 function formatCounterValue(value, decimals, suffix) {
@@ -247,7 +245,7 @@ export function animateSummaryCounters(container, options = {}) {
   const counters = Array.from(container.querySelectorAll("[data-summary-count-to]"));
   if (!counters.length) return;
 
-  const duration = Math.max(0, Number(options.duration ?? SUMMARY_COUNTER_DURATION_MS));
+  const duration = Math.max(0, Number(options.duration ?? DEFAULT_SUMMARY_COUNTER_DURATION_MS));
   const startTime = now();
   const entries = counters
     .map((element) => ({
@@ -302,7 +300,7 @@ export function renderSummaryModal() {
     uiState.summaryAnimationKey = animationKey;
     body.innerHTML = `<div class="summary-grid">${renderSummaryGrid(summary, payload.pieces.length, "summary-modal")}</div>`;
     body.scrollTop = 0;
-    animateSummaryCounters(body);
+    animateSummaryCounters(body, { duration: summaryCounterDurationMs(payload) });
   }
 }
 

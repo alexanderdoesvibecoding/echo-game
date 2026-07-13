@@ -51,14 +51,6 @@ export function renderMetrics() {
       tooltip: "Completed subjobs that finished after their target completion date.",
       showBar: false,
     },
-    {
-      label: "Schedule Risk",
-      value: `${Math.round(snap.scheduleRisk)}/100`,
-      pct: snap.scheduleRisk / 100,
-      tone: snap.scheduleRisk > 70 ? "danger" : snap.scheduleRisk > 40 ? "warn" : "good",
-      tooltip: "Overall probability of missing the deadline (0 = safe, 100 = critical).",
-      showBar: true,
-    },
   ];
   $("metrics").innerHTML = metrics.map((metric) => {
     const detail = metric.detail || "";

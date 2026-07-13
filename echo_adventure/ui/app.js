@@ -17,7 +17,6 @@ import {
   toggleSettingsMenu,
 } from "./modals.js";
 import { hideDecisionChartTooltip, renderFinal, showDecisionChartTooltip } from "./renderFinal.js";
-import { renderMetrics } from "./renderMetrics.js";
 import {
   closeDecisionModal,
   configureDecisionActions,
@@ -146,10 +145,8 @@ function render() {
   if (!uiState.state) return;
   syncDayCycleForState();
   $("dayBadge").textContent = uiState.state.currentDate || "Schedule";
-  $("projectedText").textContent = `Projected completion: ${uiState.state.projectedCompletion}`;
   renderMainSectionVisibility();
 
-  renderMetrics();
   renderDecisions();
   renderInlineDecisions();
   renderSummary();
@@ -163,7 +160,6 @@ function render() {
 
 function renderMainSectionVisibility() {
   const gameOver = Boolean(uiState.state.gameOver);
-  $("projectPositionSection").classList.toggle("hidden", gameOver);
   $("dailyDecisionSection").classList.toggle("hidden", gameOver);
 }
 

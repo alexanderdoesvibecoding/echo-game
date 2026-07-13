@@ -251,7 +251,6 @@ function renderFinalMetricBar(player, automated) {
     1,
   );
   const formatScore = (value) => Number(value || 0).toFixed(2);
-  const formatRisk = (value) => `${Math.round(Number(value || 0))}/100`;
   const metricCards = [
     {
       label: "Score",
@@ -288,13 +287,6 @@ function renderFinalMetricBar(player, automated) {
       playerValue: Number(player.jobsLate || 0),
       echoValue: Number(automated.jobsLate || 0),
       tone: Number(player.jobsLate || 0) <= Number(automated.jobsLate || 0) ? "good" : "warn",
-    },
-    {
-      label: "Max risk",
-      playerValue: formatRisk(player.maxScheduleRisk ?? player.scheduleRisk),
-      echoValue: formatRisk(automated.maxScheduleRisk ?? automated.scheduleRisk),
-      tone: Number(player.maxScheduleRisk ?? player.scheduleRisk ?? 0)
-        <= Number(automated.maxScheduleRisk ?? automated.scheduleRisk ?? 0) ? "good" : "warn",
     },
   ];
 

@@ -51,6 +51,7 @@ class PayloadMixin:
                 "deadlineDate": self.config.deadline_date_label,
                 "shiftsPerDay": self.config.shifts_per_day,
                 "dayCycleDurationMs": self.config.day_cycle_duration_ms,
+                "dailySummaryCounterDurationMs": self.config.daily_summary_counter_duration_ms,
                 "projectedCompletion": self.config.date_label_for_shift(snapshot.projected_completion_shift),
                 "snapshot": snapshot_payload,
                 "pieces": self._pieces_payload(),
