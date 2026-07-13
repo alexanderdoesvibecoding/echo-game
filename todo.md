@@ -44,5 +44,3 @@
 - [ ] Can get stuck waiting for one job for a real long time… and then the game finishes and ECHO finished a week prior
 
 - [ ] It starts on July “0” technically when looking at the end-of-game summary
-
-- [ ] Make highlight for new job placed more obvious
