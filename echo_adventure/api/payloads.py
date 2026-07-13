@@ -78,7 +78,7 @@ class PayloadMixin:
             "totalRemainingDays": snapshot.total_remaining_days,
             "projectedCompletion": self.config.date_label_for_day(snapshot.projected_completion_day),
             "puzzle": self.last_summary_puzzle,
-            "notes": self.last_result.notes[-10:],
+            "notes": self.last_result.notes[-10:] if self.last_result.completed_job_ids else [],
         }
 
     def _build_puzzle_payload(self, day: int, completed_before: set[str]) -> dict[str, Any]:

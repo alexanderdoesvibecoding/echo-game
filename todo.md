@@ -1,6 +1,6 @@
-- [ ] Welcome screen update
+- [x] Welcome screen update
     - [x] Remove critical path jobs list – Alexander
-    - [ ] Reword text – Alexander
+    - [x] Reword text – Alexander
     - [x] Make text and start button bigger – Alexander
 
 - [x] Remove the job/subjob split

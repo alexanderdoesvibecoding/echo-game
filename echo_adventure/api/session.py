@@ -64,7 +64,6 @@ class GameSession(PayloadMixin, ReviewMixin):
             self.last_result.completed_job_ids = sorted(
                 self.player_state.completed_jobs - self.day_completed_before
             )
-            self.last_result.notes = [*self.choice_notes, *self.last_result.notes]
             self.last_summary_puzzle = self._build_puzzle_payload(
                 day=self.last_result.day,
                 completed_before=self.day_completed_before,

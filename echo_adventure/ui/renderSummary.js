@@ -51,15 +51,20 @@ function renderSummaryMetricBar(summary, jobsTotal) {
 }
 
 function renderSummaryGrid(summary, jobsTotal, puzzleInstanceId) {
-  const notesMarkup = (summary.notes || [])
+  const notes = Array.isArray(summary.notes) ? summary.notes : [];
+  const showUpdates = Number(summary.completedToday || 0) > 0 && notes.length;
+  const notesMarkup = notes
     .map(note => `<li>${escapeHtml(note)}</li>`)
-    .join("") || "<li>No notable notes recorded.</li>";
-  return `
-    ${renderSummaryMetricBar(summary, jobsTotal)}
+    .join("");
+  const updatesMarkup = showUpdates ? `
     <div class="summary-updates-banner" role="status">
       <h3>Updates</h3>
       <ul class="notes">${notesMarkup}</ul>
     </div>
+  ` : "";
+  return `
+    ${renderSummaryMetricBar(summary, jobsTotal)}
+    ${updatesMarkup}
     <div class="reveal-panel summary-puzzle-panel">
       ${renderSubmarinePuzzle(summary.puzzle, puzzleInstanceId, { showCaption: true, showPlacedToday: true })}
     </div>

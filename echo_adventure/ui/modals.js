@@ -36,7 +36,7 @@ function renderWelcomeContent() {
 
   const jobCount = Array.isArray(uiState.state?.jobs) ? uiState.state.jobs.length : 0;
   const jobText = jobCount ? `${jobCount} job${jobCount === 1 ? "" : "s"}` : "jobs";
-  blurb.textContent = `Complete all ${jobText}. Every unfinished job advances by one day each game day, and every decision adds or removes job days.`;
+  blurb.textContent = `Your mission is to finish all ${jobText} and assemble the submarine. Each day, you will make decisions that affect the outcome of your journey. Good luck!`;
 }
 
 export function closeWelcomeModal() {
