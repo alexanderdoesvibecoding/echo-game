@@ -29,7 +29,6 @@ STATIC_ASSETS = {
     "/ui/modals.js": ("application/javascript; charset=utf-8", UI_DIR / "modals.js"),
     "/ui/renderDecisions.js": ("application/javascript; charset=utf-8", UI_DIR / "renderDecisions.js"),
     "/ui/renderFinal.js": ("application/javascript; charset=utf-8", UI_DIR / "renderFinal.js"),
-    "/ui/renderMetrics.js": ("application/javascript; charset=utf-8", UI_DIR / "renderMetrics.js"),
     "/ui/renderSummary.js": ("application/javascript; charset=utf-8", UI_DIR / "renderSummary.js"),
     "/ui/state.js": ("application/javascript; charset=utf-8", UI_DIR / "state.js"),
     "/ui/submarineVisual.js": ("application/javascript; charset=utf-8", UI_DIR / "submarineVisual.js"),
@@ -60,8 +59,6 @@ class GameRequestHandler(BaseHTTPRequestHandler):
         """Handle state-changing UI actions."""
         parsed = urlparse(self.path)
         try:
-            # This intentionally tiny API mirrors the UI's workflow:
-            # create/read a run, apply decisions, then advance days.
             if parsed.path == "/api/new":
                 data = self._read_json()
                 self._send_json(self.session_store.new_session_payload(seed=_parse_optional_seed(data.get("seed"))))
@@ -70,8 +67,6 @@ class GameRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(
                     self.session_store.choice_payload(str(data.get("cardId", "")), str(data.get("choiceId", "")))
                 )
-            elif parsed.path == "/api/shift":
-                self._send_json(self.session_store.shift_payload())
             elif parsed.path == "/api/advance":
                 self._send_json(self.session_store.advance_payload())
             else:

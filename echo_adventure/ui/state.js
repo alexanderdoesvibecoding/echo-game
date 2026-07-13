@@ -1,7 +1,5 @@
 "use strict";
 
-// Client-side state is intentionally local. The server remains the source of
-// truth for the run, decisions, and day advancement rules.
 export const uiState = {
   state: null,
   welcomeModalVisible: false,
@@ -15,15 +13,9 @@ export const uiState = {
   dayCycleTimer: null,
   dayCycleLastTick: null,
   dayCycleAdvancing: false,
-  dayCycleShiftInFlight: false,
-  dayCycleCompletedShiftMarkers: new Set(),
-  dayDecisionThresholdKey: null,
   dayDecisionThresholds: [],
   pendingAdvanceState: null,
   modalVisible: false,
   summaryAnimationKey: null,
   pendingChoice: null,
-  metricSnapshot: null,
-  metricDeltas: {},
-  metricDeltaTimer: null,
 };

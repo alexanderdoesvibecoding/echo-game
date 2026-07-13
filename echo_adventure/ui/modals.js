@@ -34,10 +34,9 @@ function renderWelcomeContent() {
 
   if (!blurb) return;
 
-  const jobCount = Array.isArray(uiState.state?.pieces) ? uiState.state.pieces.length : 0;
+  const jobCount = Array.isArray(uiState.state?.jobs) ? uiState.state.jobs.length : 0;
   const jobText = jobCount ? `${jobCount} job${jobCount === 1 ? "" : "s"}` : "jobs";
-  const deadline = uiState.state?.deadlineDate ? ` by ${uiState.state.deadlineDate}` : " on time";
-  blurb.textContent = `Your job is to get these ${jobText} done${deadline}. Each decision you make can risk or reward other jobs.`;
+  blurb.textContent = `Complete all ${jobText}. Every unfinished job advances by one day each game day, and every decision adds or removes job days.`;
 }
 
 export function closeWelcomeModal() {

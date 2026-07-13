@@ -3,10 +3,10 @@
     - [ ] Reword text – Alexander
     - [x] Make text and start button bigger – Alexander
 
-- [ ] Remove the job/subjob split
-  - [ ]	Refactor the submarine puzzle and questions – Matt/Ethan
-  - [ ] Make each job take X number of days, and daily decision add or remove days – Matt
-    - There should still be workstation related questions
+- [x] Remove the job/subjob split
+  - [x]	Refactor the submarine puzzle and questions – Matt/Ethan
+  - [x] Make each job take 5-15 days, and daily decisions add or remove days – Matt
+    - Workstation-related flavor remains without hidden workstation state
 
 - [ ] Daily summary update
     - [ ] Animate jobs into place in submarine once completed - Alexander
@@ -37,7 +37,7 @@
     - [ ] Graph should show how questions impacted – Matt
     - [ ] Center the text inside the boxes – Alexander
 
-- [ ] Change the timeline of the game so that it doesn’t end until all jobs have been completed – Matt
+- [x] Change the timeline of the game so that it doesn’t end until all jobs have been completed – Matt
 
 - [ ] Finishing early grants points, remove that
 

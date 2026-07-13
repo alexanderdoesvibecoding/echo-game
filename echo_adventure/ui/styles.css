@@ -1670,3 +1670,117 @@ html[data-theme="dark"] #closeWelcomeBtn {
   z-index: 100000;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
 }
+
+/* Jobs-only day board */
+.daily-overview {
+  display: grid;
+  gap: 18px;
+}
+.jobs-only-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.jobs-only-metrics .metric {
+  display: grid;
+  gap: 6px;
+}
+.decision-queue {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.decision-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.decision-queue-item > span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--soft);
+  font-weight: 800;
+}
+.decision-queue-item.complete > span {
+  background: var(--teal);
+  color: white;
+}
+.decision-queue-item div {
+  display: grid;
+  gap: 2px;
+}
+.decision-queue-item small,
+.job-day-card span {
+  color: var(--muted);
+}
+.decision-open-button {
+  justify-self: start;
+}
+.job-day-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+.job-day-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.job-day-card > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.job-day-card.complete {
+  border-color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 8%, var(--panel));
+}
+.job-days-value {
+  font-weight: 800;
+}
+.decision-question-copy {
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+.decision-choice-list {
+  display: grid;
+  gap: 10px;
+}
+.decision-choice {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  padding: 14px;
+  text-align: left;
+}
+.decision-choice.selected {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--teal) 25%, transparent);
+}
+.completion-history-table {
+  max-height: 360px;
+  overflow: auto;
+}
+.completion-history-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.completion-history-table th,
+.completion-history-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+@media (max-width: 720px) {
+  .jobs-only-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

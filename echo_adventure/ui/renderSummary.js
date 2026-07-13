@@ -32,32 +32,27 @@ function renderSummaryMetricValue(value) {
   `;
 }
 
-function renderSummaryMetricBar(summary, piecesTotal) {
+function renderSummaryMetricBar(summary, jobsTotal) {
   const metrics = [
     {
-      label: "Subjobs Today",
+      label: "Jobs Today",
       value: Number(summary.completedToday || 0),
       tone: Number(summary.completedToday || 0) > 0 ? "good" : "warn",
     },
     {
-      label: "Subjobs Remaining",
+      label: "Jobs Remaining",
       value: Number(summary.jobsRemaining || 0),
       tone: Number(summary.jobsRemaining || 0) > 0 ? "warn" : "good",
     },
     {
       label: "Jobs Complete",
-      value: `${Number(summary.piecesCompleted || 0)}/${Math.max(1, Number(piecesTotal || 0))}`,
-      tone: Number(summary.piecesCompleted || 0) >= Number(piecesTotal || 0) ? "good" : "warn",
+      value: `${Number(summary.jobsComplete || 0)}/${Math.max(1, Number(jobsTotal || 0))}`,
+      tone: Number(summary.jobsComplete || 0) >= Number(jobsTotal || 0) ? "good" : "warn",
     },
     {
-      label: "Behind Schedule",
-      value: Number(summary.jobsBehindSchedule || 0),
-      tone: Number(summary.jobsBehindSchedule || 0) > 0 ? "warn" : "good",
-    },
-    {
-      label: "Late Subjobs",
-      value: Number(summary.jobsLate || 0),
-      tone: Number(summary.jobsLate || 0) > 0 ? "danger" : "good",
+      label: "Remaining Job-Days",
+      value: Number(summary.totalRemainingDays || 0),
+      tone: Number(summary.totalRemainingDays || 0) > 0 ? "warn" : "good",
     },
     {
       label: "Projected Finish",
@@ -82,12 +77,12 @@ function renderSummaryMetricBar(summary, piecesTotal) {
   `;
 }
 
-function renderSummaryGrid(summary, piecesTotal, puzzleInstanceId) {
+function renderSummaryGrid(summary, jobsTotal, puzzleInstanceId) {
   const notesMarkup = (summary.notes || [])
     .map(note => `<li>${escapeHtml(note)}</li>`)
     .join("") || "<li>No notable notes recorded.</li>";
   return `
-    ${renderSummaryMetricBar(summary, piecesTotal)}
+    ${renderSummaryMetricBar(summary, jobsTotal)}
     <div class="summary-updates-banner" role="status">
       <h3>Updates</h3>
       <ul class="notes">${notesMarkup}</ul>
@@ -203,9 +198,8 @@ function summaryAnimationKey(payload, summary) {
     payload.currentDate,
     summary.completedToday,
     summary.jobsRemaining,
-    summary.piecesCompleted,
-    summary.jobsBehindSchedule,
-    summary.jobsLate,
+    summary.jobsComplete,
+    summary.totalRemainingDays,
     summary.projectedCompletion,
   ].join("|");
 }
@@ -298,7 +292,7 @@ export function renderSummaryModal() {
   const animationKey = summaryAnimationKey(payload, summary);
   if (uiState.summaryAnimationKey !== animationKey || !body.innerHTML) {
     uiState.summaryAnimationKey = animationKey;
-    body.innerHTML = `<div class="summary-grid">${renderSummaryGrid(summary, payload.pieces.length, "summary-modal")}</div>`;
+    body.innerHTML = `<div class="summary-grid">${renderSummaryGrid(summary, payload.jobs.length, "summary-modal")}</div>`;
     body.scrollTop = 0;
     animateSummaryCounters(body, { duration: summaryCounterDurationMs(payload) });
   }
