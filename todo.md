@@ -38,3 +38,11 @@
     - [ ] Center the text inside the boxes – Alexandee
 
 - [ ] Change the timeline of the game so that it doesn’t end until all jobs have been completed – Matt
+
+- [ ] Finishing early grants points, remove that
+
+- [ ] Can get stuck waiting for one job for a real long time… and then the game finishes and ECHO finished a week prior
+
+- [ ] It starts on July “0” technically when looking at the end-of-game summary
+
+- [ ] Make highlight for new job placed more obvious
