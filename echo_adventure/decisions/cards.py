@@ -1,4 +1,4 @@
-"""Deterministic question bank for adding or removing job days."""
+"""Generate varied day-only cards from the restored 75-decision catalog."""
 
 from __future__ import annotations
 
@@ -7,48 +7,140 @@ import random
 
 from ..config import GameConfig
 from ..enums import DecisionType
-from ..models import DecisionCard, DecisionChoice, DecisionProgress, Job, SimulationState
-
-
-DELAY_QUESTIONS = (
-    ("Machine interruption", "A machine issue has interrupted {context}.", "machine"),
-    ("Material delivery problem", "A material delivery problem affects {context}.", "material"),
-    ("Staffing gap", "A short staffing gap affects {context}.", "crew"),
-    ("Weather disruption", "Severe weather slows {context}.", "weather"),
-    ("Quality concern", "A quality concern must be addressed on {context}.", "quality"),
-    ("Planning data correction", "Updated planning data changes the work expected for {context}.", "planning"),
+from ..models import (
+    DecisionCard,
+    DecisionChoice,
+    DecisionFollowUp,
+    DecisionProgress,
+    Job,
+    PendingFollowUp,
+    SimulationState,
+)
+from .definitions import (
+    BASE_DEFINITIONS,
+    DEFINITIONS_BY_ID,
+    CatalogChoice,
+    DecisionDefinition,
+    choice_schedule_score,
+    definition_schedule_score,
 )
 
-OPPORTUNITY_QUESTIONS = (
-    ("Focused acceleration", "A short-lived opportunity could accelerate {context}.", "priority"),
-    ("Process improvement", "A proven process improvement is available for {context}.", "process"),
-    ("Early material arrival", "An early delivery can shorten work on {context}.", "material"),
-    ("Team breakthrough", "The team found a safe shortcut for {context}.", "crew"),
-    ("Shared learning", "Lessons from completed work can shorten {context}.", "planning"),
-)
+
+_NEUTRAL_THRESHOLD = 0.15
 
 
 def generate_daily_decision_cards(state: SimulationState, config: GameConfig) -> list[DecisionCard]:
-    """Create the configured two-to-four questions for the current day."""
+    """Create two-to-four unique questions, including eligible follow-ups."""
     incomplete = sorted(state.incomplete_jobs(), key=lambda job: (-job.remaining_days, job.id))
     if not incomplete:
         return []
+
     rng = random.Random(_stable_seed(state.seed, state.current_day, "daily-questions"))
     count = rng.randint(config.min_decisions_per_day, config.max_decisions_per_day)
+    selected: list[tuple[DecisionDefinition, Job, PendingFollowUp | None]] = []
+
+    due = _eligible_follow_ups(state)
+    rng.shuffle(due)
+    for pending in due[:count]:
+        definition = DEFINITIONS_BY_ID.get(pending.definition_id)
+        job = state.jobs.get(pending.job_id)
+        if not definition or not definition.is_follow_up or not job or job.is_complete:
+            continue
+        selected.append((definition, job, pending))
+
+    selected_pending = {pending for _, _, pending in selected if pending is not None}
+    state.pending_follow_ups = [item for item in state.pending_follow_ups if item not in selected_pending]
+
+    used_today = {definition.id for definition, _, _ in selected}
+    assigned_jobs = {job.id for _, job, _ in selected}
+    while len(selected) < count:
+        pool = _available_base_definitions(state, len(incomplete), used_today)
+        if not pool:
+            # This is possible only if the small endgame-safe subset has
+            # already filled today's card slots.
+            break
+        definition = _weighted_choice(rng, pool, state)
+        job_pool = [job for job in incomplete if job.id not in assigned_jobs] or incomplete
+        primary = rng.choice(job_pool)
+        selected.append((definition, primary, None))
+        used_today.add(definition.id)
+        assigned_jobs.add(primary.id)
+
     cards: list[DecisionCard] = []
-
-    # At least one acceleration question appears each day. When only a few
-    # jobs remain, every question accelerates work so an unbounded run still
-    # converges instead of repeatedly adding time to the final job.
-    opportunity_count = count if len(incomplete) <= 2 else max(1, count // 2)
-    kinds = [DecisionType.OPPORTUNITY] * opportunity_count + [DecisionType.DELAY] * (count - opportunity_count)
-    rng.shuffle(kinds)
-
-    for ordinal, decision_type in enumerate(kinds, start=1):
-        card = _build_card(state, incomplete, rng, ordinal, decision_type)
+    for ordinal, (definition, primary, pending) in enumerate(selected, start=1):
+        card = _build_card(state, incomplete, rng, ordinal, definition, primary, pending is not None)
         cards.append(card)
         state.decision_cards[card.id] = card
+        if definition.is_follow_up:
+            state.shown_follow_up_decision_ids.add(definition.id)
     return cards
+
+
+def _eligible_follow_ups(state: SimulationState) -> list[PendingFollowUp]:
+    """Drop stale follow-ups and return those ready for today's still-active jobs."""
+    retained: list[PendingFollowUp] = []
+    eligible: list[PendingFollowUp] = []
+    for pending in state.pending_follow_ups:
+        job = state.jobs.get(pending.job_id)
+        definition = DEFINITIONS_BY_ID.get(pending.definition_id)
+        if (
+            not job
+            or job.is_complete
+            or not definition
+            or not definition.is_follow_up
+            or pending.definition_id in state.shown_follow_up_decision_ids
+        ):
+            continue
+        retained.append(pending)
+        if pending.available_day <= state.current_day:
+            eligible.append(pending)
+    state.pending_follow_ups = retained
+    return eligible
+
+
+def _available_base_definitions(
+    state: SimulationState,
+    incomplete_count: int,
+    used_today: set[str],
+) -> list[DecisionDefinition]:
+    pool = [
+        definition
+        for definition in BASE_DEFINITIONS
+        if definition.id not in used_today
+    ]
+    if incomplete_count <= 2:
+        # As in the previous day-only generator, the final jobs receive only
+        # choices that cannot add time, preventing an intentionally bad answer
+        # from creating an unbounded run.
+        pool = [definition for definition in pool if _has_no_delay_choice(definition)]
+    return pool
+
+
+def _has_no_delay_choice(definition: DecisionDefinition) -> bool:
+    return all(choice_schedule_score(definition, choice) >= -_NEUTRAL_THRESHOLD for choice in definition.choices)
+
+
+def _weighted_choice(
+    rng: random.Random,
+    definitions: list[DecisionDefinition],
+    state: SimulationState,
+) -> DecisionDefinition:
+    """Favor unseen catalog entries without making repeats impossible."""
+    appearances: dict[str, list[int]] = {}
+    for card in state.decision_cards.values():
+        if card.definition_id:
+            appearances.setdefault(card.definition_id, []).append(card.day)
+
+    weights = []
+    for definition in definitions:
+        seen_days = appearances.get(definition.id, [])
+        # Each prior appearance sharply reduces, but never eliminates, the
+        # chance of another draw. A separate recency penalty makes the kind of
+        # conspicuous back-to-back repetition from the 11-card bank very rare.
+        repeat_factor = 0.06 ** len(seen_days)
+        recency_factor = 0.2 if seen_days and state.current_day - max(seen_days) <= 3 else 1.0
+        weights.append(max(0.0001, definition.weight * repeat_factor * recency_factor))
+    return rng.choices(definitions, weights=weights, k=1)[0]
 
 
 def _build_card(
@@ -56,56 +148,108 @@ def _build_card(
     incomplete: list[Job],
     rng: random.Random,
     ordinal: int,
-    decision_type: DecisionType,
+    definition: DecisionDefinition,
+    primary: Job,
+    is_follow_up: bool,
 ) -> DecisionCard:
-    bank = OPPORTUNITY_QUESTIONS if decision_type == DecisionType.OPPORTUNITY else DELAY_QUESTIONS
-    title, description, _flavor = rng.choice(bank)
-    shuffled = list(incomplete)
-    rng.shuffle(shuffled)
-    primary = shuffled[0]
-    group = shuffled[: min(3, len(shuffled))]
-    broad = shuffled[: min(5, len(shuffled))]
-    sign = -1 if decision_type == DecisionType.OPPORTUNITY else 1
-
-    if sign < 0:
-        specs = (
-            ("Focus on one job", f"Remove 2 days from {primary.name}.", {primary.id: -2}),
-            ("Help a small set", f"Remove 1 day from each of {len(group)} jobs.", {job.id: -1 for job in group}),
-            ("Use the full opening", f"Remove 1 day from each of {len(broad)} jobs.", {job.id: -1 for job in broad}),
-        )
-    else:
-        specs = (
-            ("Contain the impact", f"Add 1 day to {primary.name}.", {primary.id: 1}),
-            ("Spread the disruption", f"Add 1 day to each of {len(group)} jobs.", {job.id: 1 for job in group}),
-            ("Take the longer correction", f"Add 2 days to {primary.name}.", {primary.id: 2}),
-        )
-
-    choices: list[DecisionChoice] = []
-    for choice_index, (label, choice_description, changes) in enumerate(specs, start=1):
-        score = -sum(changes.values())
-        choices.append(
-            DecisionChoice(
-                id=f"choice-{choice_index}",
-                label=label,
-                description=choice_description,
-                day_changes=changes,
-                score_delta=float(score),
-            )
-        )
+    others = [job for job in incomplete if job.id != primary.id]
+    rng.shuffle(others)
+    targets = [primary, *others[:4]]
+    choices = [
+        _build_choice(definition, catalog_choice, targets, index)
+        for index, catalog_choice in enumerate(definition.choices, start=1)
+    ]
     echo_choice = select_echo_choice_from_choices(choices)
-    target_ids = list(dict.fromkeys(job_id for choice in choices for job_id in choice.day_changes))
-    context = _format_job_list([job.name for job in broad])
+    target_ids = list(dict.fromkeys([primary.id, *(job_id for choice in choices for job_id in choice.day_changes)]))
+    context = _format_job_list([job.name for job in targets])
+    tie_text = "This follow-up remains tied to" if is_follow_up else "Today's affected job is"
+    description = f"{_simplify_language(definition.description)} {tie_text} {primary.name}."
     return DecisionCard(
-        id=f"DEC-D{state.current_day:03d}-{ordinal:02d}",
+        id=f"DEC-D{state.current_day:03d}-{ordinal:02d}-{definition.id}",
         day=state.current_day,
-        type=decision_type,
-        title=title,
-        description=description.format(context=context),
+        type=_decision_type(definition),
+        title=_simplify_language(definition.title),
+        description=description,
         target_ids=target_ids,
         choices=choices,
         echo_choice_id=echo_choice.id,
         context_label=context,
+        definition_id=definition.id,
+        primary_job_id=primary.id,
     )
+
+
+def _build_choice(
+    definition: DecisionDefinition,
+    catalog_choice: CatalogChoice,
+    targets: list[Job],
+    index: int,
+) -> DecisionChoice:
+    schedule_score = choice_schedule_score(definition, catalog_choice)
+    changes = _day_changes(schedule_score, targets)
+    schedule_text = _format_change_summary(changes, targets)
+    follow_ups = _choice_follow_ups(definition, catalog_choice)
+    return DecisionChoice(
+        id=f"choice-{index}",
+        label=_simplify_language(catalog_choice.label),
+        description=f"{_simplify_language(catalog_choice.description)} {schedule_text}",
+        day_changes=changes,
+        score_delta=float(-sum(changes.values())),
+        follow_ups=follow_ups,
+    )
+
+
+def _day_changes(schedule_score: float, targets: list[Job]) -> dict[str, int]:
+    """Convert a catalog score into a bounded one-to-three-job day effect."""
+    if abs(schedule_score) < _NEUTRAL_THRESHOLD or not targets:
+        return {}
+    direction = -1 if schedule_score > 0 else 1
+    strength = abs(schedule_score)
+    breadth = 1 if strength < 0.75 else 2 if strength < 1.5 else 3
+    breadth = min(breadth, len(targets))
+    magnitude = 2 if breadth == 1 and strength >= 1.75 else 1
+    return {job.id: direction * magnitude for job in targets[:breadth]}
+
+
+def _choice_follow_ups(
+    definition: DecisionDefinition,
+    catalog_choice: CatalogChoice,
+) -> tuple[DecisionFollowUp, ...]:
+    edges = (*catalog_choice.follow_up_edges, *definition.unavoidable_follow_up_edges)
+    unique: dict[str, DecisionFollowUp] = {}
+    for edge in edges:
+        unique[edge.target_definition_id] = DecisionFollowUp(
+            definition_id=edge.target_definition_id,
+            probability=edge.probability,
+            delay_days=max(1, edge.delay_days),
+        )
+    return tuple(unique.values())
+
+
+def _decision_type(definition: DecisionDefinition) -> DecisionType:
+    score = definition_schedule_score(definition)
+    if score > _NEUTRAL_THRESHOLD:
+        return DecisionType.OPPORTUNITY
+    if score < -_NEUTRAL_THRESHOLD:
+        return DecisionType.DELAY
+    return DecisionType.NEUTRAL
+
+
+def _format_change_summary(changes: dict[str, int], targets: list[Job]) -> str:
+    if not changes:
+        return "Schedule effect: no days added or removed."
+    names = {job.id: job.name for job in targets}
+    delta = next(iter(changes.values()))
+    verb = "Remove" if delta < 0 else "Add"
+    amount = abs(delta)
+    job_names = _format_job_list([names[job_id] for job_id in changes])
+    each = " each" if len(changes) > 1 else ""
+    return f"Schedule effect: {verb} {amount} day{'s' if amount != 1 else ''}{each} {'from' if delta < 0 else 'to'} {job_names}."
+
+
+def _simplify_language(value: str) -> str:
+    """Remove obsolete subjob terminology while retaining manufacturing flavor."""
+    return value.replace("subjobs", "jobs").replace("Subjobs", "Jobs").replace("subjob", "job").replace("Subjob", "Job")
 
 
 def select_echo_choice(card: DecisionCard) -> DecisionChoice:
@@ -136,7 +280,6 @@ def _stable_seed(seed: int, day: int, suffix: str) -> int:
 
 
 def _format_job_list(job_names: list[str]) -> str:
-    """Format player-facing job lists with 'and' before the final item."""
     if not job_names:
         return ""
     if len(job_names) == 1:

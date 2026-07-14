@@ -11,3 +11,4 @@ class JobStatus(str, Enum):
 class DecisionType(str, Enum):
     DELAY = "Schedule delay"
     OPPORTUNITY = "Schedule opportunity"
+    NEUTRAL = "Schedule tradeoff"

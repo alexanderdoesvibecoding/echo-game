@@ -78,6 +78,7 @@ export function renderDecisionModal() {
         return `
           <button class="decision-choice ${selected ? "selected" : ""}" onclick="selectPendingChoice('${card.id}', '${choice.id}')">
             <strong>${escapeHtml(choice.label)}</strong>
+            <span>${escapeHtml(choice.description)}</span>
           </button>
         `;
       }).join("")}

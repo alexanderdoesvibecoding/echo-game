@@ -28,7 +28,7 @@
         - [x] Gray out main submarine, gets filled in as jobs are completed
 
 - [ ] Decisions update
-    - [ ] Fix the issue where the same decisions repeat – Matt
+    - [x] Fix the issue where the same decisions repeat – Matt
     - [ ] Add more icons and symbols to decisions – Ethan
 
 - [ ] Final summary update

@@ -265,6 +265,7 @@ def _choice_payload(choice: DecisionChoice) -> dict[str, Any]:
     return {
         "id": choice.id,
         "label": choice.label,
+        "description": choice.description,
     }
 
 

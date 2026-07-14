@@ -24,6 +24,15 @@ class Job:
 
 
 @dataclass(frozen=True)
+class DecisionFollowUp:
+    """One possible later definition unlocked by a selected response."""
+
+    definition_id: str
+    probability: float
+    delay_days: int
+
+
+@dataclass(frozen=True)
 class DecisionChoice:
     """A response whose only runtime effect is changing job days."""
 
@@ -32,6 +41,7 @@ class DecisionChoice:
     description: str
     day_changes: dict[str, int]
     score_delta: float
+    follow_ups: tuple[DecisionFollowUp, ...] = ()
 
 
 @dataclass
@@ -47,6 +57,17 @@ class DecisionCard:
     choices: list[DecisionChoice]
     echo_choice_id: str
     context_label: str
+    definition_id: str = ""
+    primary_job_id: str = ""
+
+
+@dataclass(frozen=True)
+class PendingFollowUp:
+    """A definition waiting to revisit the still-active originating job."""
+
+    definition_id: str
+    job_id: str
+    available_day: int
 
 
 @dataclass
@@ -104,6 +125,8 @@ class SimulationState:
     decision_cards: dict[str, DecisionCard] = field(default_factory=dict)
     decision_history: list[DecisionRecord] = field(default_factory=list)
     decision_score: float = 0.0
+    shown_follow_up_decision_ids: set[str] = field(default_factory=set)
+    pending_follow_ups: list[PendingFollowUp] = field(default_factory=list)
     is_echo_benchmark: bool = False
 
     def incomplete_jobs(self) -> list[Job]:
