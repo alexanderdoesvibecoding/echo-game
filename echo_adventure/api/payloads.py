@@ -75,6 +75,7 @@ class PayloadMixin:
             "completedToday": len(self.last_result.completed_job_ids),
             "jobsRemaining": snapshot.jobs_remaining,
             "jobsComplete": snapshot.jobs_completed,
+            "previousTotalRemainingDays": self.last_result.start_snapshot.total_remaining_days,
             "totalRemainingDays": snapshot.total_remaining_days,
             "projectedCompletion": self.config.date_label_for_day(snapshot.projected_completion_day),
             "puzzle": self.last_summary_puzzle,

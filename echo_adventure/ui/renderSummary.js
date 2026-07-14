@@ -18,11 +18,14 @@ function countValueParts(value) {
   };
 }
 
-function renderSummaryMetricValue(value) {
+function renderSummaryMetricValue(value, startValue = 0) {
   const count = countValueParts(value);
   if (!count) return `<strong>${escapeHtml(value)}</strong>`;
+  const start = Number(startValue);
+  const countFrom = Number.isFinite(start) ? start : 0;
   return `
     <strong
+      data-summary-count-from="${escapeHtml(countFrom)}"
       data-summary-count-to="${escapeHtml(count.target)}"
       data-summary-count-decimals="${escapeHtml(count.decimals)}"
       data-summary-count-suffix="${escapeHtml(count.suffix)}"
@@ -30,12 +33,16 @@ function renderSummaryMetricValue(value) {
   `;
 }
 
-function renderSummaryMetricBar(summary, jobsTotal) {
+function renderSummaryMetricBar(summary) {
   const metrics = [
-    { label: "Jobs Completed Today", value: Number(summary.completedToday || 0), tone: summary.completedToday ? "good" : "warn" },
+    { label: "Jobs Complete", value: Number(summary.completedToday || 0), tone: summary.completedToday ? "good" : "warn" },
     { label: "Jobs Remaining", value: Number(summary.jobsRemaining || 0), tone: summary.jobsRemaining ? "warn" : "good" },
-    { label: "Jobs Complete", value: `${Number(summary.jobsComplete || 0)}/${Math.max(1, Number(jobsTotal || 0))}`, tone: summary.jobsRemaining ? "warn" : "good" },
-    { label: "Remaining Job-Days", value: Number(summary.totalRemainingDays || 0), tone: summary.totalRemainingDays ? "warn" : "good" },
+    {
+      label: "Remaining Job-Days",
+      value: Number(summary.totalRemainingDays || 0),
+      startValue: Number(summary.previousTotalRemainingDays ?? 0),
+      tone: summary.totalRemainingDays ? "warn" : "good",
+    },
     { label: "Projected Finish", value: summary.projectedCompletion || "-", tone: "good" },
   ];
   return `
@@ -43,14 +50,14 @@ function renderSummaryMetricBar(summary, jobsTotal) {
       ${metrics.map(metric => `
         <div class="metric summary-metric summary-metric-${metric.tone}">
           <div class="metric-title-row"><span class="subtle metric-label">${escapeHtml(metric.label)}</span></div>
-          <div class="metric-value-row summary-metric-value-row">${renderSummaryMetricValue(metric.value)}</div>
+          <div class="metric-value-row summary-metric-value-row">${renderSummaryMetricValue(metric.value, metric.startValue)}</div>
         </div>
       `).join("")}
     </div>
   `;
 }
 
-function renderSummaryGrid(summary, jobsTotal, puzzleInstanceId) {
+function renderSummaryGrid(summary, puzzleInstanceId) {
   const notes = Array.isArray(summary.notes) ? summary.notes : [];
   const showUpdates = Number(summary.completedToday || 0) > 0 && notes.length;
   const notesMarkup = notes
@@ -63,10 +70,13 @@ function renderSummaryGrid(summary, jobsTotal, puzzleInstanceId) {
     </div>
   ` : "";
   return `
-    ${renderSummaryMetricBar(summary, jobsTotal)}
+    ${renderSummaryMetricBar(summary)}
     ${updatesMarkup}
     <div class="reveal-panel summary-puzzle-panel">
-      ${renderSubmarinePuzzle(summary.puzzle, puzzleInstanceId, { showCaption: true, showPlacedToday: true })}
+      ${renderSubmarinePuzzle(summary.puzzle, puzzleInstanceId, {
+        showCaption: true,
+        animateNewlyPlaced: true,
+      })}
     </div>
   `;
 }
@@ -109,17 +119,38 @@ function sliceStyle(slice, loose = false) {
   return values.join("; ");
 }
 
-function renderPuzzleSection(tile, slice, className, highlightNewlyPlaced = true) {
+function placementMotionStyle(slice) {
+  const centerOffset = slice.index - ((slice.total - 1) / 2);
+  const drift = (centerOffset * -18).toFixed(1);
+  const delay = Math.min(420, Math.max(0, slice.index * 45));
+  const rotate = (centerOffset * 1.6).toFixed(1);
+  return `--placement-x:${drift}%; --placement-delay:${delay}ms; --placement-rotate:${rotate}deg`;
+}
+
+function renderPuzzleSection(tile, slice, className, options = {}) {
   const label = escapeHtml(tile.label || tile.id || "");
   const assembled = className === "placed";
   const status = assembled
     ? `Assembled${tile.completedAt ? ` at ${tile.completedAt}` : ""}`
     : `Waiting outside${tile.due ? `; due ${tile.due}` : ""}`;
   const title = `${tile.name || tile.id}: ${slice.part}. ${status}.`;
-  const newlyPlaced = assembled && tile.newlyCompleted && highlightNewlyPlaced ? " newly-placed" : "";
+  const highlightNewlyPlaced = options.highlightNewlyPlaced !== false;
+  const animateNewlyPlaced = Boolean(options.animateNewlyPlaced);
+  const newlyPlaced = assembled && tile.newlyCompleted && highlightNewlyPlaced;
+  const movingIntoPlace = newlyPlaced && animateNewlyPlaced;
+  const classNames = [
+    "puzzle-image-slice",
+    className,
+    newlyPlaced ? "newly-placed" : "",
+    movingIntoPlace ? "move-into-place" : "",
+  ].filter(Boolean).join(" ");
   const loose = className === "unplaced";
+  const style = [
+    sliceStyle(slice, loose),
+    movingIntoPlace ? placementMotionStyle(slice) : "",
+  ].filter(Boolean).join("; ");
   return `
-    <div class="puzzle-image-slice ${className}${newlyPlaced}" style="${sliceStyle(slice, loose)}" role="img" aria-label="${escapeHtml(`${label}: ${title}`)}">
+    <div class="${classNames}" style="${style}" role="img" aria-label="${escapeHtml(`${label}: ${title}`)}">
       <img src="${PUZZLE_SUBMARINE_IMAGE}" alt="" aria-hidden="true" draggable="false">
     </div>
   `;
@@ -138,13 +169,14 @@ export function renderSubmarinePuzzle(puzzle, instanceId, options = {}) {
   const total = tiles.length;
   const showUnplaced = options.showUnplaced !== false;
   const highlightNewlyPlaced = options.highlightNewlyPlaced !== false;
+  const animateNewlyPlaced = Boolean(options.animateNewlyPlaced);
   const slices = submarineImageSlices(total);
   const unplacedItems = tiles
     .map((tile, index) => ({ tile, index, slice: slices[index] }))
     .filter((item) => !item.tile.completed);
   const placedMarkup = tiles.map((tile, index) => (
     tile.completed
-      ? renderPuzzleSection(tile, slices[index], "placed", highlightNewlyPlaced)
+      ? renderPuzzleSection(tile, slices[index], "placed", { highlightNewlyPlaced, animateNewlyPlaced })
       : renderPuzzlePlaceholder(tile, slices[index])
   )).join("");
   const unplacedMarkup = showUnplaced
@@ -224,14 +256,15 @@ export function animateSummaryCounters(container, options = {}) {
   const entries = counters
     .map((element) => ({
       element,
+      start: Number(element.dataset.summaryCountFrom || 0),
       target: Number(element.dataset.summaryCountTo || 0),
       decimals: Math.max(0, Number(element.dataset.summaryCountDecimals || 0)),
       suffix: element.dataset.summaryCountSuffix || "",
     }))
-    .filter((entry) => Number.isFinite(entry.target));
+    .filter((entry) => Number.isFinite(entry.start) && Number.isFinite(entry.target));
 
   entries.forEach((entry) => {
-    entry.element.textContent = formatCounterValue(0, entry.decimals, entry.suffix);
+    entry.element.textContent = formatCounterValue(entry.start, entry.decimals, entry.suffix);
   });
 
   if (!entries.length || duration === 0) {
@@ -245,7 +278,8 @@ export function animateSummaryCounters(container, options = {}) {
     const progress = Math.min(1, Math.max(0, (timestamp - startTime) / duration));
     const eased = 1 - Math.pow(1 - progress, 3);
     entries.forEach((entry) => {
-      entry.element.textContent = formatCounterValue(entry.target * eased, entry.decimals, entry.suffix);
+      const value = entry.start + ((entry.target - entry.start) * eased);
+      entry.element.textContent = formatCounterValue(value, entry.decimals, entry.suffix);
     });
     if (progress < 1) {
       requestFrame(step);
@@ -272,7 +306,7 @@ export function renderSummaryModal() {
   const animationKey = summaryAnimationKey(payload, summary);
   if (uiState.summaryAnimationKey !== animationKey || !body.innerHTML) {
     uiState.summaryAnimationKey = animationKey;
-    body.innerHTML = `<div class="summary-grid">${renderSummaryGrid(summary, payload.jobs.length, "summary-modal")}</div>`;
+    body.innerHTML = `<div class="summary-grid">${renderSummaryGrid(summary, "summary-modal")}</div>`;
     body.scrollTop = 0;
     animateSummaryCounters(body, { duration: summaryCounterDurationMs(payload) });
   }
