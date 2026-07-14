@@ -4,9 +4,9 @@
     - [x] Make text and start button bigger – Alexander
 
 - [x] Remove the job/subjob split
-  - [x]	Refactor the submarine puzzle and questions – Matt/Ethan
-  - [x] Make each job take 5–15 days, and daily decisions add or remove days – Matt
-    - Workstation-related flavor remains without a hidden workstation state
+    - [x] Refactor the submarine puzzle and questions – Matt/Ethan
+    - [x] Make each job take 5–15 days, and daily decisions add or remove days – Matt
+        - Workstation-related flavor remains without a hidden workstation state
 
 - [ ] Daily summary update
     - [ ] Animate jobs into place in submarine once completed – Alexander
@@ -21,7 +21,7 @@
         - Submarine rides above bar
         - Decision symbols on the progress bar – maybe
         - Grows/shrinks as decisions add or take away days to completion
-    - [ ] Decisions appear below bars – Matt/Ethan
+    - [ ] Decisions appear below bars – Matt/Ethan - do this manually matty
     - [x] Refactor submarine “puzzle” under – Matt
         - [x] Shouldn’t show pieces under the main submarine
         - [x] Remove the live updates
@@ -39,8 +39,6 @@
 
 - [x] Change the timeline of the game so that it doesn’t end until all jobs have been completed – Matt
 
-- [ ] Finishing early grants points, remove that
+- [x] Finishing early grants points, remove that – Matt
 
-- [ ] Can get stuck waiting for one job for a real long time… and then the game finishes, and ECHO finished a week prior – Matt
-
-- [ ] It starts on July “0” technically when looking at the end-of-game summary
+- [x] It starts on July “0” technically when looking at the end-of-game summary – Matt
