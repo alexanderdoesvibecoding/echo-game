@@ -118,7 +118,8 @@ class PayloadMixin:
             "review": self._final_review_payload(),
         }
 
-    def _completion_history_payload(self) -> list[dict[str, Any]]:
+    def _completion_history_payload(self) -> dict[str, Any]:
+        """Return completion totals plus decision-score points for the final chart."""
         player_by_day = {snapshot.day: snapshot.jobs_completed for snapshot in self.player_state.metric_history}
         echo_by_day = {snapshot.day: snapshot.jobs_completed for snapshot in self.automated_state.metric_history}
         if self.player_state.final_item_completed and self.player_state.completion_day is not None:
@@ -143,7 +144,73 @@ class PayloadMixin:
                     "automated": echo_value,
                 }
             )
-        return history
+        return {
+            "days": [point["day"] for point in history],
+            "total": max(len(self.player_state.jobs), len(self.automated_state.jobs)),
+            "player": [point["player"] for point in history],
+            "automated": [point["automated"] for point in history],
+            "decisionPoints": self._decision_chart_payload(),
+        }
+
+    def _decision_chart_payload(self) -> list[dict[str, Any]]:
+        """Align player and ECHO decisions by game day for the score chart."""
+        player_by_day: dict[int, list[Any]] = {}
+        echo_by_day: dict[int, list[Any]] = {}
+        for record in self.player_state.decision_history:
+            if record.actor == "player":
+                player_by_day.setdefault(record.day, []).append(record)
+        for record in self.automated_state.decision_history:
+            if record.actor == "ECHO":
+                echo_by_day.setdefault(record.day, []).append(record)
+
+        points = []
+        sequence = 0
+        for day in sorted(set(player_by_day) | set(echo_by_day)):
+            player_records = player_by_day.get(day, [])
+            echo_records = echo_by_day.get(day, [])
+            for slot in range(max(len(player_records), len(echo_records))):
+                sequence += 1
+                player_record = player_records[slot] if slot < len(player_records) else None
+                echo_record = echo_records[slot] if slot < len(echo_records) else None
+                player_card = (
+                    self.player_state.decision_cards.get(player_record.card_id)
+                    if player_record
+                    else None
+                )
+                echo_card = (
+                    self.automated_state.decision_cards.get(echo_record.card_id)
+                    if echo_record
+                    else None
+                )
+                card = player_card or echo_card
+                record = player_record or echo_record
+                points.append(
+                    {
+                        "sequence": sequence,
+                        "label": f"Q{sequence}",
+                        "day": day,
+                        "dateLabel": self.config.date_label_for_day(day),
+                        "questionId": record.card_id,
+                        "questionTitle": record.card_title,
+                        "questionText": card.description if card else record.card_title,
+                        "playerQuestionId": player_record.card_id if player_record else None,
+                        "echoQuestionId": echo_record.card_id if echo_record else None,
+                        "playerEventKind": "decision" if player_record else None,
+                        "echoEventKind": "decision" if echo_record else None,
+                        "playerChoice": player_record.choice_label if player_record else "-",
+                        "echoChoice": echo_record.choice_label if echo_record else "-",
+                        "playerDelta": round(player_record.score_delta, 2) if player_record else 0,
+                        "echoDelta": round(echo_record.score_delta, 2) if echo_record else 0,
+                        "playerCumulativeScore": (
+                            round(player_record.cumulative_score, 2) if player_record else None
+                        ),
+                        "echoCumulativeScore": (
+                            round(echo_record.cumulative_score, 2) if echo_record else None
+                        ),
+                        "affectedLabel": card.context_label if card else "-",
+                    }
+                )
+        return points
 
     def _decision_comparison_payload(self) -> list[dict[str, Any]]:
         echo_records = {record.card_id: record for record in self.automated_state.decision_history}

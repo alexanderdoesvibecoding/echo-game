@@ -109,14 +109,14 @@ function sliceStyle(slice, loose = false) {
   return values.join("; ");
 }
 
-function renderPuzzleSection(tile, slice, className) {
+function renderPuzzleSection(tile, slice, className, highlightNewlyPlaced = true) {
   const label = escapeHtml(tile.label || tile.id || "");
   const assembled = className === "placed";
   const status = assembled
     ? `Assembled${tile.completedAt ? ` at ${tile.completedAt}` : ""}`
     : `Waiting outside${tile.due ? `; due ${tile.due}` : ""}`;
   const title = `${tile.name || tile.id}: ${slice.part}. ${status}.`;
-  const newlyPlaced = assembled && tile.newlyCompleted ? " newly-placed" : "";
+  const newlyPlaced = assembled && tile.newlyCompleted && highlightNewlyPlaced ? " newly-placed" : "";
   const loose = className === "unplaced";
   return `
     <div class="puzzle-image-slice ${className}${newlyPlaced}" style="${sliceStyle(slice, loose)}" role="img" aria-label="${escapeHtml(`${label}: ${title}`)}">
@@ -136,17 +136,22 @@ export function renderSubmarinePuzzle(puzzle, instanceId, options = {}) {
   if (!tiles.length) return "";
 
   const total = tiles.length;
+  const showUnplaced = options.showUnplaced !== false;
+  const highlightNewlyPlaced = options.highlightNewlyPlaced !== false;
   const slices = submarineImageSlices(total);
   const unplacedItems = tiles
     .map((tile, index) => ({ tile, index, slice: slices[index] }))
     .filter((item) => !item.tile.completed);
-  const scrambledItems = scrambledUnplacedItems(unplacedItems, total);
   const placedMarkup = tiles.map((tile, index) => (
-    tile.completed ? renderPuzzleSection(tile, slices[index], "placed") : renderPuzzlePlaceholder(tile, slices[index])
+    tile.completed
+      ? renderPuzzleSection(tile, slices[index], "placed", highlightNewlyPlaced)
+      : renderPuzzlePlaceholder(tile, slices[index])
   )).join("");
-  const unplacedMarkup = scrambledItems
-    .map(item => renderPuzzleSection(item.tile, item.slice, "unplaced"))
-    .join("");
+  const unplacedMarkup = showUnplaced
+    ? scrambledUnplacedItems(unplacedItems, total)
+      .map(item => renderPuzzleSection(item.tile, item.slice, "unplaced"))
+      .join("")
+    : "";
   const placedToday = tiles.filter(tile => tile.completed && tile.newlyCompleted);
   const placedMarkupToday = placedToday.length
     ? placedToday.map(tile => `<span class="badge">${escapeHtml(tile.label)}</span>`).join("")
@@ -154,11 +159,11 @@ export function renderSubmarinePuzzle(puzzle, instanceId, options = {}) {
   return `
     <div class="submarine-puzzle">
       ${options.showCaption ? `<div class="puzzle-caption"><strong>Assembly</strong></div>` : ""}
-      <div class="puzzle-stage" aria-label="Submarine puzzle showing assembled and waiting image sections">
+      <div class="puzzle-stage" aria-label="Submarine puzzle showing ${showUnplaced ? "assembled and waiting" : "assembled"} image sections">
         <div class="puzzle-assembled-row${unplacedItems.length ? " has-incomplete" : ""}" style="--slice-total:${total}">
           ${placedMarkup}
         </div>
-        ${unplacedItems.length ? `<div class="puzzle-loose-row">${unplacedMarkup}</div>` : ""}
+        ${showUnplaced && unplacedItems.length ? `<div class="puzzle-loose-row">${unplacedMarkup}</div>` : ""}
       </div>
       ${options.showPlacedToday ? `<div class="puzzle-added"><span>Placed today:</span>${placedMarkupToday}</div>` : ""}
     </div>
@@ -274,10 +279,13 @@ export function renderSummaryModal() {
 }
 
 export function renderSummary() {
-  const puzzle = uiState.state.livePuzzle;
+  const puzzle = uiState.state.lastSummary?.puzzle || uiState.state.livePuzzle;
   $("summarySection").classList.toggle("hidden", !puzzle);
   if (!puzzle) return;
   $("summaryGrid").innerHTML = `
-    ${renderSubmarinePuzzle(puzzle, "live-submarine")}
+    ${renderSubmarinePuzzle(puzzle, "main-submarine", {
+      showUnplaced: false,
+      highlightNewlyPlaced: false,
+    })}
   `;
 }
