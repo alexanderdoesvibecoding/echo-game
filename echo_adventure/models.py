@@ -68,6 +68,7 @@ class PendingFollowUp:
     definition_id: str
     job_id: str
     available_day: int
+    trigger_delta: int = 0
 
 
 @dataclass

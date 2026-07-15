@@ -13,6 +13,7 @@ ECHO Adventure is a local browser game about completing twenty independent jobs.
 - A question either adds days to a job or set of jobs, or removes days from a job or set of jobs.
 - Equivalent future states reconverge into the same node, making the complete web a directed acyclic graph rather than a duplicated history tree. Preplanned questions change their exact primary job, which keeps this reconvergence tractable without horizon-based effect capping.
 - Probabilistic follow-ups are rolled while the web is generated and become preplanned successor questions.
+- A follow-up can amplify, reverse, or leave in place its triggering answer, but it never exactly cancels that answer's job-day change.
 - Manufacturing situations such as equipment, staffing, material, weather, and quality issues are flavor text only. They have no hidden model or effect beyond the job-day change stated on the answer.
 - The run ends only after all 20 jobs are complete. The full web covers days 1–24, and question generation continues seamlessly from day 25 if work remains.
 - Before the player sees the first question, ECHO solves every node backward. It minimizes final completion day, maximizes decision score among equal completion days, and then uses a stable choice-ID tiebreak.

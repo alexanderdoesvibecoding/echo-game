@@ -68,7 +68,7 @@ def generate_daily_decision_cards(state: SimulationState, config: GameConfig) ->
 
     cards: list[DecisionCard] = []
     for ordinal, (definition, primary, pending) in enumerate(selected, start=1):
-        card = _build_card(state, incomplete, rng, ordinal, definition, primary, pending is not None)
+        card = _build_card(state, incomplete, rng, ordinal, definition, primary, pending)
         cards.append(card)
         state.decision_cards[card.id] = card
         if definition.is_follow_up:
@@ -150,19 +150,25 @@ def _build_card(
     ordinal: int,
     definition: DecisionDefinition,
     primary: Job,
-    is_follow_up: bool,
+    pending: PendingFollowUp | None,
 ) -> DecisionCard:
     others = [job for job in incomplete if job.id != primary.id]
     rng.shuffle(others)
     targets = [primary, *others[:4]]
     choices = [
-        _build_choice(definition, catalog_choice, targets, index)
+        _build_choice(
+            definition,
+            catalog_choice,
+            targets,
+            index,
+            trigger_delta=pending.trigger_delta if pending else 0,
+        )
         for index, catalog_choice in enumerate(definition.choices, start=1)
     ]
     echo_choice = select_echo_choice_from_choices(choices)
     target_ids = list(dict.fromkeys([primary.id, *(job_id for choice in choices for job_id in choice.day_changes)]))
     context = _format_job_list([job.name for job in targets])
-    tie_text = "This follow-up remains tied to" if is_follow_up else "Today's affected job is"
+    tie_text = "This follow-up remains tied to" if pending else "Today's affected job is"
     description = f"{_simplify_language(definition.description)} {tie_text} {primary.name}."
     return DecisionCard(
         id=f"DEC-D{state.current_day:03d}-{ordinal:02d}-{definition.id}",
@@ -186,11 +192,20 @@ def build_preplanned_decision_card(
     ordered_targets: list[Job],
     question_number: int,
     node_token: str,
+    trigger_delta: int = 0,
 ) -> DecisionCard:
     """Build one immutable-web question for an exact precomputed state."""
     targets = [primary, *(job for job in ordered_targets if job.id != primary.id)][:5]
+    deltas = _preplanned_deltas(definition, targets, trigger_delta)
     choices = [
-        _build_preplanned_choice(definition, catalog_choice, targets, primary, index)
+        _build_preplanned_choice(
+            definition,
+            catalog_choice,
+            targets,
+            primary,
+            index,
+            deltas[index - 1],
+        )
         for index, catalog_choice in enumerate(definition.choices, start=1)
     ]
     echo_choice = select_echo_choice_from_choices(choices)
@@ -222,12 +237,10 @@ def _build_preplanned_choice(
     targets: list[Job],
     primary: Job,
     index: int,
+    day_delta: int,
 ) -> DecisionChoice:
     """Keep web branching exact and tractable by changing one known job."""
-    schedule_score = choice_schedule_score(definition, catalog_choice)
-    raw_changes = _day_changes(schedule_score, targets)
-    net_change = sum(raw_changes.values())
-    changes = {primary.id: 1 if net_change > 0 else -1} if net_change else {}
+    changes = {primary.id: day_delta} if day_delta else {}
     schedule_text = _format_change_summary(changes, targets)
     return DecisionChoice(
         id=f"choice-{index}",
@@ -244,9 +257,11 @@ def _build_choice(
     catalog_choice: CatalogChoice,
     targets: list[Job],
     index: int,
+    trigger_delta: int = 0,
 ) -> DecisionChoice:
     schedule_score = choice_schedule_score(definition, catalog_choice)
     changes = _day_changes(schedule_score, targets)
+    changes = _avoid_exact_cancellation(changes, trigger_delta, targets[0].id if targets else "")
     schedule_text = _format_change_summary(changes, targets)
     follow_ups = _choice_follow_ups(definition, catalog_choice)
     return DecisionChoice(
@@ -257,6 +272,70 @@ def _build_choice(
         score_delta=float(-sum(changes.values())),
         follow_ups=follow_ups,
     )
+
+
+def _preplanned_deltas(
+    definition: DecisionDefinition,
+    targets: list[Job],
+    trigger_delta: int,
+) -> list[int]:
+    """Return ranked one-job deltas without erasing follow-up differences.
+
+    Base questions retain the catalog's weak/strong distinction but are capped
+    at two days to keep the precomputed web compact. Follow-ups use up to four
+    small tiers. When their direction opposes the triggering answer, its exact
+    magnitude is reserved so no answer can merely refund the earlier change.
+    """
+    scores = [choice_schedule_score(definition, choice) for choice in definition.choices]
+    if not definition.is_follow_up:
+        deltas: list[int] = []
+        for score in scores:
+            net_change = sum(_day_changes(score, targets).values())
+            if not net_change:
+                deltas.append(0)
+                continue
+            magnitude = min(2, abs(net_change))
+            deltas.append(magnitude if net_change > 0 else -magnitude)
+        return deltas
+
+    deltas = [0] * len(scores)
+    for direction in (-1, 1):
+        indexes = [
+            index
+            for index, score in enumerate(scores)
+            if abs(score) >= _NEUTRAL_THRESHOLD
+            and (-1 if score > 0 else 1) == direction
+        ]
+        strengths = sorted({abs(scores[index]) for index in indexes})
+        magnitudes = [1, 2, 3, 4]
+        if (
+            trigger_delta
+            and direction == (-1 if trigger_delta > 0 else 1)
+            and abs(trigger_delta) in magnitudes
+        ):
+            magnitudes.remove(abs(trigger_delta))
+        rank_to_magnitude = {
+            strength: magnitudes[rank]
+            for rank, strength in enumerate(strengths)
+        }
+        for index in indexes:
+            deltas[index] = direction * rank_to_magnitude[abs(scores[index])]
+    return deltas
+
+
+def _avoid_exact_cancellation(
+    changes: dict[str, int],
+    trigger_delta: int,
+    primary_job_id: str,
+) -> dict[str, int]:
+    """Strengthen an inverse follow-up by one day instead of netting to zero."""
+    follow_up_delta = sum(changes.values())
+    if not trigger_delta or not follow_up_delta or trigger_delta + follow_up_delta:
+        return changes
+    direction = 1 if follow_up_delta > 0 else -1
+    adjusted = dict(changes)
+    adjusted[primary_job_id] = adjusted.get(primary_job_id, 0) + direction
+    return adjusted
 
 
 def _day_changes(schedule_score: float, targets: list[Job]) -> dict[str, int]:

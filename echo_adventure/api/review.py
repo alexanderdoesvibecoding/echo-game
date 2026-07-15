@@ -51,7 +51,6 @@ class ReviewMixin:
             f"You completed the project on day {player_day}; ECHO completed it on day {echo_day}.",
             f"You chose ECHO's preferred response on {aligned} of {len(player_records)} questions.",
             f"Your decision score was {self.player_state.decision_score:.0f}; ECHO's was {self.automated_state.decision_score:.0f}.",
-            f"ECHO evaluated all {len(self.decision_web.nodes):,} nodes before your first decision.",
         ]
         return {
             "outcome": outcome,

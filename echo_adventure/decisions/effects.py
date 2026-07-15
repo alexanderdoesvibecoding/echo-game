@@ -75,6 +75,7 @@ def _schedule_follow_ups(
                 definition_id=follow_up.definition_id,
                 job_id=job.id,
                 available_day=state.current_day + follow_up.delay_days,
+                trigger_delta=sum(choice.day_changes.values()),
             )
         )
         pending_ids.add(follow_up.definition_id)

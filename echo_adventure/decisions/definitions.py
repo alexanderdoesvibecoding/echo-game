@@ -499,7 +499,7 @@ FOLLOW_UP_DEFINITIONS = (
         "bulk-lot-released", "The delayed material lot is released", "The delayed restock arrives as a verified lot with matched paperwork.", "material",
         C("Run the full lot immediately", "Release paused work and share setup across the full material family.", E("verify", selector="target_material"), E("release", selector="family", count=6), E("recover", selector="family", shifts=(3, 4), count=6, mode="total"), E("delay", selector="shop", shifts=1, count=2), E("reschedule", count=1)),
         C("Feed only due work", "Recover the nearest-due material paths and preserve stock for later.", E("verify", selector="target_material"), E("release", selector="near_due", count=3), E("recover", selector="near_due", shifts=2, count=3, mode="total")),
-        C("Stage it normally", "Restore verified stock without changing today's queue.", E("verify", selector="target_material"), E("release", selector="target", count=1)),
+        C("Stage it normally", "Restore verified stock without changing today's queue.", E("verify", selector="target_material"), E("release", selector="target", count=1), score=0),
         is_follow_up=True,
     ),
     D(
@@ -534,7 +534,7 @@ FOLLOW_UP_DEFINITIONS = (
         "aisles-cleared", "Staging aisles are clear again", "The floor reset has restored clean movement and findable WIP.", "staging",
         C("Restart with a clean pull list", "Use the clear lanes to accelerate handoffs and reopen blocked stations.", E("resource", action="open", kind="staging lane"), E("release", selector="shop", count=5), E("recover", selector="shop", shifts=(3, 4), count=5, mode="total"), E("reschedule", count=1)),
         C("Restart only critical lanes", "Use the clear paths on the highest-risk work first.", E("release", selector="critical", count=3), E("recover", selector="critical", shifts=2, count=3, mode="total")),
-        C("Resume the old queue", "Keep dispatch stable and recover only the physical access." , E("resource", action="open", kind="staging lane")),
+        C("Resume the old queue", "Keep dispatch stable and recover only the physical access." , E("resource", action="open", kind="staging lane"), score=0),
         is_follow_up=True,
     ),
     D(
@@ -562,7 +562,7 @@ FOLLOW_UP_DEFINITIONS = (
         "operator-qualified", "A new operator is qualified", "The newer operator can now cover the same capability independently.", "worker",
         C("Open a second lane", "Use the new qualification for parallel compatible work with temporary supervision load.", E("qualify", selector="target_worker"), E("open_capacity", selector="family", shifts=(3, 5), count=5, mode="total"), E("worker_load", amount=2)),
         C("Use them as relief", "Add resilient coverage and prevent the next staffing absence from stopping work.", E("qualify", selector="target_worker"), E("worker", action="relief"), E("recover", selector="target", shifts=1, count=1)),
-        C("Keep them shadowing", "Retain the qualification record without opening near-term capacity.", E("qualify", selector="target_worker")),
+        C("Keep them shadowing", "Retain the qualification record without opening near-term capacity.", E("qualify", selector="target_worker"), score=0),
         is_follow_up=True,
     ),
     D(
@@ -576,7 +576,7 @@ FOLLOW_UP_DEFINITIONS = (
         "rack-recovery-sprint", "Temporary racks opened space", "Temporary racks created a clean lane for closing and moving finished WIP.", "staging",
         C("Clear finished WIP first", "Release tied-up stations and recover broad movement capacity.", E("resource", action="open", kind="rack"), E("release", selector="near_complete", count=5), E("recover", selector="near_complete", shifts=(3, 4), count=5, mode="total"), E("delay", selector="ready_shop", shifts=1, count=2)),
         C("Clear critical WIP first", "Recover the risky path while leaving some routine crowding.", E("release", selector="critical", count=3), E("recover", selector="critical", shifts=2, count=3, mode="total")),
-        C("Leave racks as overflow", "Prevent more crowding without recovering the earlier support effort.", E("resource", action="open", kind="rack")),
+        C("Leave racks as overflow", "Prevent more crowding without recovering the earlier support effort.", E("resource", action="open", kind="rack"), score=0),
         is_follow_up=True,
     ),
     D(
@@ -681,7 +681,7 @@ FOLLOW_UP_DEFINITIONS = (
         "returning-worker-shortcut", "The returning operator knows a shortcut", "The returning operator knows a faster safe setup for the paused work.", "worker",
         C("Use the shortcut", "Recover the absence and take an additional setup saving while keeping this route assigned to the worker.", E("release", selector="target", count=1), E("recover", selector="target", shifts=(2, 3), count=1, mode="total"), E("resource", action="reserve_worker")),
         C("Use only part of it", "Recover the absence without committing the full route.", E("release", selector="target", count=1), E("recover", selector="target", shifts=1, count=1, mode="total")),
-        C("Resume normally", "Return to the original setup and leave the absence delay in place.", E("release", selector="target", count=1)),
+        C("Resume normally", "Return to the original setup and leave the absence delay in place.", E("release", selector="target", count=1), score=0),
         is_follow_up=True,
     ),
 )

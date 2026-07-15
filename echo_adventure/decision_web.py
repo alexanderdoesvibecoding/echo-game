@@ -23,6 +23,7 @@ class DecisionWebState:
     completed_mask: int
     pending_definition_id: str = ""
     pending_job_index: int = -1
+    pending_trigger_delta: int = 0
 
 
 @dataclass(frozen=True)
@@ -205,6 +206,7 @@ class _DecisionWebBuilder:
             incomplete,
             question_number=state.question_index + 1,
             node_token=node_id.rsplit("-", 1)[-1],
+            trigger_delta=state.pending_trigger_delta,
         )
 
     def _runtime_state(self, state: DecisionWebState) -> SimulationState:
@@ -245,6 +247,7 @@ class _DecisionWebBuilder:
 
         pending_definition_id = ""
         pending_job_index = -1
+        pending_trigger_delta = 0
         for follow_up in choice.follow_ups:
             if _preplanned_follow_up_occurs(
                 self.scenario.seed,
@@ -257,6 +260,7 @@ class _DecisionWebBuilder:
             ):
                 pending_definition_id = follow_up.definition_id
                 pending_job_index = self.job_index[card.primary_job_id]
+                pending_trigger_delta = sum(choice.day_changes.values())
                 break
 
         question_count = self.question_counts[state.day]
@@ -269,6 +273,7 @@ class _DecisionWebBuilder:
                 completed_mask=state.completed_mask,
                 pending_definition_id=pending_definition_id,
                 pending_job_index=pending_job_index,
+                pending_trigger_delta=pending_trigger_delta,
             )
             return DecisionWebTransition(
                 choice_id=choice.id,
