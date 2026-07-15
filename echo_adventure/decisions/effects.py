@@ -12,6 +12,7 @@ def apply_choice(
     card: DecisionCard,
     choice: DecisionChoice,
     actor: str,
+    schedule_follow_ups: bool = True,
 ) -> str:
     changes: list[str] = []
     for job_id, delta in choice.day_changes.items():
@@ -28,7 +29,8 @@ def apply_choice(
         if actual:
             verb = "added to" if actual > 0 else "removed from"
             changes.append(f"{abs(actual)} day(s) {verb} {job.name}")
-    _schedule_follow_ups(state, card, choice)
+    if schedule_follow_ups:
+        _schedule_follow_ups(state, card, choice)
     echo_choice = next(item for item in card.choices if item.id == card.echo_choice_id)
     state.decision_score = round(state.decision_score + choice.score_delta, 2)
     note = "; ".join(changes) if changes else "No unfinished job was changed."

@@ -1,6 +1,6 @@
 # ECHO Adventure
 
-ECHO Adventure is a local browser game about completing twenty independent jobs. Every job is also one piece of the submarine assembly puzzle. A hidden ECHO run plays the same generated scenario and is revealed when the player finishes.
+ECHO Adventure is a local browser game about completing twenty independent jobs. Every job is also one piece of the submarine assembly puzzle. At startup, the game generates one complete seed-specific decision web shared by the player and a hidden ECHO run.
 
 ## Game rules
 
@@ -9,9 +9,15 @@ ECHO Adventure is a local browser game about completing twenty independent jobs.
 - There are no subjobs, dependencies, shifts, resources, queues, events, or deadline.
 - Every unfinished job loses one remaining day whenever a game day advances.
 - Each day presents a configurable 2–4 questions.
+- Every question is one node in the startup-generated web. Its answer selects the already-generated next node.
 - A question either adds days to a job or set of jobs, or removes days from a job or set of jobs.
+- Equivalent future states reconverge into the same node, making the complete web a directed acyclic graph rather than a duplicated history tree. Preplanned questions change their exact primary job, which keeps this reconvergence tractable without horizon-based effect capping.
+- Probabilistic follow-ups are rolled while the web is generated and become preplanned successor questions.
 - Manufacturing situations such as equipment, staffing, material, weather, and quality issues are flavor text only. They have no hidden model or effect beyond the job-day change stated on the answer.
-- The run ends only after all 20 jobs are complete.
+- The run ends only after all 20 jobs are complete. The full web covers days 1–24, and question generation continues seamlessly from day 25 if work remains.
+- Before the player sees the first question, ECHO solves every node backward. It minimizes final completion day, maximizes decision score among equal completion days, and then uses a stable choice-ID tiebreak.
+- If ECHO's solved route would reach day 25, the question web is regenerated while preserving the job scenario. ECHO therefore always finishes inside the completely solved portion of the run.
+- A player who reproduces ECHO's exact optimal path ties ECHO. Every divergent path ranks behind ECHO by completion day, score, or the stable path tiebreak.
 
 ## Run the app
 
@@ -38,23 +44,23 @@ The normal run is defined in `echo_adventure/config.py`:
 - `max_job_duration_days = 15`
 - `min_decisions_per_day = 2`
 - `max_decisions_per_day = 4`
+- `max_campaign_day = 25` (runtime-generation boundary)
 - `day_cycle_duration_ms`
 - `daily_summary_counter_duration_ms`
-
-There is deliberately no deadline or maximum-day setting.
 
 ## Architecture
 
 ```text
 echo_adventure/
-  config.py               Jobs, runtime, question-count, and UI timing settings
+  config.py               Jobs, runtime, question-count, horizon, and UI timing settings
   models.py               Flat job, decision, scenario, and state dataclasses
   scenario_generator.py   Deterministic twenty-job generation
+  decision_web.py         Days 1–24 startup DAG generation and global optimization
   simulation.py           Once-per-day job progression
   metrics.py              Completion and remaining-work rollups
-  echo.py                 Hidden best-choice benchmark
+  echo.py                 Hidden traversal of the globally optimal web policy
   decisions/
-    cards.py              Deterministic daily question bank
+    cards.py              Preplanned card construction and runtime continuation generation
     effects.py            Explicit add/remove-day effects
   api/
     session.py            Player and ECHO session ownership
@@ -68,9 +74,9 @@ The state model intentionally contains no shops, workstations, employees, materi
 
 ## HTTP API
 
-- `GET /api/state` returns the active run.
+- `GET /api/state` returns the active run and current preplanned web node.
 - `POST /api/new` starts a new run. An optional integer `seed` may be supplied.
-- `POST /api/choice` applies one answer using `cardId` and `choiceId`.
+- `POST /api/choice` applies one answer and moves to its preplanned successor node using `cardId` and `choiceId`.
 - `POST /api/advance` removes one day from every unfinished job after all daily questions are answered.
 
 There is no shift endpoint.

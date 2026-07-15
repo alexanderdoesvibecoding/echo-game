@@ -23,6 +23,7 @@ class GameConfig:
     max_job_duration_days: int = 15
     min_decisions_per_day: int = 2
     max_decisions_per_day: int = 4
+    max_campaign_day: int = 25
     day_cycle_duration_ms: int = 8000
     daily_summary_counter_duration_ms: int = 2000
     seed: int | None = None
@@ -61,6 +62,7 @@ def _validate_config(config: GameConfig) -> None:
         "max_job_duration_days",
         "min_decisions_per_day",
         "max_decisions_per_day",
+        "max_campaign_day",
         "day_cycle_duration_ms",
         "daily_summary_counter_duration_ms",
     ):
@@ -70,4 +72,6 @@ def _validate_config(config: GameConfig) -> None:
         raise ValueError("Minimum job duration cannot exceed maximum job duration.")
     if config.min_decisions_per_day > config.max_decisions_per_day:
         raise ValueError("Minimum daily decisions cannot exceed maximum daily decisions.")
+    if config.max_campaign_day < config.max_job_duration_days:
+        raise ValueError("Campaign horizon cannot be shorter than the longest initial job.")
     config.schedule_start

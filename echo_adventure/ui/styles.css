@@ -1734,18 +1734,7 @@ html[data-theme="dark"] #closeWelcomeBtn {
   text-align: left;
   white-space: normal;
   overflow: visible;
-}
-.decision-choice strong {
-  display: block;
   line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-.decision-choice span {
-  display: block;
-  margin-top: 5px;
-  color: var(--muted);
-  font-size: 0.88rem;
-  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 .decision-choice.selected {

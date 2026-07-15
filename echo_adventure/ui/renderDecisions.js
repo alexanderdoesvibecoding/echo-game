@@ -77,8 +77,7 @@ export function renderDecisionModal() {
         const selected = uiState.pendingChoice?.cardId === card.id && uiState.pendingChoice?.choiceId === choice.id;
         return `
           <button class="decision-choice ${selected ? "selected" : ""}" onclick="selectPendingChoice('${card.id}', '${choice.id}')">
-            <strong>${escapeHtml(choice.label)}</strong>
-            <span>${escapeHtml(choice.description)}</span>
+            ${escapeHtml(choice.label)}
           </button>
         `;
       }).join("")}

@@ -1,4 +1,4 @@
-"""Generate varied day-only cards from the restored 75-decision catalog."""
+"""Construct state-specific cards from the restored 75-decision catalog."""
 
 from __future__ import annotations
 
@@ -176,6 +176,66 @@ def _build_card(
         context_label=context,
         definition_id=definition.id,
         primary_job_id=primary.id,
+    )
+
+
+def build_preplanned_decision_card(
+    state: SimulationState,
+    definition: DecisionDefinition,
+    primary: Job,
+    ordered_targets: list[Job],
+    question_number: int,
+    node_token: str,
+) -> DecisionCard:
+    """Build one immutable-web question for an exact precomputed state."""
+    targets = [primary, *(job for job in ordered_targets if job.id != primary.id)][:5]
+    choices = [
+        _build_preplanned_choice(definition, catalog_choice, targets, primary, index)
+        for index, catalog_choice in enumerate(definition.choices, start=1)
+    ]
+    echo_choice = select_echo_choice_from_choices(choices)
+    target_ids = list(
+        dict.fromkeys([primary.id, *(job_id for choice in choices for job_id in choice.day_changes)])
+    )
+    context = _format_job_list([job.name for job in targets])
+    is_follow_up = definition.is_follow_up
+    tie_text = "This follow-up remains tied to" if is_follow_up else "Today's affected job is"
+    description = f"{_simplify_language(definition.description)} {tie_text} {primary.name}."
+    return DecisionCard(
+        id=f"DEC-D{state.current_day:03d}-Q{question_number:02d}-{node_token}-{definition.id}",
+        day=state.current_day,
+        type=_decision_type(definition),
+        title=_simplify_language(definition.title),
+        description=description,
+        target_ids=target_ids,
+        choices=choices,
+        echo_choice_id=echo_choice.id,
+        context_label=context,
+        definition_id=definition.id,
+        primary_job_id=primary.id,
+    )
+
+
+def _build_preplanned_choice(
+    definition: DecisionDefinition,
+    catalog_choice: CatalogChoice,
+    targets: list[Job],
+    primary: Job,
+    index: int,
+) -> DecisionChoice:
+    """Keep web branching exact and tractable by changing one known job."""
+    schedule_score = choice_schedule_score(definition, catalog_choice)
+    raw_changes = _day_changes(schedule_score, targets)
+    net_change = sum(raw_changes.values())
+    changes = {primary.id: 1 if net_change > 0 else -1} if net_change else {}
+    schedule_text = _format_change_summary(changes, targets)
+    return DecisionChoice(
+        id=f"choice-{index}",
+        label=_simplify_language(catalog_choice.label),
+        description=f"{_simplify_language(catalog_choice.description)} {schedule_text}",
+        day_changes=changes,
+        score_delta=float(-sum(changes.values())),
+        follow_ups=_choice_follow_ups(definition, catalog_choice),
     )
 
 

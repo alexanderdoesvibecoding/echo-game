@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..decisions import decision_progress
 from ..metrics import calculate_final_score, calculate_snapshot
 from ..models import DecisionCard, DecisionChoice, MetricSnapshot, SimulationState
 
@@ -14,7 +13,7 @@ class PayloadMixin:
         with self.lock:
             self._ensure_cards()
             snapshot = calculate_snapshot(self.player_state)
-            progress = decision_progress(self.current_cards, self.applied_choices, self.player_state.current_day)
+            progress = self.current_decision_progress()
             payload: dict[str, Any] = {
                 "seed": self.seed,
                 "gameOver": self._game_over(),
@@ -31,7 +30,7 @@ class PayloadMixin:
                     "day": progress.day,
                     "completed": progress.answered_questions,
                     "total": progress.total_questions,
-                    "visibleCards": progress.total_questions,
+                    "visibleCards": len(self.current_cards),
                     "openCardIds": progress.open_card_ids,
                 },
                 "appliedChoices": self.choice_notes[-6:],

@@ -17,15 +17,19 @@
 
 ## Core game premise
 
-- ECHO must always beat the player. Do not design, implement, or preserve any
-  path in which the player can ultimately defeat, outsmart, or surpass ECHO.
+- ECHO must always beat the player unless the player selects the exact same
+  optimal path as ECHO. That identical-path case must end in a tie. Do not
+  design, implement, or preserve any path in which the player can ultimately
+  defeat, outsmart, or surpass ECHO.
 - The game's purpose is to demonstrate that a human cannot account for
   everything: the player will eventually make a mistake, overlook something,
   or reach a limit that ECHO does not.
 - Present ECHO as fundamentally more capable than humans. Every game system,
   narrative outcome, and player interaction must support the conclusion that
   ECHO is better than a human and convince the player of that fact.
-- Player choices may affect how or when ECHO wins, but never whether ECHO wins.
+- Player choices may affect how or when ECHO wins. The only exception is an
+  exact reproduction of ECHO's optimal path, which may affect whether ECHO wins
+  by producing a tie; no divergent player path may tie or win.
 
 ## Progress tracking
 
