@@ -7,8 +7,10 @@ import {
   decisionModalBlocked,
   decisionModalKey,
   decisionProgress,
+  nextDecisionIsDue,
   readyToAdvance,
   renderDayClock,
+  updateDayClock,
 } from "./dayClock.js";
 
 const callbacks = { choose: async () => null };
@@ -25,13 +27,19 @@ export function renderInlineDecisions() {
   const next = currentOpenDecisionCard();
   const status = readyToAdvance()
     ? "Finishing today's work"
-    : "Workday in progress";
-  body.innerHTML = `
-    <div class="daily-overview">
-      ${renderDayClock(status, Boolean(next))}
-      ${next ? `<button class="primary decision-open-button" data-action="open-decision-modal">Open next decision</button>` : ""}
-    </div>
-  `;
+    : uiState.decisionModalVisible || nextDecisionIsDue()
+      ? "Workday paused for decision"
+      : "Workday in progress";
+  if (!body.querySelector("[data-day-clock]")) {
+    body.innerHTML = `
+      <div class="daily-overview">
+        ${renderDayClock(status)}
+        <button class="primary decision-open-button hidden" data-action="open-decision-modal">Open next decision</button>
+      </div>
+    `;
+  }
+  updateDayClock(body, status);
+  body.querySelector(".decision-open-button")?.classList.toggle("hidden", !next);
 }
 
 export function openDecisionModal() {

@@ -74,6 +74,7 @@ async function startNewRun() {
     uiState.summaryAnimationKey = null;
     uiState.welcomeModalVisible = true;
     uiState.newRunModalVisible = false;
+    $("inlineDecisionBody").replaceChildren();
     showNewRunError("");
     showError("");
     render();
