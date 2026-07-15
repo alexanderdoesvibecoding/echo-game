@@ -1726,6 +1726,8 @@ html[data-theme="dark"] #closeWelcomeBtn {
 }
 .decision-choice {
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
   width: 100%;
   height: auto;
@@ -1736,6 +1738,19 @@ html[data-theme="dark"] #closeWelcomeBtn {
   overflow: visible;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+.decision-choice .choice-icon {
+  flex: 0 0 auto;
+  margin: 0;
+  background: color-mix(in srgb, var(--teal) 9%, var(--panel));
+  border-color: color-mix(in srgb, var(--teal) 32%, var(--line));
+}
+.decision-choice.selected .choice-icon {
+  background: color-mix(in srgb, var(--teal) 16%, var(--panel));
+  border-color: var(--teal);
+}
+.decision-choice-label {
+  min-width: 0;
 }
 .decision-choice.selected {
   border-color: var(--teal);
