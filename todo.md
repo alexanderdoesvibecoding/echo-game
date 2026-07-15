@@ -8,8 +8,8 @@
     - [x] Make each job take 5–15 days, and daily decisions add or remove days – Matt
         - Workstation-related flavor remains without a hidden workstation state
 
-- [ ] Daily summary update
-    - [ ] Animate jobs into place in submarine once completed – Alexander
+- [x] Daily summary update
+    - [x] Animate jobs into place in submarine once completed – Alexander
     - [x] Number fields tick up/down rather than display – Alexander
     - [x] Remove risk – Alexander
 
