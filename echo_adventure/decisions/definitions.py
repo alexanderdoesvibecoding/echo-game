@@ -199,9 +199,9 @@ BASE_DEFINITIONS = (
         severity=4,
     ),
     D(
-        "echo-recommendation", "ECHO sees a possible schedule move", "ECHO recommends a disruptive, board-wide reshuffle whose benefit may not be immediately visible.", "critical",
+        "echo-recommendation", "A third-party process optimization tool sees a possible schedule move", "A third-party process optimization tool recommends a disruptive, board-wide reshuffle whose benefit may not be immediately visible.", "critical",
         C("Take advice", "Reshuffle active and queued work to expose hidden capacity.", E("delay", selector="all_active", shifts=(1, 2), count=99), E("reschedule", count=3), follow=(F("echo-slack-pocket-found", 0.68),), score=-1.5),
-        C("Ignore the AI", "Leave today's board unchanged and pass on the possible opening."),
+        C("Ignore the tool", "Leave today's board unchanged and pass on the possible opening."),
         severity=3, weight=0.22,
     ),
     D(
@@ -664,7 +664,7 @@ FOLLOW_UP_DEFINITIONS = (
         severity=5, is_follow_up=True,
     ),
     D(
-        "echo-slack-pocket-found", "ECHO found hidden slack", "The reshuffle exposed useful idle capacity hidden by the old queue.", "critical",
+        "echo-slack-pocket-found", "The process optimization tool found hidden slack", "The reshuffle exposed useful idle capacity hidden by the old queue.", "critical",
         C("Trust the full reshuffle", "Use the whole opening across several jobs and accept visible queue churn.", E("recover", selector="all_active", shifts=(4, 6), count=8, mode="total"), E("queue_front", selector="critical", count=4), E("reschedule", count=3), score=3.0),
         C("Use only the safe moves", "Capture the clearest savings without committing to the full board change.", E("recover", selector="critical", shifts=(2, 3), count=4, mode="total"), E("reschedule", count=1)),
         C("Roll back the advice", "Restore the earlier dispatch plan and leave the reshuffle cost unrecovered.", E("reschedule", count=2)),
