@@ -15,6 +15,18 @@
   for confirmation.
 - Do not make changes outside the scope of the user's request.
 
+## Core game premise
+
+- ECHO must always beat the player. Do not design, implement, or preserve any
+  path in which the player can ultimately defeat, outsmart, or surpass ECHO.
+- The game's purpose is to demonstrate that a human cannot account for
+  everything: the player will eventually make a mistake, overlook something,
+  or reach a limit that ECHO does not.
+- Present ECHO as fundamentally more capable than humans. Every game system,
+  narrative outcome, and player interaction must support the conclusion that
+  ECHO is better than a human and convince the player of that fact.
+- Player choices may affect how or when ECHO wins, but never whether ECHO wins.
+
 ## Progress tracking
 
 - At the beginning of each new coding task, replace the contents of
