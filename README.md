@@ -15,7 +15,7 @@ ECHO Adventure is a local browser game about completing twenty independent jobs.
 - Probabilistic follow-ups are rolled while the web is generated and become preplanned successor questions.
 - A follow-up can amplify, reverse, or leave in place its triggering answer, but it never exactly cancels that answer's job-day change.
 - Manufacturing situations such as equipment, staffing, material, weather, and quality issues are flavor text only. They have no hidden model or effect beyond the job-day change stated on the answer.
-- The run ends only after all 20 jobs are complete. The full web covers days 1–24, and question generation continues seamlessly from day 25 if work remains.
+- The run ends only after all 20 jobs are complete. The full web covers days 1–24, and question generation continues seamlessly from day 25 if work remains. Runtime generation uses the complete base catalog, prioritizes its least-used definitions without weighting, and continues to surface eligible follow-ups.
 - Before the player sees the first question, ECHO solves every node backward. It minimizes final completion day, maximizes decision score among equal completion days, and then uses a stable choice-ID tiebreak.
 - During play, ECHO traverses that solved route independently: each accepted player answer applies one matching-slot ECHO answer, and day advancement applies ECHO's once-per-day work tick without replaying its decisions.
 - If ECHO's solved route would reach day 25, the question web is regenerated while preserving the job scenario. ECHO therefore always finishes inside the completely solved portion of the run.

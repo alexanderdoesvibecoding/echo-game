@@ -994,6 +994,10 @@ tr:last-child td { border-bottom: none; }
   font-weight: 720;
   line-height: 1.25;
 }
+.final-metric-neutral {
+  border-color: var(--line);
+  box-shadow: inset 0 3px 0 var(--muted);
+}
 .final-metric-good {
   border-color: rgba(0, 122, 94, 0.3);
   box-shadow: inset 0 3px 0 rgba(0, 122, 94, 0.7);

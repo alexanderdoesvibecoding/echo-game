@@ -49,7 +49,6 @@ class DecisionDefinition:
     choices: tuple[CatalogChoice, ...]
     severity: int = 3
     is_follow_up: bool = False
-    weight: float = 1.0
     unavoidable_effects: tuple[DecisionEffect, ...] = ()
     unavoidable_follow_up_edges: tuple[FollowUpEdge, ...] = ()
 
@@ -160,7 +159,6 @@ def D(
     *choices: CatalogChoice,
     severity: int = 3,
     is_follow_up: bool = False,
-    weight: float = 1.0,
     unavoidable: tuple[DecisionEffect, ...] = (),
     card_follow: tuple[FollowUpEdge, ...] = (),
 ) -> DecisionDefinition:
@@ -172,7 +170,6 @@ def D(
         choices=tuple(choices),
         severity=severity,
         is_follow_up=is_follow_up,
-        weight=weight,
         unavoidable_effects=unavoidable,
         unavoidable_follow_up_edges=card_follow,
     )
@@ -202,7 +199,7 @@ BASE_DEFINITIONS = (
         "echo-recommendation", "A third-party process optimization tool sees a possible schedule move", "A third-party process optimization tool recommends a disruptive, board-wide reshuffle whose benefit may not be immediately visible.", "critical",
         C("Take advice", "Reshuffle active and queued work to expose hidden capacity.", E("delay", selector="all_active", shifts=(1, 2), count=99), E("reschedule", count=3), follow=(F("echo-slack-pocket-found", 0.68),), score=-1.5),
         C("Ignore the tool", "Leave today's board unchanged and pass on the possible opening."),
-        severity=3, weight=0.22,
+        severity=3,
     ),
     D(
         "worker-off-day", "The assigned operator is unavailable", "The operator assigned to this job is unavailable today.", "worker",
