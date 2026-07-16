@@ -36,7 +36,7 @@
         - 0-100 scale
     - [ ] Graph should show how questions impacted – Matt
     - [ ] Center the text inside the boxes – Alexander
-    - [ ] The graph gets hard to see as days increase to beyond like 10–20 – Ethan
+    - [x] The graph gets hard to see as days increase to beyond like 10–20 – Ethan
 
 - [x] Change the timeline of the game so that it doesn’t end until all jobs have been completed – Matt
 
