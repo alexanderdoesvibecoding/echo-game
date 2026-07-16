@@ -41,6 +41,7 @@ class DecisionChoice:
     description: str
     day_changes: dict[str, int]
     score_delta: float
+    icon_key: str
     follow_ups: tuple[DecisionFollowUp, ...] = ()
 
 

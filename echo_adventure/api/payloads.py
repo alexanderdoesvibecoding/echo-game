@@ -266,6 +266,7 @@ def _choice_payload(choice: DecisionChoice) -> dict[str, Any]:
         "id": choice.id,
         "label": choice.label,
         "description": choice.description,
+        "icon": choice.icon_key,
     }
 
 

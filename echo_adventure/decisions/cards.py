@@ -248,6 +248,7 @@ def _build_preplanned_choice(
         description=f"{_simplify_language(catalog_choice.description)} {schedule_text}",
         day_changes=changes,
         score_delta=float(-sum(changes.values())),
+        icon_key=catalog_choice.icon_key,
         follow_ups=_choice_follow_ups(definition, catalog_choice),
     )
 
@@ -270,6 +271,7 @@ def _build_choice(
         description=f"{_simplify_language(catalog_choice.description)} {schedule_text}",
         day_changes=changes,
         score_delta=float(-sum(changes.values())),
+        icon_key=catalog_choice.icon_key,
         follow_ups=follow_ups,
     )
 

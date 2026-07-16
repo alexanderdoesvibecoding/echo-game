@@ -8,7 +8,7 @@ workcenters, workers, routing, inventory, or any removed simulation system.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 
@@ -38,6 +38,7 @@ class CatalogChoice:
     effects: tuple[DecisionEffect, ...]
     follow_up_edges: tuple[FollowUpEdge, ...]
     score_delta: float
+    icon_key: str = ""
 
 
 @dataclass(frozen=True)
@@ -164,18 +165,119 @@ def D(
     unavoidable: tuple[DecisionEffect, ...] = (),
     card_follow: tuple[FollowUpEdge, ...] = (),
 ) -> DecisionDefinition:
+    icon_keys = DECISION_CHOICE_ICON_KEYS.get(definition_id)
+    if icon_keys is None or len(icon_keys) != len(choices):
+        raise ValueError(f"Decision {definition_id!r} must define one icon key per choice.")
+    if len(set(icon_keys)) != len(icon_keys):
+        raise ValueError(f"Decision {definition_id!r} cannot repeat an icon key.")
+    unknown_icon_keys = set(icon_keys) - SUPPORTED_CHOICE_ICON_KEYS
+    if unknown_icon_keys:
+        raise ValueError(f"Decision {definition_id!r} uses unknown icon keys: {sorted(unknown_icon_keys)}")
+    choices_with_icons = tuple(
+        replace(choice, icon_key=icon_key)
+        for choice, icon_key in zip(choices, icon_keys, strict=True)
+    )
     return DecisionDefinition(
         id=definition_id,
         title=title,
         description=description,
         target_selector=target,
-        choices=tuple(choices),
+        choices=choices_with_icons,
         severity=severity,
         is_follow_up=is_follow_up,
         weight=weight,
         unavoidable_effects=unavoidable,
         unavoidable_follow_up_edges=card_follow,
     )
+
+
+SUPPORTED_CHOICE_ICON_KEYS = frozenset(
+    {
+        "accelerate", "adjust", "branch", "calendar", "calibrate", "discard", "document",
+        "echo", "exchange", "flag", "gauge", "idea", "inspect", "inventory", "material",
+        "merge", "monitor", "people", "printer", "protect", "quality", "release", "repair",
+        "route", "search", "stop", "study", "tool", "wait",
+    }
+)
+
+
+DECISION_CHOICE_ICON_KEYS = {
+    "weather": ("route", "wait"),
+    "workstation-breakdown": ("route", "wait"),
+    "materials-not-here": ("wait", "inventory", "calendar"),
+    "echo-recommendation": ("echo", "adjust"),
+    "worker-off-day": ("exchange", "wait"),
+    "calibration-drift": ("calibrate", "inspect", "route"),
+    "traveler-mismatch": ("inspect", "quality", "branch"),
+    "shared-fixture-claim": ("flag", "tool", "wait"),
+    "changeover-drag": ("merge", "tool", "route"),
+    "batch-window-opens": ("merge", "protect", "calendar"),
+    "consumables-short": ("protect", "exchange", "wait"),
+    "label-printer-outage": ("document", "printer", "wait"),
+    "shop-air-pressure-dip": ("protect", "tool", "monitor"),
+    "coolant-change-due": ("repair", "quality", "route"),
+    "fod-sweep": ("release",),
+    "handoff-window-missed": ("wait", "release", "exchange"),
+    "crane-reservation-conflict": ("wait", "route", "calendar"),
+    "nesting-opportunity": ("merge", "branch", "tool"),
+    "old-setup-sheet": ("tool", "inspect", "document"),
+    "wip-crowding": ("route", "adjust", "inventory"),
+    "cleanliness-breach": ("repair", "stop", "quality"),
+    "software-seat-conflict": ("protect", "exchange", "people"),
+    "network-folder-offline": ("document", "branch", "wait"),
+    "gauge-dispute": ("inspect", "study", "gauge"),
+    "count-variance": ("inspect", "inventory", "material"),
+    "burr-cleanup": ("repair", "tool", "release"),
+    "cure-clock": ("wait", "branch", "quality"),
+    "vacuum-leak-chase": ("search", "tool", "monitor"),
+    "tool-crib-hold": ("wait", "tool", "material"),
+    "fixture-soak": ("wait", "tool", "material"),
+    "shift-overlap-bonus": ("people", "adjust", "calendar"),
+    "waste-container-full": ("inventory", "tool", "route"),
+    "preapproved-package": ("merge", "quality", "document"),
+    "expired-stickers": ("inspect", "printer", "quality"),
+    "vendor-rep-on-site": ("tool", "monitor", "release"),
+    "training-run": ("people", "protect", "wait"),
+    "off-peak-utility-slot": ("merge", "accelerate", "calendar"),
+    "floor-walk-insight": ("idea", "document", "adjust"),
+    "wash-tank-chemistry": ("repair", "route", "monitor"),
+    "rack-shortage": ("tool", "material", "adjust"),
+    "safety-drill": ("release",),
+    "access-badge-failure": ("wait", "adjust", "people"),
+    "reference-sample-missing": ("quality", "gauge", "calibrate"),
+    "staging-map-reset": ("adjust", "inventory", "quality"),
+    "narrow-drift-found": ("gauge", "inspect", "stop"),
+    "route-shortcut-approved": ("route", "accelerate", "exchange"),
+    "spare-fixture-certified": ("inspect", "tool", "material"),
+    "family-run-unlocked": ("merge", "branch", "tool"),
+    "bulk-lot-released": ("inventory", "material", "inspect"),
+    "clean-packet-release": ("stop", "release", "inspect"),
+    "finish-window-restored": ("adjust", "protect", "repair"),
+    "combined-lift": ("merge", "branch", "route"),
+    "setup-library-update": ("tool", "material", "repair"),
+    "aisles-cleared": ("repair", "release", "tool"),
+    "clean-room-cleared": ("release", "quality", "inspect"),
+    "program-template-saved": ("adjust", "document", "discard"),
+    "gauge-method-locked": ("quality", "flag", "gauge"),
+    "operator-qualified": ("accelerate", "exchange", "people"),
+    "process-tweak-validated": ("adjust", "document", "protect"),
+    "rack-recovery-sprint": ("route", "protect", "tool"),
+    "batch-data-accepted": ("merge", "branch", "study"),
+    "clamp-marks-found": ("inspect", "quality", "study"),
+    "covered-work-reopened": ("inspect", "quality", "study"),
+    "wrong-revision-loaded": ("repair", "merge", "tool"),
+    "phantom-stock-confirmed": ("inventory", "stop", "search"),
+    "fit-check-failed": ("repair", "tool", "quality"),
+    "cure-failure-found": ("discard", "inspect", "repair"),
+    "vacuum-trace-failed": ("tool", "quality", "inspect"),
+    "waste-lane-blocked": ("route", "tool", "exchange"),
+    "sticker-audit-hit": ("inspect", "quality", "study"),
+    "weather-cleared-early": ("wait", "release", "monitor"),
+    "setup-mismatch-found": ("tool", "material", "inspect"),
+    "echo-slack-pocket-found": ("echo", "route", "monitor"),
+    "replacement-handoff-check": ("release", "exchange", "people"),
+    "returning-worker-shortcut": ("tool", "route", "material"),
+}
 
 
 BASE_DEFINITIONS = (
