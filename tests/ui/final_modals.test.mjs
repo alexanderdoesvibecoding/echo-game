@@ -119,8 +119,11 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
   renderFinal();
 
   assert.equal(dom.element("finalSection").classList.contains("hidden"), false);
-  assert.match(dom.element("finalMetricsBar").innerHTML, /Completion Day/);
-  assert.match(dom.element("finalMetricsBar").innerHTML, /ECHO 3/);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /Completion date/);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /<strong>July 4<\/strong>/);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /final-metric-secondary">Day 4/);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /ECHO July 3/);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /Day 3/);
   assert.match(dom.element("finalCompletionChart").innerHTML, /Your score/);
   assert.match(dom.element("finalCompletionChart").innerHTML, /ECHO score/);
   assert.equal(dom.element("finalNotes").innerHTML, "<li>ECHO finished &lt;first&gt;.</li>");
