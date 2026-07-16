@@ -1,8 +1,8 @@
 {
   "type": "module",
   "scripts": {
-    "test:api": "python3 -m pytest -q",
-    "test:ui": "node --test tests/ui/*.test.mjs",
+    "test:api": "pytest",
+    "test:ui": "node --test --experimental-test-coverage --test-coverage-include='echo_adventure/ui/*.js' --test-coverage-lines=90 --test-coverage-branches=60 --test-coverage-functions=85 tests/ui/*.test.mjs",
     "test": "npm run test:api && npm run test:ui"
   }
 }

@@ -2,7 +2,6 @@
 
 ## Protected files
 
-- Do not read, run, create, or modify anything under `tests/` unless explicitly tasked to.
 - Never modify `todo.md`.
 - Preserve unrelated user changes already present in the working tree.
 
@@ -50,14 +49,20 @@
 
 ## Verification
 
-- Do not perform extensive testing.
-- Do not inspect or run the unit tests under `tests/`.
-- For code changes, verify only that:
+- Run the existing tests under `tests/` for code changes and verify that they
+  still pass.
+- Update existing tests when needed to keep them aligned with current game
+  behavior.
+- Do not add new tests.
+- Remove an existing test only when the functionality it covers has been
+  removed from the game.
+- For code changes, verify that:
     1. the project compiles or passes its standard build check; and
-    2. the application starts and reaches its normal initial state without an
+    2. the existing test suite passes; and
+    3. the application starts and reaches its normal initial state without an
        immediate error.
-- If the correct build or startup command cannot be determined from repository
-  documentation or configuration, ask the user.
+- If the correct build, test, or startup command cannot be determined from
+  repository documentation or configuration, ask the user.
 - Report exactly which verification commands were run and whether they passed.
 
 ## Running the application

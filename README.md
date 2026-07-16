@@ -3,7 +3,7 @@
   <p><strong>Build the submarine. Make every call. Discover how close you can come to perfect.</strong></p>
 </div>
 
-ECHO Adventure is a local, browser-based decision game about assembling a submarine through 20 concurrent jobs. Every day brings operational choices that can accelerate work, introduce delays, and reshape the route to completion.
+ECHO Adventure is a local, browser-based decision game about assembling a submarine through 20 concurrent jobs. Every day brings operational choices that can speed up work, introduce delays, and reshape the route to completion.
 
 You are not alone in the scenario. Before you make your first decision, ECHO solves the entire decision web and begins its own hidden run. It has already found the best possible route. Your choices determine only how closely you can follow it—and where you fall behind.
 
@@ -57,18 +57,18 @@ The question is not whether ECHO made a mistake. It is whether you can avoid mak
 
 ## Simulation rules
 
-| System | Behavior |
-| --- | --- |
-| Jobs | Every run contains exactly 20 independent jobs, each paired with one submarine piece. |
-| Starting duration | Jobs begin at 5–15 days, weighted toward shorter durations while keeping every configured duration possible. |
-| Daily decisions | Each day presents a configurable two to four questions. |
-| Choice effects | A choice only adds or removes stated job-days; narrative context creates no hidden state. |
-| Daily progress | Every unfinished job loses one remaining day when the day advances. |
-| Follow-ups | Eligible follow-ups are rolled during web generation and stored as preplanned successor questions. They may amplify, reverse, or preserve an earlier effect, but never exactly cancel its job-day change. |
-| Decision web | Equivalent future states reconverge, forming a directed acyclic graph instead of a duplicated history tree. |
-| Solved horizon | The complete web covers days 1–24. If ECHO's route would reach day 25, the web is regenerated around the same job scenario so ECHO always finishes inside the solved region. |
-| Extended play | If the player still has unfinished work on day 25, runtime generation continues with eligible questions and follow-ups until every job is complete. |
-| Win condition | Only an exact reproduction of ECHO's optimal path ties. Every divergent path loses. |
+| System            | Behavior                                                                                                                                                                                                  |
+|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Jobs              | Every run contains exactly 20 independent jobs, each paired with one submarine piece.                                                                                                                     |
+| Starting duration | Jobs begin at 5–15 days, weighted toward shorter durations while keeping every configured duration possible.                                                                                              |
+| Daily decisions   | Each day presents a configurable two to four questions.                                                                                                                                                   |
+| Choice effects    | A choice only adds or removes stated job-days; narrative context creates no hidden state.                                                                                                                 |
+| Daily progress    | Every unfinished job loses one remaining day when the day advances.                                                                                                                                       |
+| Follow-ups        | Eligible follow-ups are rolled during web generation and stored as preplanned successor questions. They may amplify, reverse, or preserve an earlier effect, but never exactly cancel its job-day change. |
+| Decision web      | Equivalent future states reconverge, forming a directed acyclic graph instead of a duplicated history tree.                                                                                               |
+| Solved horizon    | The complete web covers days 1–24. If ECHO's route would reach day 25, the web is regenerated around the same job scenario so ECHO always finishes inside the solved region.                              |
+| Extended play     | If the player still has unfinished work on day 25, runtime generation continues with eligible questions and follow-ups until every job is complete.                                                       |
+| Win condition     | Only an exact reproduction of ECHO's optimal path ties. Every divergent path loses.                                                                                                                       |
 
 There are deliberately no subjobs, dependencies, shifts, resources, queues, deadlines, workstations, employees, materials, inspections, routing, or rework systems. The model is entirely about job-days, decisions, and the gap between a human route and ECHO's optimum.
 
@@ -76,18 +76,18 @@ There are deliberately no subjobs, dependencies, shifts, resources, queues, dead
 
 The game is configured through `GameConfig` in `echo_adventure/config.py`.
 
-| Field | Default | Purpose |
-| --- | ---: | --- |
-| `start_date` | `2026-07-01` | Calendar date displayed for game day 1. |
-| `job_count` | `20` | Number of jobs and submarine pieces. |
-| `min_job_duration_days` | `5` | Shortest generated starting duration. |
-| `max_job_duration_days` | `15` | Longest generated starting duration. |
-| `min_decisions_per_day` | `2` | Minimum daily question count. |
-| `max_decisions_per_day` | `4` | Maximum daily question count. |
-| `max_campaign_day` | `25` | Boundary between the preplanned web and runtime continuation. |
-| `day_cycle_duration_ms` | `8000` | Workday animation duration. |
-| `daily_summary_counter_duration_ms` | `2000` | Daily-summary counter animation duration. |
-| `seed` | `None` | Optional deterministic scenario seed. |
+| Field                               |      Default | Purpose                                                       |
+|-------------------------------------|-------------:|---------------------------------------------------------------|
+| `start_date`                        | `2026-07-01` | Calendar date displayed for game day 1.                       |
+| `job_count`                         |         `20` | Number of jobs and submarine pieces.                          |
+| `min_job_duration_days`             |          `5` | Shortest generated starting duration.                         |
+| `max_job_duration_days`             |         `15` | Longest generated starting duration.                          |
+| `min_decisions_per_day`             |          `2` | Minimum daily question count.                                 |
+| `max_decisions_per_day`             |          `4` | Maximum daily question count.                                 |
+| `max_campaign_day`                  |         `25` | Boundary between the preplanned web and runtime continuation. |
+| `day_cycle_duration_ms`             |       `8000` | Workday animation duration.                                   |
+| `daily_summary_counter_duration_ms` |       `2000` | Daily-summary counter animation duration.                     |
+| `seed`                              |       `None` | Optional deterministic scenario seed.                         |
 
 Example:
 
@@ -130,12 +130,12 @@ echo_adventure/
 
 The browser uses a small local JSON API served from the same process.
 
-| Method | Route | Description |
-| --- | --- | --- |
-| `GET` | `/api/state` | Return the active run and current preplanned web node. |
-| `POST` | `/api/new` | Start a new run. Accepts an optional integer `seed`. |
-| `POST` | `/api/choice` | Apply the player's `cardId` and `choiceId`, move to the preplanned successor, and advance ECHO through the matching daily slot. |
-| `POST` | `/api/advance` | Advance one workday in each active simulation after all daily questions are answered. |
+| Method | Route          | Description                                                                                                                     |
+|--------|----------------|---------------------------------------------------------------------------------------------------------------------------------|
+| `GET`  | `/api/state`   | Return the active run and current preplanned web node.                                                                          |
+| `POST` | `/api/new`     | Start a new run. Accepts an optional integer `seed`.                                                                            |
+| `POST` | `/api/choice`  | Apply the player's `cardId` and `choiceId`, move to the preplanned successor, and advance ECHO through the matching daily slot. |
+| `POST` | `/api/advance` | Advance one workday in each active simulation after all daily questions are answered.                                           |
 
 There is no shift endpoint.
 

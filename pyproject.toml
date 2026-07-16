@@ -1,5 +1,5 @@
 [project]
-name = "echo-adventure"
+name = "echo_adventure"
 version = "1"
 description = "Shipbuilding Choose Your Own Adventure Game"
 requires-python = ">=3.14"
@@ -12,5 +12,5 @@ echo-adventure = "echo_adventure.app:main"
 "echo_adventure.ui" = ["*.html", "*.css", "*.js"]
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=83.0.0"]
 build-backend = "setuptools.build_meta"
