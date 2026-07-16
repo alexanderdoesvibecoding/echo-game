@@ -95,8 +95,6 @@ export function renderNewRunModal() {
 }
 
 export function initDarkMode() {
-  // Theme is intentionally local browser preference, separate from run
-  // uiState.state so seed replays do not change presentation preferences.
   const saved = localStorage.getItem("theme") || "light";
   document.documentElement.setAttribute("data-theme", saved);
   updateThemeButton(saved);

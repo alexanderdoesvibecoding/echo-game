@@ -62,6 +62,20 @@
         <section id="decisionQueueSection" class="decision-queue-section" aria-labelledby="decisionQueueTitle">
           <div class="section-head">
             <h2 id="decisionQueueTitle">Decision Queue</h2>
+            <div
+              class="queue-day-clock"
+              data-queue-day-clock
+              role="progressbar"
+              aria-label="Workday progress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <span class="queue-day-clock-face" aria-hidden="true">
+                <span class="queue-day-clock-hand"></span>
+              </span>
+              <span>Workday</span>
+            </div>
           </div>
           <div id="decisionQueueBody" class="decision-queue-body" aria-live="polite"></div>
         </section>

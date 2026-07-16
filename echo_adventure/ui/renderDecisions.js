@@ -4,6 +4,7 @@ import { uiState } from "./state.js";
 import { $, escapeHtml } from "./html.js";
 import {
   currentOpenDecisionCard,
+  dayCyclePercent,
   decisionInteractionBlocked,
   decisionProgress,
   nextDecisionIsDue,
@@ -91,6 +92,7 @@ export function renderDecisionQueue() {
   const progress = decisionProgress();
   const blocked = decisionInteractionBlocked();
   const due = nextDecisionIsDue();
+  updateQueueDayClock(section, due);
   const card = due && !blocked ? currentOpenDecisionCard() : null;
   const pendingChoiceId = card && uiState.pendingChoice?.cardId === card.id
     ? uiState.pendingChoice.choiceId
@@ -154,4 +156,17 @@ export function renderDecisionQueue() {
       </div>
     </article>
   `;
+}
+
+function updateQueueDayClock(section, paused) {
+  const clock = section.querySelector("[data-queue-day-clock]");
+  if (!clock) return;
+  const percent = dayCyclePercent();
+  const roundedPercent = Math.round(percent);
+  clock.style.setProperty("--day-cycle-angle", `${percent * 3.6}deg`);
+  clock.setAttribute("aria-valuenow", String(roundedPercent));
+  clock.setAttribute(
+    "aria-valuetext",
+    `Workday ${roundedPercent} percent complete${paused ? "; waiting for a decision" : ""}.`
+  );
 }

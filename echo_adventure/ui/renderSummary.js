@@ -301,8 +301,6 @@ export function renderSummaryModal() {
     uiState.summaryAnimationKey = null;
     return;
   }
-  // The day has already been simulated on the server, but the summary modal
-  // lets the player read consequences before committing that uiState.state locally.
   overlay.classList.add("active");
   if (title) {
     title.textContent = summary.date ? `Daily Summary - ${summary.date}` : "Daily Summary";

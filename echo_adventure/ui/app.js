@@ -110,8 +110,6 @@ async function choose(cardId, choiceId, renderAfter = true) {
 }
 
 async function prepareAdvanceDay() {
-  // The button should already be disabled until all decisions are complete,
-  // but this guard keeps direct console calls and stale UI state honest.
   if (!readyToAdvance()) {
     uiState.dayCycleAdvancing = false;
     document.getElementById("dailyDecisionSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
