@@ -1,13 +1,18 @@
 "use strict";
 
 import { uiState } from "./state.js";
-import { escapeHtml } from "./html.js";
+import { SUBMARINE_IMAGE_SRC } from "./submarineVisual.js";
 
 const DEFAULT_DAY_CYCLE_DURATION_MS = 8000;
 const TICK_MS = 180;
+const TIMELINE_ACTORS = [
+  { key: "player", label: "YOU:", spokenLabel: "You" },
+  { key: "echo", label: "ECHO:", spokenLabel: "ECHO" },
+];
 const callbacks = {
   render: () => {},
   renderInlineDecisions: () => {},
+  renderDecisionQueue: () => {},
   prepareAdvanceDay: () => {},
   showError: () => {},
 };
@@ -45,8 +50,6 @@ export function syncDayCycleForState() {
     uiState.dayCycleLastTick = performance.now();
     uiState.dayCycleAdvancing = false;
     uiState.dayDecisionThresholds = buildThresholds(decisionProgress().total);
-    uiState.decisionModalVisible = false;
-    uiState.decisionModalDismissedKey = null;
   }
   if (!uiState.dayCycleTimer) {
     uiState.dayCycleTimer = window.setInterval(tick, TICK_MS);
@@ -75,27 +78,19 @@ function tick() {
   if (!cycleBlocked()) {
     uiState.dayCycleProgress = Math.min(100, uiState.dayCycleProgress + elapsed / dayDurationMs() * 100);
   }
-  if (nextDecisionIsDue()) {
-    const card = currentOpenDecisionCard();
-    const key = decisionModalKey(card);
-    if (card && uiState.decisionModalDismissedKey !== key && !uiState.decisionModalVisible) {
-      uiState.decisionModalVisible = true;
-      callbacks.render();
-      return;
-    }
-  }
+
   if (uiState.dayCycleProgress >= 100 && readyToAdvance() && !uiState.dayCycleAdvancing && !uiState.pendingAdvanceState) {
     uiState.dayCycleAdvancing = true;
     callbacks.prepareAdvanceDay();
     return;
   }
   callbacks.renderInlineDecisions();
+  callbacks.renderDecisionQueue();
 }
 
 function cycleBlocked() {
   return uiState.welcomeModalVisible
     || uiState.newRunModalVisible
-    || uiState.decisionModalVisible
     || nextDecisionIsDue()
     || Boolean(uiState.pendingAdvanceState);
 }
@@ -119,22 +114,85 @@ export function currentOpenDecisionCard() {
   return uiState.state?.decisions?.find(card => !card.selectedChoice) || null;
 }
 
-export function decisionModalKey(card) {
-  return card ? `${uiState.state?.day}:${card.id}` : "";
-}
-
-export function decisionModalBlocked() {
+export function decisionInteractionBlocked() {
   return !uiState.state || uiState.state.gameOver || uiState.welcomeModalVisible || uiState.newRunModalVisible;
 }
 
-export function renderDayClock(statusText, paused = false) {
-  const percent = dayCyclePercent();
+export function renderDayClock() {
   return `
-    <div class="day-clock">
-      <div class="day-clock-row"><span>${escapeHtml(statusText)}</span><span>${Math.round(percent)}%</span></div>
-      <div class="day-progress-track" aria-label="Day progress, ${Math.round(percent)} percent">
-        <div class="day-progress-fill ${paused ? "paused" : ""}" style="width:${percent}%"></div>
+    <div class="day-clock" data-day-clock>
+      <div class="completion-timelines" role="group" aria-label="Estimated completion timelines">
+        ${TIMELINE_ACTORS.map(renderTimelineRow).join("")}
       </div>
     </div>
   `;
+}
+
+export function updateDayClock(root) {
+  const clock = root?.querySelector?.("[data-day-clock]");
+  if (!clock || !uiState.state) return;
+  for (const actor of TIMELINE_ACTORS) {
+    updateTimelineRow(clock, actor);
+  }
+}
+
+function renderTimelineRow(actor) {
+  return `
+    <div class="completion-timeline" data-timeline-actor="${actor.key}" role="progressbar" aria-labelledby="timeline-${actor.key}-label" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="timeline-actor-label" id="timeline-${actor.key}-label">${actor.label}</div>
+      <div class="timeline-plot">
+        <div class="timeline-course" style="--timeline-submarine-mask:url('${SUBMARINE_IMAGE_SRC}')">
+          <span class="timeline-submarine" aria-hidden="true"></span>
+          <div class="completion-timeline-track" aria-hidden="true">
+            <div class="completion-timeline-fill"></div>
+          </div>
+          <div class="timeline-dates">
+            <span data-timeline-start></span>
+            <span class="timeline-end-date" data-timeline-end></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function updateTimelineRow(clock, actor) {
+  const row = clock.querySelector(`[data-timeline-actor="${actor.key}"]`);
+  if (!row) return;
+  const timeline = uiState.state.timelines?.[actor.key] || {};
+  const progressValue = Number(timeline.progressPercent);
+  const progress = Number.isFinite(progressValue)
+    ? Math.max(0, Math.min(100, progressValue))
+    : 0;
+  const startDate = uiState.state.scheduleStartDate || "July 1";
+  const endDate = timeline.displayCompletion || timeline.projectedCompletion || startDate;
+  const projectedDate = timeline.projectedCompletion || endDate;
+  const currentDate = uiState.state.currentDate || startDate;
+  const actualCompletion = timeline.completion
+    ? ` Actual completion: ${timeline.completion}.`
+    : "";
+
+  const progressPosition = `${progress}%`;
+  const submarine = row.querySelector(".timeline-submarine");
+  const fill = row.querySelector(".completion-timeline-fill");
+  if (submarine) submarine.style.left = progressPosition;
+  if (fill) fill.style.width = progressPosition;
+  row.setAttribute("aria-valuenow", String(Math.round(progress)));
+  row.setAttribute(
+    "aria-valuetext",
+    `${actor.spokenLabel}: ${startDate} to ${endDate}. Current story date: ${currentDate}. Projected completion: ${projectedDate}.${actualCompletion}`
+  );
+  setDateLabel(row.querySelector("[data-timeline-start]"), startDate, false);
+  setDateLabel(row.querySelector("[data-timeline-end]"), endDate, true);
+}
+
+function setDateLabel(element, value, animateChange) {
+  if (!element || element.textContent === value) return;
+  const hasPreviousValue = Boolean(element.textContent);
+  element.textContent = value;
+  if (!animateChange || !hasPreviousValue) return;
+  element.classList.remove("is-updating");
+  void element.offsetWidth;
+  element.classList.add("is-updating");
+  window.setTimeout(() => element.classList.remove("is-updating"), 450);
 }

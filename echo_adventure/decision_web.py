@@ -142,6 +142,7 @@ class _DecisionWebBuilder:
     def _build_base_schedule(self) -> dict[tuple[int, int], DecisionDefinition]:
         safe_definitions = [definition for definition in BASE_DEFINITIONS if not _has_follow_up(definition)]
         schedule: dict[tuple[int, int], DecisionDefinition] = {}
+        scheduled_counts = {definition.id: 0 for definition in BASE_DEFINITIONS}
         for day, count in self.question_counts.items():
             used: set[str] = set()
             for question_index in range(count):
@@ -150,6 +151,12 @@ class _DecisionWebBuilder:
                 # across the daily tick or the day-25 horizon.
                 pool = safe_definitions if question_index == count - 1 else list(BASE_DEFINITIONS)
                 available = [definition for definition in pool if definition.id not in used] or pool
+                least_uses = min(scheduled_counts[definition.id] for definition in available)
+                candidates = [
+                    definition
+                    for definition in available
+                    if scheduled_counts[definition.id] == least_uses
+                ]
                 rng = random.Random(
                     _stable_seed(
                         self.scenario.seed,
@@ -157,10 +164,10 @@ class _DecisionWebBuilder:
                         f"web-definition-{question_index}-attempt-{self.generation_attempt}",
                     )
                 )
-                weights = [max(0.0001, definition.weight) for definition in available]
-                definition = rng.choices(available, weights=weights, k=1)[0]
+                definition = rng.choice(candidates)
                 schedule[(day, question_index)] = definition
                 used.add(definition.id)
+                scheduled_counts[definition.id] += 1
         return schedule
 
     def _ensure_node(self, state: DecisionWebState) -> str:

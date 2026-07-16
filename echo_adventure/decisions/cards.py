@@ -30,7 +30,7 @@ _NEUTRAL_THRESHOLD = 0.15
 
 
 def generate_daily_decision_cards(state: SimulationState, config: GameConfig) -> list[DecisionCard]:
-    """Create two-to-four unique questions, including eligible follow-ups."""
+    """Create two-to-four varied questions, including eligible follow-ups."""
     incomplete = sorted(state.incomplete_jobs(), key=lambda job: (-job.remaining_days, job.id))
     if not incomplete:
         return []
@@ -54,12 +54,10 @@ def generate_daily_decision_cards(state: SimulationState, config: GameConfig) ->
     used_today = {definition.id for definition, _, _ in selected}
     assigned_jobs = {job.id for _, job, _ in selected}
     while len(selected) < count:
-        pool = _available_base_definitions(state, len(incomplete), used_today)
+        pool = _available_base_definitions(state, used_today)
         if not pool:
-            # This is possible only if the small endgame-safe subset has
-            # already filled today's card slots.
             break
-        definition = _weighted_choice(rng, pool, state)
+        definition = rng.choice(pool)
         job_pool = [job for job in incomplete if job.id not in assigned_jobs] or incomplete
         primary = rng.choice(job_pool)
         selected.append((definition, primary, None))
@@ -100,47 +98,24 @@ def _eligible_follow_ups(state: SimulationState) -> list[PendingFollowUp]:
 
 def _available_base_definitions(
     state: SimulationState,
-    incomplete_count: int,
     used_today: set[str],
 ) -> list[DecisionDefinition]:
+    """Return the least-used definitions from the complete base catalog."""
     pool = [
         definition
         for definition in BASE_DEFINITIONS
         if definition.id not in used_today
     ]
-    if incomplete_count <= 2:
-        # As in the previous day-only generator, the final jobs receive only
-        # choices that cannot add time, preventing an intentionally bad answer
-        # from creating an unbounded run.
-        pool = [definition for definition in pool if _has_no_delay_choice(definition)]
-    return pool
+    if not pool:
+        return []
 
-
-def _has_no_delay_choice(definition: DecisionDefinition) -> bool:
-    return all(choice_schedule_score(definition, choice) >= -_NEUTRAL_THRESHOLD for choice in definition.choices)
-
-
-def _weighted_choice(
-    rng: random.Random,
-    definitions: list[DecisionDefinition],
-    state: SimulationState,
-) -> DecisionDefinition:
-    """Favor unseen catalog entries without making repeats impossible."""
-    appearances: dict[str, list[int]] = {}
+    appearances = {definition.id: 0 for definition in BASE_DEFINITIONS}
     for card in state.decision_cards.values():
-        if card.definition_id:
-            appearances.setdefault(card.definition_id, []).append(card.day)
+        if card.definition_id in appearances:
+            appearances[card.definition_id] += 1
 
-    weights = []
-    for definition in definitions:
-        seen_days = appearances.get(definition.id, [])
-        # Each prior appearance sharply reduces, but never eliminates, the
-        # chance of another draw. A separate recency penalty makes the kind of
-        # conspicuous back-to-back repetition from the 11-card bank very rare.
-        repeat_factor = 0.06 ** len(seen_days)
-        recency_factor = 0.2 if seen_days and state.current_day - max(seen_days) <= 3 else 1.0
-        weights.append(max(0.0001, definition.weight * repeat_factor * recency_factor))
-    return rng.choices(definitions, weights=weights, k=1)[0]
+    least_uses = min(appearances[definition.id] for definition in pool)
+    return [definition for definition in pool if appearances[definition.id] == least_uses]
 
 
 def _build_card(

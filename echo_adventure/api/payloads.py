@@ -13,17 +13,25 @@ class PayloadMixin:
         with self.lock:
             self._ensure_cards()
             snapshot = calculate_snapshot(self.player_state)
+            automated_snapshot = calculate_snapshot(self.automated_state)
             progress = self.current_decision_progress()
             payload: dict[str, Any] = {
                 "seed": self.seed,
                 "gameOver": self._game_over(),
                 "day": self.player_state.current_day,
                 "currentDate": self.config.date_label_for_day(self.player_state.current_day),
+                "scheduleStartDay": 1,
+                "scheduleStartDate": self.config.date_label_for_day(1),
+                "scheduleStartISO": self.config.start_date,
                 "jobCount": len(self.player_state.jobs),
                 "dayCycleDurationMs": self.config.day_cycle_duration_ms,
                 "dailySummaryCounterDurationMs": self.config.daily_summary_counter_duration_ms,
                 "projectedCompletion": self.config.date_label_for_day(snapshot.projected_completion_day),
                 "snapshot": self._snapshot_payload(snapshot, self.player_state),
+                "timelines": {
+                    "player": self._timeline_payload(snapshot, self.player_state),
+                    "echo": self._timeline_payload(automated_snapshot, self.automated_state),
+                },
                 "jobs": self._jobs_payload(),
                 "decisions": [self._card_payload(card, self.applied_choices.get(card.id)) for card in self.current_cards],
                 "decisionProgress": {
@@ -246,6 +254,39 @@ class PayloadMixin:
                 else None
             ),
             "finalScore": calculate_final_score(state),
+        }
+
+    def _timeline_payload(
+        self,
+        snapshot: MetricSnapshot,
+        state: SimulationState,
+    ) -> dict[str, Any]:
+        """Return an actor projection positioned against the shared story date."""
+        start_day = 1
+        story_day = max(start_day, self.player_state.current_day)
+        display_completion_day = max(story_day, snapshot.projected_completion_day)
+        represented_days = display_completion_day - start_day
+        if represented_days <= 0:
+            progress_percent = 100.0 if story_day >= display_completion_day else 0.0
+        else:
+            elapsed_days = max(0, story_day - start_day)
+            progress_percent = max(0.0, min(100.0, elapsed_days / represented_days * 100.0))
+        return {
+            "currentDay": state.current_day,
+            "currentDate": self.config.date_label_for_day(state.current_day),
+            "projectedCompletionDay": snapshot.projected_completion_day,
+            "projectedCompletion": self.config.date_label_for_day(
+                snapshot.projected_completion_day
+            ),
+            "displayCompletionDay": display_completion_day,
+            "displayCompletion": self.config.date_label_for_day(display_completion_day),
+            "completionDay": state.completion_day,
+            "completion": (
+                self.config.date_label_for_day(state.completion_day)
+                if state.completion_day is not None
+                else None
+            ),
+            "progressPercent": round(progress_percent, 4),
         }
 
     @staticmethod

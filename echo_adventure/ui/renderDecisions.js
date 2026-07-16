@@ -4,11 +4,11 @@ import { uiState } from "./state.js";
 import { $, escapeHtml } from "./html.js";
 import {
   currentOpenDecisionCard,
-  decisionModalBlocked,
-  decisionModalKey,
+  decisionInteractionBlocked,
   decisionProgress,
-  readyToAdvance,
+  nextDecisionIsDue,
   renderDayClock,
+  updateDayClock,
 } from "./dayClock.js";
 
 const callbacks = { choose: async () => null };
@@ -54,42 +54,27 @@ export function configureDecisionActions(overrides) {
   Object.assign(callbacks, overrides || {});
 }
 
-export function renderDecisions() {}
-
 export function renderInlineDecisions() {
   const body = $("inlineDecisionBody");
   if (!body || !uiState.state) return;
-  const next = currentOpenDecisionCard();
-  const status = readyToAdvance()
-    ? "Finishing today's work"
-    : "Workday in progress";
-  body.innerHTML = `
-    <div class="daily-overview">
-      ${renderDayClock(status, Boolean(next))}
-      ${next ? `<button class="primary decision-open-button" data-action="open-decision-modal">Open next decision</button>` : ""}
-    </div>
-  `;
-}
 
-export function openDecisionModal() {
-  if (decisionModalBlocked() || !currentOpenDecisionCard()) return;
-  uiState.decisionModalVisible = true;
-  uiState.decisionModalDismissedKey = null;
-  uiState.pendingChoice = null;
-  renderDecisionModal();
-}
+  if (!body.querySelector("[data-day-clock]")) {
+    body.innerHTML = `
+      <div class="daily-overview">
+        ${renderDayClock()}
+      </div>
+    `;
+  }
 
-export function closeDecisionModal() {
-  const card = currentOpenDecisionCard();
-  uiState.decisionModalVisible = false;
-  uiState.decisionModalDismissedKey = decisionModalKey(card);
-  uiState.pendingChoice = null;
-  renderDecisionModal();
+  updateDayClock(body);
 }
 
 export function selectPendingChoice(cardId, choiceId) {
   uiState.pendingChoice = { cardId, choiceId };
-  renderDecisionModal();
+  renderDecisionQueue();
+  const selectedButton = Array.from(document.querySelectorAll("#decisionQueueBody [data-choice-id]"))
+    .find(button => button.dataset.choiceId === choiceId);
+  selectedButton?.focus();
 }
 
 export async function submitDecision() {
@@ -98,30 +83,75 @@ export async function submitDecision() {
   await callbacks.choose(pending.cardId, pending.choiceId);
 }
 
-export function renderDecisionModal() {
-  const overlay = $("decisionModalOverlay");
-  const card = currentOpenDecisionCard();
-  if (!overlay || !card || !uiState.decisionModalVisible || decisionModalBlocked()) {
-    overlay?.classList.remove("active");
+export function renderDecisionQueue() {
+  const section = $("decisionQueueSection");
+  const body = $("decisionQueueBody");
+  if (!section || !body || !uiState.state) return;
+
+  const progress = decisionProgress();
+  const blocked = decisionInteractionBlocked();
+  const due = nextDecisionIsDue();
+  const card = due && !blocked ? currentOpenDecisionCard() : null;
+  const pendingChoiceId = card && uiState.pendingChoice?.cardId === card.id
+    ? uiState.pendingChoice.choiceId
+    : "";
+  const mode = card ? "active" : blocked ? "blocked" : "idle";
+  const renderKey = JSON.stringify([
+    uiState.runCycleId,
+    uiState.state.seed,
+    uiState.state.day,
+    mode,
+    progress.completed,
+    progress.total,
+    card?.id || "",
+    pendingChoiceId,
+  ]);
+
+  section.classList.toggle("is-empty", !card);
+  if (body.dataset.renderKey === renderKey) return;
+  body.dataset.renderKey = renderKey;
+
+  if (!card) {
+    body.innerHTML = `<div class="decision-queue-empty">No decision currently requires your attention.</div>`;
+
     return;
   }
-  overlay.classList.add("active");
-  $("decisionModalTitle").textContent = card.title;
-  $("decisionModalBody").innerHTML = `
-    <p class="decision-question-copy">${escapeHtml(card.description)}</p>
-    <div class="decision-choice-list">
-      ${card.choices.map(choice => {
-        const selected = uiState.pendingChoice?.cardId === card.id && uiState.pendingChoice?.choiceId === choice.id;
-        return `
-          <button class="decision-choice ${selected ? "selected" : ""}" onclick="selectPendingChoice('${card.id}', '${choice.id}')">
-            ${renderChoiceIcon(choice.icon)}
-            <span class="decision-choice-label">${escapeHtml(choice.label)}</span>
-          </button>
-        `;
-      }).join("")}
-    </div>
-  `;
-  $("decisionModalFooter").innerHTML = `
-    <button class="primary" onclick="submitDecision()" ${uiState.pendingChoice ? "" : "disabled"}>Confirm response</button>
+
+  body.innerHTML = `
+    <article class="decision-queue-card">
+      <div>
+        <h3>${escapeHtml(card.title)}</h3>
+        <p class="decision-question-copy">${escapeHtml(card.description)}</p>
+      </div>
+
+      <div class="decision-choice-list">
+        ${card.choices.map(choice => {
+          const selected =
+            uiState.pendingChoice?.cardId === card.id &&
+            uiState.pendingChoice?.choiceId === choice.id;
+
+          return `
+            <button
+              class="decision-choice ${selected ? "selected" : ""}"
+              data-choice-id="${escapeHtml(choice.id)}"
+              onclick="selectPendingChoice('${card.id}', '${choice.id}')"
+            >
+              ${renderChoiceIcon(choice.icon)}
+              <span class="decision-choice-label">${escapeHtml(choice.label)}</span>
+            </button>
+          `;
+        }).join("")}
+      </div>
+
+      <div class="decision-queue-actions">
+        <button
+          class="primary"
+          onclick="submitDecision()"
+          ${uiState.pendingChoice ? "" : "disabled"}
+        >
+          Confirm response
+        </button>
+      </div>
+    </article>
   `;
 }

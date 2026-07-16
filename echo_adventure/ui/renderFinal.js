@@ -249,7 +249,7 @@ function renderFinalMetricBar(player, automated) {
       label: "Completion",
       playerValue: player.completion || "-",
       echoValue: automated.completion || "-",
-      tone: "good",
+      tone: "neutral",
     },
     {
       label: "Completion Day",

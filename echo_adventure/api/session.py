@@ -9,7 +9,7 @@ from ..config import GameConfig, resolve_seed
 from ..decision_web import DecisionWebTransition, generate_decision_web
 from ..decisions import apply_choice as apply_decision_choice
 from ..decisions import generate_daily_decision_cards
-from ..echo import run_omniscient_echo
+from ..echo import advance_omniscient_day, apply_omniscient_choice
 from ..models import DecisionCard, DecisionProgress
 from ..scenario_generator import generate_scenario
 from ..simulation import DayResult, advance_day as simulate_day, initialize_state
@@ -29,6 +29,9 @@ class GameSession(PayloadMixin, ReviewMixin):
         self.automated_state.is_echo_benchmark = True
         self.player_node_id = self.decision_web.root_node_id
         self.pending_player_transition: DecisionWebTransition | None = None
+        self.echo_node_id: str | None = self.decision_web.root_node_id
+        self.pending_echo_transition: DecisionWebTransition | None = None
+        self.echo_choices_applied_today = 0
         self.player_in_overtime = False
         self.overtime_cards: list[DecisionCard] = []
         self.overtime_card_index = 0
@@ -41,7 +44,6 @@ class GameSession(PayloadMixin, ReviewMixin):
         self.last_result: DayResult | None = None
         self.last_summary_puzzle: dict[str, Any] | None = None
         self.day_completed_before: set[str] = set(self.player_state.completed_jobs)
-        run_omniscient_echo(self.automated_state, self.decision_web)
         self._ensure_cards()
 
     def apply_choice(self, card_id: str, choice_id: str) -> dict[str, Any]:
@@ -67,6 +69,7 @@ class GameSession(PayloadMixin, ReviewMixin):
             self.applied_choices[card.id] = choice.id
             self.choice_notes.append(f"{card.title}: {choice.label}. {note}")
             self.questions_answered_today += 1
+            self._apply_echo_choice(self.questions_answered_today)
             self.current_cards = []
             if self.player_in_overtime:
                 self.overtime_card_index += 1
@@ -95,6 +98,7 @@ class GameSession(PayloadMixin, ReviewMixin):
                 raise ValueError("Select a response for all decisions before advancing the day.")
             if self.player_in_overtime:
                 self._record_player_day()
+                self._advance_echo_day()
                 self._reset_daily_choices()
                 if self._game_over():
                     self._finish_automated()
@@ -106,6 +110,7 @@ class GameSession(PayloadMixin, ReviewMixin):
             if transition is None:
                 raise RuntimeError("The completed question sequence has no daily web transition.")
             self._record_player_day()
+            self._advance_echo_day()
             self._reset_daily_choices()
             self.pending_player_transition = None
             if transition.next_node_id is not None:
@@ -169,6 +174,46 @@ class GameSession(PayloadMixin, ReviewMixin):
         )
         self.day_completed_before = set(self.player_state.completed_jobs)
 
+    def _apply_echo_choice(self, player_slot: int) -> None:
+        """Apply ECHO's independent optimal answer for the matching daily slot."""
+        if self.automated_state.final_item_completed:
+            return
+        expected_slot = self.echo_choices_applied_today + 1
+        if player_slot != expected_slot:
+            raise RuntimeError(
+                f"ECHO decision slot mismatch: expected {expected_slot}, received {player_slot}."
+            )
+        if self.pending_echo_transition is not None or self.echo_node_id is None:
+            raise RuntimeError("ECHO has no unapplied decision for this daily slot.")
+
+        transition = apply_omniscient_choice(
+            self.automated_state,
+            self.decision_web,
+            self.echo_node_id,
+        )
+        self.echo_choices_applied_today += 1
+        if transition.advances_day:
+            self.pending_echo_transition = transition
+            self.echo_node_id = None
+        else:
+            if transition.next_node_id is None:
+                raise RuntimeError("ECHO's non-daily transition has no successor.")
+            self.echo_node_id = transition.next_node_id
+
+    def _advance_echo_day(self) -> None:
+        """Perform ECHO's remaining once-per-day work without replaying choices."""
+        if self.automated_state.final_item_completed:
+            return
+        if self.echo_choices_applied_today != self.decision_total_today:
+            raise RuntimeError("ECHO has not applied every expected decision for the day.")
+        transition = self.pending_echo_transition
+        if transition is None:
+            raise RuntimeError("ECHO's completed question sequence has no daily transition.")
+
+        self.echo_node_id = advance_omniscient_day(self.automated_state, transition)
+        self.pending_echo_transition = None
+        self.echo_choices_applied_today = 0
+
     def _reset_daily_choices(self) -> None:
         self.current_cards = []
         self.applied_choices = {}
@@ -189,7 +234,7 @@ class GameSession(PayloadMixin, ReviewMixin):
 
     def _finish_automated(self) -> None:
         if not self.automated_state.final_item_completed:
-            raise RuntimeError("ECHO's startup-solved web traversal did not complete.")
+            raise RuntimeError("ECHO's incremental solved-web traversal did not complete.")
 
 
 class SessionStore:
