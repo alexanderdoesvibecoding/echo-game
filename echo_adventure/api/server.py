@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -34,6 +38,43 @@ STATIC_ASSETS = {
     "/ui/submarineVisual.js": ("application/javascript; charset=utf-8", UI_DIR / "submarineVisual.js"),
     "/ui/styles.css": ("text/css; charset=utf-8", UI_DIR / "styles.css"),
 }
+
+
+@contextmanager
+def _initialization_status() -> Iterator[None]:
+    """Show a compact status animation while the initial game is generated."""
+    stream = sys.stdout
+    interactive = stream.isatty()
+    stop_animation = threading.Event()
+    animation_thread: threading.Thread | None = None
+    completed = False
+
+    if interactive:
+        def animate() -> None:
+            dot_count = 1
+            while not stop_animation.is_set():
+                dots = "." * dot_count
+                stream.write(f"\rInitializing{dots:<3}")
+                stream.flush()
+                dot_count = (dot_count % 3) + 1
+                stop_animation.wait(0.4)
+
+        animation_thread = threading.Thread(target=animate, daemon=True)
+        animation_thread.start()
+    else:
+        print("Initializing...", file=stream, flush=True)
+
+    try:
+        yield
+        completed = True
+    finally:
+        if animation_thread is not None:
+            stop_animation.set()
+            animation_thread.join()
+            stream.write(f"\r{'':<15}\r")
+            stream.flush()
+        if completed:
+            print("✓ Initialized", file=stream, flush=True)
 
 
 class GameRequestHandler(BaseHTTPRequestHandler):
@@ -123,15 +164,24 @@ def run_ui_server(seed: int | None = None, host: str = "127.0.0.1", port: int = 
     # A fresh handler subclass lets us attach a mutable class-level session owner
     # without modifying BaseHTTPRequestHandler itself.
     handler = type("SessionHandler", (GameRequestHandler,), {})
-    handler.session_store = SessionStore(seed=seed)
-    server = ThreadingHTTPServer((host, port), handler)
-    url = f"http://{host}:{port}"
-    print(f"ECHO Adventure UI running at {url} (normal mode)")
-    print("Press Ctrl+C to stop.")
+    server: ThreadingHTTPServer | None = None
+    interrupted = False
     try:
+        with _initialization_status():
+            handler.session_store = SessionStore(seed=seed)
+        server = ThreadingHTTPServer((host, port), handler)
+        url = f"http://{host}:{port}"
+        print(f"ECHO Adventure UI running at {url} (normal mode)")
+        print("Press Ctrl+C to stop.")
         server.serve_forever()
+    except KeyboardInterrupt:
+        interrupted = True
+        print("\nShutting down...")
     finally:
-        server.server_close()
+        if server is not None:
+            server.server_close()
+    if interrupted:
+        print("ECHO Adventure stopped.")
 
 
 def main(argv: list[str] | None = None) -> None:
