@@ -100,14 +100,21 @@
         <button id="closeNewRunModalBtn" class="icon-button" title="Close new run settings" onclick="closeNewRunModal()">×</button>
       </div>
       <div class="modal-body">
-        <div class="settings-form">
+        <div id="newRunSettings" class="settings-form">
           <p class="subtle">Start a fresh standard run with a newly generated seed.</p>
           <div id="newRunError" class="modal-error hidden"></div>
         </div>
+        <div id="newRunLoading" class="new-run-loading hidden" role="status" aria-live="polite">
+          <span class="loading-spinner" aria-hidden="true"></span>
+          <div>
+            <strong>Generating game…</strong>
+            <p>Please wait, this should only take a moment.</p>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
-        <button onclick="closeNewRunModal()">Cancel</button>
-        <button class="primary" onclick="startNewRun()">Start Game</button>
+        <button id="cancelNewRunBtn" onclick="closeNewRunModal()">Cancel</button>
+        <button id="startNewRunBtn" class="primary" onclick="startNewRun()">Start Game</button>
       </div>
     </div>
   </div>

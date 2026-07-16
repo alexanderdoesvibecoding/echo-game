@@ -58,6 +58,12 @@ async function loadState() {
 }
 
 async function startNewRun() {
+  if (uiState.newRunLoading) return;
+
+  uiState.newRunLoading = true;
+  showNewRunError("");
+  renderNewRunModal();
+
   try {
     uiState.state = await api("/api/new", {
       method: "POST",
@@ -69,11 +75,14 @@ async function startNewRun() {
     uiState.summaryAnimationKey = null;
     uiState.welcomeModalVisible = true;
     uiState.newRunModalVisible = false;
+    uiState.newRunLoading = false;
     $("inlineDecisionBody").replaceChildren();
     showNewRunError("");
     showError("");
     render();
   } catch (error) {
+    uiState.newRunLoading = false;
+    renderNewRunModal();
     if (uiState.newRunModalVisible) {
       showNewRunError(error.message);
     } else {

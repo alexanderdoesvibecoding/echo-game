@@ -72,6 +72,7 @@ export function openNewRunModal() {
 }
 
 export function closeNewRunModal() {
+  if (uiState.newRunLoading) return;
   uiState.newRunModalVisible = false;
   callbacks.showNewRunError("");
   renderNewRunModal();
@@ -82,6 +83,15 @@ export function renderNewRunModal() {
   const overlay = $("newRunModalOverlay");
   if (!overlay) return;
   overlay.classList.toggle("active", uiState.newRunModalVisible);
+  overlay.setAttribute("aria-busy", uiState.newRunLoading ? "true" : "false");
+
+  $("newRunSettings")?.classList.toggle("hidden", uiState.newRunLoading);
+  $("newRunLoading")?.classList.toggle("hidden", !uiState.newRunLoading);
+
+  for (const id of ["closeNewRunModalBtn", "cancelNewRunBtn", "startNewRunBtn"]) {
+    const button = $(id);
+    if (button) button.disabled = uiState.newRunLoading;
+  }
 }
 
 export function initDarkMode() {
