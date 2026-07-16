@@ -27,7 +27,7 @@
         - [x] Remove the live updates
         - [x] Gray out main submarine, gets filled in as jobs are completed
 
-- [ ] Decisions update
+- [x] Decisions update
     - [x] Fix the issue where the same decisions repeat – Matt
     - [x] Add more icons and symbols to decisions – Ethan
 
