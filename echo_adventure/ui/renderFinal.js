@@ -244,18 +244,23 @@ function renderDecisionScoreChart(history) {
 }
 
 function renderFinalMetricBar(player, automated) {
+  const playerCompletionDay = numberOrNull(player.completionDay);
+  const echoCompletionDay = numberOrNull(automated.completionDay);
+  const completionTone = playerCompletionDay === null || echoCompletionDay === null
+    ? "neutral"
+    : playerCompletionDay < echoCompletionDay
+      ? "good"
+      : playerCompletionDay === echoCompletionDay
+        ? "warn"
+        : "danger";
   const metricCards = [
     {
-      label: "Completion",
+      label: "Completion date",
       playerValue: player.completion || "-",
+      playerDetail: playerCompletionDay === null ? "Day -" : `Day ${playerCompletionDay}`,
       echoValue: automated.completion || "-",
-      tone: "neutral",
-    },
-    {
-      label: "Completion Day",
-      playerValue: String(player.completionDay || "-"),
-      echoValue: String(automated.completionDay || "-"),
-      tone: Number(player.completionDay || Infinity) <= Number(automated.completionDay || Infinity) ? "good" : "warn",
+      echoDetail: echoCompletionDay === null ? "Day -" : `Day ${echoCompletionDay}`,
+      tone: completionTone,
     },
     {
       label: "Decision Score",
@@ -273,7 +278,10 @@ function renderFinalMetricBar(player, automated) {
       <div class="metric-value-row final-metric-value-row">
         <strong>${escapeHtml(metric.playerValue)}</strong>
       </div>
-      <div class="final-metric-benchmark">ECHO ${escapeHtml(metric.echoValue)}</div>
+      ${metric.playerDetail ? `<div class="final-metric-secondary">${escapeHtml(metric.playerDetail)}</div>` : ""}
+      <div class="final-metric-benchmark">
+        ECHO ${escapeHtml(metric.echoValue)}${metric.echoDetail ? ` <span aria-hidden="true">&middot;</span> ${escapeHtml(metric.echoDetail)}` : ""}
+      </div>
     </div>
   `).join("");
 }

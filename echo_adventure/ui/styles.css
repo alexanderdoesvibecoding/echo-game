@@ -1128,6 +1128,13 @@ tr:last-child td { border-bottom: none; }
 .final-metric-value-row strong {
   font-size: 24px;
 }
+.final-metric-secondary {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.2;
+}
 .final-metric-benchmark {
   margin-top: 6px;
   color: var(--muted);
