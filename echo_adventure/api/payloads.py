@@ -264,13 +264,23 @@ class PayloadMixin:
         """Return an actor projection positioned against the shared story date."""
         start_day = 1
         story_day = max(start_day, self.player_state.current_day)
-        display_completion_day = max(story_day, snapshot.projected_completion_day)
-        represented_days = display_completion_day - start_day
-        if represented_days <= 0:
-            progress_percent = 100.0 if story_day >= display_completion_day else 0.0
+        if snapshot.final_item_completed and state.completion_day is not None:
+            # A finished actor's endpoint is its actual completion day. Using the
+            # advancing story day here made ECHO's displayed ECD keep moving after
+            # ECHO had finished and repeatedly rescaled the completed timeline.
+            display_completion_day = state.completion_day
+            progress_percent = 100.0
         else:
-            elapsed_days = max(0, story_day - start_day)
-            progress_percent = max(0.0, min(100.0, elapsed_days / represented_days * 100.0))
+            display_completion_day = max(story_day, snapshot.projected_completion_day)
+            represented_days = display_completion_day - start_day
+            if represented_days <= 0:
+                progress_percent = 100.0 if story_day >= display_completion_day else 0.0
+            else:
+                elapsed_days = max(0, story_day - start_day)
+                progress_percent = max(
+                    0.0,
+                    min(100.0, elapsed_days / represented_days * 100.0),
+                )
         return {
             "currentDay": state.current_day,
             "currentDate": self.config.date_label_for_day(state.current_day),
