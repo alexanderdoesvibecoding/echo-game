@@ -294,6 +294,7 @@ export function renderSummaryModal() {
   const summary = payload.lastSummary;
   const overlay = document.getElementById("summaryModalOverlay");
   const body = document.getElementById("summaryModalBody");
+  const title = document.getElementById("summaryModalTitle");
   if (!overlay || !body) return;
   if (!summary || !uiState.modalVisible) {
     overlay.classList.remove("active");
@@ -303,6 +304,9 @@ export function renderSummaryModal() {
   // The day has already been simulated on the server, but the summary modal
   // lets the player read consequences before committing that uiState.state locally.
   overlay.classList.add("active");
+  if (title) {
+    title.textContent = summary.date ? `Daily Summary - ${summary.date}` : "Daily Summary";
+  }
   const animationKey = summaryAnimationKey(payload, summary);
   if (uiState.summaryAnimationKey !== animationKey || !body.innerHTML) {
     uiState.summaryAnimationKey = animationKey;

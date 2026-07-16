@@ -7,7 +7,6 @@ import {
   decisionInteractionBlocked,
   decisionProgress,
   nextDecisionIsDue,
-  readyToAdvance,
   renderDayClock,
   updateDayClock,
 } from "./dayClock.js";
@@ -48,18 +47,18 @@ export async function submitDecision() {
 }
 
 export function renderDecisionQueue() {
+  const section = $("decisionQueueSection");
   const body = $("decisionQueueBody");
-  if (!body || !uiState.state) return;
+  if (!section || !body || !uiState.state) return;
 
   const progress = decisionProgress();
   const blocked = decisionInteractionBlocked();
   const due = nextDecisionIsDue();
   const card = due && !blocked ? currentOpenDecisionCard() : null;
-  const ready = readyToAdvance();
   const pendingChoiceId = card && uiState.pendingChoice?.cardId === card.id
     ? uiState.pendingChoice.choiceId
     : "";
-  const mode = card ? "active" : ready ? "complete" : blocked ? "blocked" : "idle";
+  const mode = card ? "active" : blocked ? "blocked" : "idle";
   const renderKey = JSON.stringify([
     uiState.runCycleId,
     uiState.state.seed,
@@ -70,13 +69,13 @@ export function renderDecisionQueue() {
     card?.id || "",
     pendingChoiceId,
   ]);
+
+  section.classList.toggle("is-empty", !card);
   if (body.dataset.renderKey === renderKey) return;
   body.dataset.renderKey = renderKey;
 
   if (!card) {
-    body.innerHTML = ready
-      ? `<div class="decision-queue-empty">All decisions for today are complete.</div>`
-      : `<div class="decision-queue-empty">No decision currently requires your attention.</div>`;
+    body.innerHTML = `<div class="decision-queue-empty">No decision currently requires your attention.</div>`;
 
     return;
   }

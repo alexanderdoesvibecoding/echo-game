@@ -115,9 +115,9 @@
   <script type="module" src="/ui/app.js"></script>
 
   <!-- End-of-day modal (centered) -->
-  <div id="summaryModalOverlay" class="modal-overlay" role="dialog" aria-modal="true">
+  <div id="summaryModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="summaryModalTitle">
     <div class="modal summary-modal">
-      <h1>Daily Summary</h1>
+      <h1 id="summaryModalTitle">Daily Summary</h1>
       <div class="modal-body" id="summaryModalBody"></div>
       <div class="modal-footer">
         <button id="modalAdvanceBtn" class="primary" onclick="commitAdvanceDay()">Advance Day</button>

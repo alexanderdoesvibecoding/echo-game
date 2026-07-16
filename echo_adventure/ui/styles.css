@@ -341,7 +341,7 @@ button:disabled { opacity: 0.48; cursor: not-allowed; }
   grid-template-areas: "puzzle queue";
   grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
   gap: 16px;
-  align-items: stretch;
+  align-items: start;
 }
 
 #summarySection {
@@ -368,6 +368,10 @@ button:disabled { opacity: 0.48; cursor: not-allowed; }
   min-width: 0;
   position: sticky;
   top: 92px;
+}
+
+.decision-queue-section.is-empty {
+  align-self: stretch;
 }
 
 .decision-queue-body {
