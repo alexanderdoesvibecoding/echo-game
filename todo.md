@@ -29,7 +29,7 @@
 
 - [ ] Decisions update
     - [x] Fix the issue where the same decisions repeat – Matt
-    - [ ] Add more icons and symbols to decisions – Ethan
+    - [x] Add more icons and symbols to decisions – Ethan
 
 - [ ] Final summary update
     - [ ] Make score easier to understand – Alexander
