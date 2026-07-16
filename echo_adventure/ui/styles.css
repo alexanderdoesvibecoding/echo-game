@@ -123,15 +123,6 @@ html[data-theme="dark"] .decision.done {
   background: #132a26;
 }
 
-html[data-theme="dark"] .decision-prompt {
-  background: #252d38;
-  border-color: #3a4352;
-}
-
-html[data-theme="dark"] .decision-prompt p {
-  color: #f0f3f5;
-}
-
 html[data-theme="dark"] .completion-timeline-track {
   background: var(--timeline-track);
   border-color: #3a4352;
@@ -145,15 +136,6 @@ html[data-theme="dark"] .choice {
 
 html[data-theme="dark"] .choice.selected {
   background: #12372f;
-  border-color: var(--green);
-}
-
-html[data-theme="dark"] .decision-option .choice-radio {
-  background: #1a202a;
-  border-color: #667085;
-}
-
-html[data-theme="dark"] .decision-option.selected .choice-radio {
   border-color: var(--green);
 }
 
@@ -353,6 +335,87 @@ button {
 button.primary { background: var(--teal); color: #fff; border-color: var(--teal); }
 button.primary:hover { background: var(--teal-dark); }
 button:disabled { opacity: 0.48; cursor: not-allowed; }
+
+.game-area {
+  display: grid;
+  grid-template-areas: "puzzle queue";
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  gap: 16px;
+  align-items: stretch;
+}
+
+#summarySection {
+  grid-area: puzzle;
+}
+
+#summarySection .summary-grid {
+  padding: 10px;
+}
+
+#summarySection .puzzle-stage {
+  gap: 10px;
+  padding: 10px;
+}
+
+#summarySection .puzzle-assembled-row {
+  width: min(100%, 700px);
+}
+
+.decision-queue-section {
+  grid-area: queue;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  position: sticky;
+  top: 92px;
+}
+
+.decision-queue-body {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  min-height: 190px;
+}
+
+.decision-queue-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-height: 150px;
+  padding: 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.decision-queue-card {
+  display: grid;
+  gap: 12px;
+}
+
+.decision-queue-card h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  text-transform: none;
+}
+
+.decision-queue-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+  .game-area {
+    grid-template-areas:
+      "queue"
+      "puzzle";
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .decision-queue-section {
+    position: static;
+  }
+}
 
 main {
   display: grid;
@@ -814,15 +877,6 @@ tr:last-child td { border-bottom: none; }
   display: grid;
   gap: 10px;
 }
-.day-clock-row {
-  display: flex;
-  justify-content: flex-start;
-  gap: 10px;
-  align-items: center;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-}
 .completion-timelines {
   display: grid;
   gap: 18px;
@@ -830,7 +884,6 @@ tr:last-child td { border-bottom: none; }
 }
 .completion-timeline {
   --timeline-color: var(--timeline-player);
-  --timeline-progress: 0%;
   --timeline-submarine-width: clamp(52px, 9vw, 76px);
   display: grid;
   grid-template-columns: 54px minmax(0, 1fr);
@@ -860,7 +913,7 @@ tr:last-child td { border-bottom: none; }
 .timeline-submarine {
   position: absolute;
   top: 0;
-  left: var(--timeline-progress);
+  left: 0;
   z-index: 2;
   display: block;
   width: var(--timeline-submarine-width);
@@ -889,7 +942,7 @@ tr:last-child td { border-bottom: none; }
   overflow: hidden;
 }
 .completion-timeline-fill {
-  width: var(--timeline-progress);
+  width: 0;
   height: 100%;
   border-radius: inherit;
   background: var(--timeline-color);
@@ -1584,92 +1637,6 @@ html[data-theme="dark"] .puzzle-added {
 .summary-modal .puzzle-added {
   margin-top: 4px;
 }
-.decision-modal {
-  display: flex;
-  flex-direction: column;
-  max-width: 560px;
-  max-height: calc(100dvh - 48px);
-  overflow: hidden;
-}
-.decision-modal-heading {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-}
-.decision-modal-body {
-  display: grid;
-  gap: 12px;
-  min-height: 0;
-  max-height: none !important;
-  overflow-y: auto !important;
-  padding-right: 4px;
-}
-.decision-modal .modal-footer {
-  flex: 0 0 auto;
-}
-.decision-prompt {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 12px;
-  background: #fbfcfe;
-}
-.decision-prompt p {
-  margin: 10px 0 0;
-  color: var(--ink);
-}
-.decision-modal-choices {
-  grid-template-columns: 1fr;
-  padding: 0;
-  gap: 8px;
-}
-.decision-modal-choices .choice {
-  min-height: 52px;
-  margin: 0;
-  padding: 12px;
-}
-.decision-option {
-  border-color: var(--line);
-  background: #fff;
-}
-.decision-option.selected {
-  border-color: var(--green);
-  background: #eef8f4;
-  box-shadow: inset 0 0 0 1px var(--green);
-}
-.decision-option-content {
-  display: grid;
-  grid-template-columns: 22px auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-}
-.decision-option .choice-icon {
-  margin: 0;
-}
-.choice-radio {
-  width: 18px;
-  height: 18px;
-  border: 2px solid #9aa6b2;
-  border-radius: 50%;
-  background: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.choice-radio::after {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--green);
-  opacity: 0;
-}
-.decision-option.selected .choice-radio {
-  border-color: var(--green);
-}
-.decision-option.selected .choice-radio::after {
-  opacity: 1;
-}
 .welcome-modal {
   max-width: 760px;
 }
@@ -1782,9 +1749,6 @@ html[data-theme="dark"] #closeWelcomeBtn {
 .daily-overview {
   display: grid;
   gap: 18px;
-}
-.decision-open-button {
-  justify-self: start;
 }
 .decision-question-copy {
   font-size: 1.05rem;

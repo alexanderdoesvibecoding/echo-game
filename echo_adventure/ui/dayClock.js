@@ -1,7 +1,6 @@
 "use strict";
 
 import { uiState } from "./state.js";
-import { escapeHtml } from "./html.js";
 import { SUBMARINE_IMAGE_SRC } from "./submarineVisual.js";
 
 const DEFAULT_DAY_CYCLE_DURATION_MS = 8000;
@@ -13,6 +12,7 @@ const TIMELINE_ACTORS = [
 const callbacks = {
   render: () => {},
   renderInlineDecisions: () => {},
+  renderDecisionQueue: () => {},
   prepareAdvanceDay: () => {},
   showError: () => {},
 };
@@ -50,8 +50,6 @@ export function syncDayCycleForState() {
     uiState.dayCycleLastTick = performance.now();
     uiState.dayCycleAdvancing = false;
     uiState.dayDecisionThresholds = buildThresholds(decisionProgress().total);
-    uiState.decisionModalVisible = false;
-    uiState.decisionModalDismissedKey = null;
   }
   if (!uiState.dayCycleTimer) {
     uiState.dayCycleTimer = window.setInterval(tick, TICK_MS);
@@ -80,27 +78,19 @@ function tick() {
   if (!cycleBlocked()) {
     uiState.dayCycleProgress = Math.min(100, uiState.dayCycleProgress + elapsed / dayDurationMs() * 100);
   }
-  if (nextDecisionIsDue()) {
-    const card = currentOpenDecisionCard();
-    const key = decisionModalKey(card);
-    if (card && uiState.decisionModalDismissedKey !== key && !uiState.decisionModalVisible) {
-      uiState.decisionModalVisible = true;
-      callbacks.render();
-      return;
-    }
-  }
+
   if (uiState.dayCycleProgress >= 100 && readyToAdvance() && !uiState.dayCycleAdvancing && !uiState.pendingAdvanceState) {
     uiState.dayCycleAdvancing = true;
     callbacks.prepareAdvanceDay();
     return;
   }
   callbacks.renderInlineDecisions();
+  callbacks.renderDecisionQueue();
 }
 
 function cycleBlocked() {
   return uiState.welcomeModalVisible
     || uiState.newRunModalVisible
-    || uiState.decisionModalVisible
     || nextDecisionIsDue()
     || Boolean(uiState.pendingAdvanceState);
 }
@@ -124,18 +114,13 @@ export function currentOpenDecisionCard() {
   return uiState.state?.decisions?.find(card => !card.selectedChoice) || null;
 }
 
-export function decisionModalKey(card) {
-  return card ? `${uiState.state?.day}:${card.id}` : "";
-}
-
-export function decisionModalBlocked() {
+export function decisionInteractionBlocked() {
   return !uiState.state || uiState.state.gameOver || uiState.welcomeModalVisible || uiState.newRunModalVisible;
 }
 
-export function renderDayClock(statusText) {
+export function renderDayClock() {
   return `
     <div class="day-clock" data-day-clock>
-      <div class="day-clock-row"><span data-workday-status>${escapeHtml(statusText)}</span></div>
       <div class="completion-timelines" role="group" aria-label="Estimated completion timelines">
         ${TIMELINE_ACTORS.map(renderTimelineRow).join("")}
       </div>
@@ -143,11 +128,9 @@ export function renderDayClock(statusText) {
   `;
 }
 
-export function updateDayClock(root, statusText) {
+export function updateDayClock(root) {
   const clock = root?.querySelector?.("[data-day-clock]");
   if (!clock || !uiState.state) return;
-  const status = clock.querySelector("[data-workday-status]");
-  if (status) status.textContent = statusText;
   for (const actor of TIMELINE_ACTORS) {
     updateTimelineRow(clock, actor);
   }
@@ -189,7 +172,11 @@ function updateTimelineRow(clock, actor) {
     ? ` Actual completion: ${timeline.completion}.`
     : "";
 
-  row.style.setProperty("--timeline-progress", `${progress}%`);
+  const progressPosition = `${progress}%`;
+  const submarine = row.querySelector(".timeline-submarine");
+  const fill = row.querySelector(".completion-timeline-fill");
+  if (submarine) submarine.style.left = progressPosition;
+  if (fill) fill.style.width = progressPosition;
   row.setAttribute("aria-valuenow", String(Math.round(progress)));
   row.setAttribute(
     "aria-valuetext",

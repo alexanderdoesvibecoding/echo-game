@@ -4,8 +4,6 @@ export const uiState = {
   state: null,
   welcomeModalVisible: false,
   newRunModalVisible: false,
-  decisionModalVisible: false,
-  decisionModalDismissedKey: null,
   settingsMenuOpen: false,
   runCycleId: 0,
   dayCycleKey: null,

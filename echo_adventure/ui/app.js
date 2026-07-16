@@ -18,11 +18,8 @@ import {
 } from "./modals.js";
 import { hideDecisionChartTooltip, renderFinal, showDecisionChartTooltip } from "./renderFinal.js";
 import {
-  closeDecisionModal,
   configureDecisionActions,
-  openDecisionModal,
-  renderDecisionModal,
-  renderDecisions,
+  renderDecisionQueue,
   renderInlineDecisions,
   selectPendingChoice,
   submitDecision,
@@ -69,8 +66,6 @@ async function startNewRun() {
     uiState.runCycleId += 1;
     resetDayCycle();
     uiState.pendingChoice = null;
-    uiState.decisionModalVisible = false;
-    uiState.decisionModalDismissedKey = null;
     uiState.summaryAnimationKey = null;
     uiState.welcomeModalVisible = true;
     uiState.newRunModalVisible = false;
@@ -94,8 +89,6 @@ async function choose(cardId, choiceId, renderAfter = true) {
       body: JSON.stringify({ cardId, choiceId })
     });
     uiState.pendingChoice = null;
-    uiState.decisionModalVisible = false;
-    uiState.decisionModalDismissedKey = null;
     showError("");
     if (renderAfter) {
       render();
@@ -148,20 +141,20 @@ function render() {
   $("dayBadge").textContent = uiState.state.currentDate || "Schedule";
   renderMainSectionVisibility();
 
-  renderDecisions();
   renderInlineDecisions();
   renderSummary();
   renderSummaryModal();
   renderFinal();
   renderWelcomeModal();
   renderNewRunModal();
-  renderDecisionModal();
+  renderDecisionQueue();
   renderSettingsMenu();
 }
 
 function renderMainSectionVisibility() {
   const gameOver = Boolean(uiState.state.gameOver);
   $("dailyDecisionSection").classList.toggle("hidden", gameOver);
+  $("game-area").classList.toggle("hidden", gameOver);
 }
 
 configureDayClock({
@@ -169,41 +162,23 @@ configureDayClock({
   renderInlineDecisions,
   prepareAdvanceDay,
   showError,
+  renderDecisionQueue,
 });
 configureDecisionActions({ choose });
-configureModals({ renderDecisionModal, showNewRunError });
+configureModals({ renderDecisionQueue, showNewRunError });
 
 $("settingsMenuBtn").addEventListener("click", toggleSettingsMenu);
 $("openNewRunModalBtn").addEventListener("click", openNewRunModal);
 $("themeMenuBtn").addEventListener("click", toggleDarkMode);
 
-document.addEventListener("pointerdown", (e) => {
-  const target = e.target instanceof Element ? e.target : null;
-  if (!target?.closest('[data-action="open-decision-modal"]')) return;
-  e.preventDefault();
-  openDecisionModal();
-});
-
-document.addEventListener("click", (e) => {
-  const target = e.target instanceof Element ? e.target : null;
-  const welcomeOverlay = document.getElementById("welcomeModalOverlay");
-  const newRunOverlay = document.getElementById("newRunModalOverlay");
+document.addEventListener("click", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
   const settingsWrap = document.querySelector(".settings-wrap");
+  const welcomeOverlay = $("welcomeModalOverlay");
+  const newRunOverlay = $("newRunModalOverlay");
+
   if (settingsWrap && target && !settingsWrap.contains(target)) {
     closeSettingsMenu();
-  }
-  if (target?.closest('[data-action="open-decision-modal"]')) {
-    openDecisionModal();
-    return;
-  }
-  if (target && target.id === "closeWelcomeBtn") {
-    closeWelcomeModal();
-  }
-  if (target && target.id === "closeNewRunModalBtn") {
-    closeNewRunModal();
-  }
-  if (target && target.id === "closeDecisionModalBtn") {
-    closeDecisionModal();
   }
   if (welcomeOverlay && target === welcomeOverlay) {
     closeWelcomeModal();
@@ -214,12 +189,10 @@ document.addEventListener("click", (e) => {
 });
 
 Object.assign(window, {
-  closeDecisionModal,
   closeNewRunModal,
   closeWelcomeModal,
   commitAdvanceDay,
   hideDecisionChartTooltip,
-  openDecisionModal,
   selectPendingChoice,
   showDecisionChartTooltip,
   startNewRun,

@@ -13,7 +13,7 @@
     - [x] Number fields tick up/down rather than display – Alexander
     - [x] Remove risk – Alexander
 
-- [ ] Main screen update
+- [x] Main screen update
     - [x] Remove project position – Alexander
     - [x] Create submarine progress bars moving across – Matt/Ethan
         - Representing player and ECHO
@@ -21,7 +21,7 @@
         - Submarine rides above bar
         - Decision symbols on the progress bar – maybe
         - Grows/shrinks as decisions add or take away days to completion
-    - [ ] Decisions appear below bars – Matt/Ethan - do this manually matty
+    - [x] Decisions appear below bars – Matt
     - [x] Refactor submarine “puzzle” under – Matt
         - [x] Shouldn’t show pieces under the main submarine
         - [x] Remove the live updates

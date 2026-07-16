@@ -5,7 +5,7 @@ import { $ } from "./html.js";
 import { renderSubmarineImage } from "./submarineVisual.js";
 
 const callbacks = {
-  renderDecisionModal: () => {},
+  renderDecisionQueue: () => {},
   showNewRunError: () => {},
 };
 
@@ -42,7 +42,7 @@ function renderWelcomeContent() {
 export function closeWelcomeModal() {
   uiState.welcomeModalVisible = false;
   renderWelcomeModal();
-  callbacks.renderDecisionModal();
+  callbacks.renderDecisionQueue();
 }
 
 export function toggleSettingsMenu() {
@@ -68,14 +68,14 @@ export function openNewRunModal() {
   uiState.newRunModalVisible = true;
   callbacks.showNewRunError("");
   renderNewRunModal();
-  callbacks.renderDecisionModal();
+  callbacks.renderDecisionQueue();
 }
 
 export function closeNewRunModal() {
   uiState.newRunModalVisible = false;
   callbacks.showNewRunError("");
   renderNewRunModal();
-  callbacks.renderDecisionModal();
+  callbacks.renderDecisionQueue();
 }
 
 export function renderNewRunModal() {

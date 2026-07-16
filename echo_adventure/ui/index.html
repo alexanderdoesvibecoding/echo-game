@@ -52,19 +52,26 @@
       <section id="dailyDecisionSection">
         <div class="section-head">
           <div>
-            <h2>Decision Events</h2>
+            <h2>Progress</h2>
           </div>
         </div>
         <div class="inline-decisions" id="inlineDecisionBody"></div>
       </section>
 
-      <section id="summarySection" class="hidden">
-        <div class="section-head"><h2>Submarine Assembly</h2></div>
-        <div class="summary-grid" id="summaryGrid"></div>
-      </section>
+      <div id="game-area" class="game-area">
+        <section id="decisionQueueSection" class="decision-queue-section" aria-labelledby="decisionQueueTitle">
+          <div class="section-head">
+            <h2 id="decisionQueueTitle">Decision Queue</h2>
+          </div>
+          <div id="decisionQueueBody" class="decision-queue-body" aria-live="polite"></div>
+        </section>
 
+        <section id="summarySection" class="hidden">
+          <div class="section-head"><h2>Submarine Assembly</h2></div>
+          <div class="summary-grid" id="summaryGrid"></div>
+        </section>
+      </div>
     </div>
-
   </main>
 
   <div id="welcomeModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="welcomeModalTitle">
@@ -102,19 +109,6 @@
         <button onclick="closeNewRunModal()">Cancel</button>
         <button class="primary" onclick="startNewRun()">Start Game</button>
       </div>
-    </div>
-  </div>
-
-  <div id="decisionModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="decisionModalTitle">
-    <div class="modal decision-modal">
-      <div class="modal-titlebar">
-        <div>
-          <h1 id="decisionModalTitle">Decision</h1>
-        </div>
-        <button id="closeDecisionModalBtn" class="icon-button" title="Close decision" onclick="closeDecisionModal()">×</button>
-      </div>
-      <div class="modal-body decision-modal-body" id="decisionModalBody"></div>
-      <div class="modal-footer" id="decisionModalFooter"></div>
     </div>
   </div>
 
