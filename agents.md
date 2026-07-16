@@ -2,7 +2,7 @@
 
 ## Protected files
 
-- Do not read, run, create, or modify anything under `tests/`.
+- Do not read, run, create, or modify anything under `tests/` unless explicitly tasked to.
 - Never modify `todo.md`.
 - Preserve unrelated user changes already present in the working tree.
 

@@ -1,7 +1,69 @@
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.code-workspace
+*.swo
+*.swp
+*~
+
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
-.DS_Store
+*$py.class
+
+# Python environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python packaging
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+.installed.cfg
+MANIFEST
+
+# Python tooling and coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.hypothesis/
+.mypy_cache/
+.nox/
+.pytest_cache/
+.pytype/
+.ruff_cache/
+.tox/
+
+# JavaScript dependencies and logs
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Runtime output
+*.log
+*.pid
+*.pid.lock
+
+# Repository-local Markdown files
 requirements.md
-.idea/
 instructions.md
 progress.md
