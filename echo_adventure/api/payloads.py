@@ -192,6 +192,26 @@ class PayloadMixin:
                 )
                 card = player_card or echo_card
                 record = player_record or echo_record
+                player_decision = (
+                    _chart_decision_payload(
+                        player_record,
+                        player_card,
+                        position=slot + 1,
+                        include_echo_preference=True,
+                    )
+                    if player_record
+                    else None
+                )
+                echo_decision = (
+                    _chart_decision_payload(
+                        echo_record,
+                        echo_card,
+                        position=slot + 1,
+                        include_echo_preference=False,
+                    )
+                    if echo_record
+                    else None
+                )
                 points.append(
                     {
                         "sequence": sequence,
@@ -216,6 +236,8 @@ class PayloadMixin:
                             round(echo_record.cumulative_score, 2) if echo_record else None
                         ),
                         "affectedLabel": card.context_label if card else "-",
+                        "playerDecision": player_decision,
+                        "echoDecision": echo_decision,
                     }
                 )
         return points
@@ -319,6 +341,34 @@ def _choice_payload(choice: DecisionChoice) -> dict[str, Any]:
         "description": choice.description,
         "icon": choice.icon_key,
     }
+
+
+def _chart_decision_payload(
+    record: Any,
+    card: DecisionCard | None,
+    *,
+    position: int,
+    include_echo_preference: bool,
+) -> dict[str, Any]:
+    """Keep one actor's question context attached to that actor's answer."""
+    payload = {
+        "position": position,
+        "questionId": record.card_id,
+        "questionTitle": record.card_title,
+        "questionText": card.description if card else record.card_title,
+        "choice": record.choice_label,
+        "scoreDelta": round(record.score_delta, 2),
+        "cumulativeScore": round(record.cumulative_score, 2),
+        "affectedLabel": card.context_label if card else "-",
+    }
+    if include_echo_preference:
+        payload.update(
+            {
+                "echoPreferredChoice": record.echo_choice_label,
+                "alignedWithEcho": record.aligned_with_echo,
+            }
+        )
+    return payload
 
 
 def _job_label(job_id: str) -> str:
