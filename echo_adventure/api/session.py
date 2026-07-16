@@ -21,7 +21,7 @@ class GameSession(PayloadMixin, ReviewMixin):
     def __init__(self, seed: int | None = None) -> None:
         self.lock = threading.RLock()
         self.seed = resolve_seed(seed)
-        self.config = GameConfig.for_preset("normal", seed=self.seed)
+        self.config = GameConfig(seed=self.seed)
         self.scenario = generate_scenario(self.config)
         self.decision_web = generate_decision_web(self.scenario, self.config)
         self.player_state = initialize_state(self.scenario)

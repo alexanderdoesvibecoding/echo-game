@@ -171,7 +171,7 @@ def run_ui_server(seed: int | None = None, host: str = "127.0.0.1", port: int = 
             handler.session_store = SessionStore(seed=seed)
         server = ThreadingHTTPServer((host, port), handler)
         url = f"http://{host}:{port}"
-        print(f"ECHO Adventure UI running at {url} (normal mode)")
+        print(f"ECHO Adventure UI running at {url}")
         print("Press Ctrl+C to stop.")
         server.serve_forever()
     except KeyboardInterrupt:

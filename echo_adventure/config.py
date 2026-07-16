@@ -28,6 +28,9 @@ class GameConfig:
     daily_summary_counter_duration_ms: int = 2000
     seed: int | None = None
 
+    def __post_init__(self) -> None:
+        _validate_config(self)
+
     @property
     def schedule_start(self) -> date:
         try:
@@ -39,14 +42,6 @@ class GameConfig:
         """Return the calendar label for any one-based game day."""
         value = self.schedule_start + timedelta(days=max(1, int(day or 1)) - 1)
         return f"{_MONTH_NAMES[value.month - 1]} {value.day}"
-
-    @classmethod
-    def for_preset(cls, preset: str, seed: int | None = None) -> "GameConfig":
-        if preset not in {"normal", "demo"}:
-            raise ValueError(f"Unknown game preset: {preset}")
-        config = cls(seed=seed)
-        _validate_config(config)
-        return config
 
 
 def resolve_seed(seed: int | None) -> int:
