@@ -35,9 +35,20 @@ function renderSummaryMetricValue(value, startValue = 0) {
 }
 
 function renderSummaryMetricBar(summary) {
+  const jobsComplete = Number(summary.jobsComplete ?? summary.completedToday ?? 0);
   const metrics = [
-    { label: "Jobs Complete", value: Number(summary.completedToday || 0), tone: summary.completedToday ? "good" : "warn" },
-    { label: "Jobs Remaining", value: Number(summary.jobsRemaining || 0), tone: summary.jobsRemaining ? "warn" : "good" },
+    {
+      label: "Jobs Complete",
+      value: jobsComplete,
+      startValue: Number(summary.previousJobsComplete ?? 0),
+      tone: jobsComplete ? "good" : "warn",
+    },
+    {
+      label: "Jobs Remaining",
+      value: Number(summary.jobsRemaining || 0),
+      startValue: Number(summary.previousJobsRemaining ?? 0),
+      tone: summary.jobsRemaining ? "warn" : "good",
+    },
     {
       label: "Remaining Job-Days",
       value: Number(summary.totalRemainingDays || 0),
@@ -203,6 +214,7 @@ function summaryAnimationKey(payload, summary) {
     payload.seed,
     payload.day,
     payload.currentDate,
+    summary.jobsComplete,
     summary.completedToday,
     summary.jobsRemaining,
     summary.totalRemainingDays,

@@ -92,6 +92,12 @@ def test_choice_and_advance_update_player_and_echo_once_per_slot(monkeypatch: py
     session.advance_day()
     assert session.last_result is not None
     assert session.last_result.day == 1
+    payload = session.state_payload()
+    job_count = len(session.player_state.jobs)
+    assert payload["lastSummary"]["previousJobsComplete"] == job_count - session.last_result.start_snapshot.jobs_remaining
+    assert payload["lastSummary"]["jobsComplete"] == job_count - session.last_result.end_snapshot.jobs_remaining
+    assert payload["lastSummary"]["previousJobsRemaining"] == session.last_result.start_snapshot.jobs_remaining
+    assert payload["lastSummary"]["jobsRemaining"] == session.last_result.end_snapshot.jobs_remaining
     assert session.player_state.current_day == 2
     assert session.automated_state.current_day == 2
     assert session.questions_answered_today == 0

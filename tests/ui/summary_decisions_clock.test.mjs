@@ -123,6 +123,9 @@ test("summary renders the live assembly and current daily metrics", () => {
     lastSummary: {
       date: "July 1",
       completedToday: 1,
+      previousJobsComplete: 1,
+      jobsComplete: 2,
+      previousJobsRemaining: 2,
       jobsRemaining: 1,
       previousTotalRemainingDays: 5,
       totalRemainingDays: 2,
@@ -137,7 +140,9 @@ test("summary renders the live assembly and current daily metrics", () => {
   assert.equal(dom.element("summaryModalOverlay").classList.contains("active"), true);
   assert.equal(dom.element("summaryModalTitle").textContent, "Daily Summary - July 1");
   assert.match(body, /Jobs Complete/);
+  assert.match(body, /Jobs Complete[\s\S]*data-summary-count-from="1"/);
   assert.match(body, /Remaining Job-Days/);
+  assert.match(body, /data-summary-count-from="2"/);
   assert.match(body, /Completed &lt;one&gt; job\./);
   assert.doesNotMatch(body, /Subjobs/);
 });

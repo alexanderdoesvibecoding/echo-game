@@ -46,9 +46,13 @@ class PayloadMixin:
         if not self.last_result:
             return None
         snapshot = self.last_result.end_snapshot
+        job_count = len(self.player_state.jobs)
         return {
             "date": self.config.date_label_for_day(self.last_result.day),
             "completedToday": len(self.last_result.completed_job_ids),
+            "previousJobsComplete": job_count - self.last_result.start_snapshot.jobs_remaining,
+            "jobsComplete": job_count - snapshot.jobs_remaining,
+            "previousJobsRemaining": self.last_result.start_snapshot.jobs_remaining,
             "jobsRemaining": snapshot.jobs_remaining,
             "previousTotalRemainingDays": self.last_result.start_snapshot.total_remaining_days,
             "totalRemainingDays": snapshot.total_remaining_days,
