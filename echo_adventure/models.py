@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .enums import DecisionType, JobStatus
+from .enums import JobStatus
 
 
 @dataclass
@@ -38,7 +38,6 @@ class DecisionChoice:
 
     id: str
     label: str
-    description: str
     day_changes: dict[str, int]
     score_delta: float
     icon_key: str
@@ -50,11 +49,8 @@ class DecisionCard:
     """A daily question about one job or a set of jobs."""
 
     id: str
-    day: int
-    type: DecisionType
     title: str
     description: str
-    target_ids: list[str]
     choices: list[DecisionChoice]
     echo_choice_id: str
     context_label: str
@@ -78,28 +74,15 @@ class DecisionRecord:
     card_id: str
     card_title: str
     actor: str
-    choice_id: str
     choice_label: str
-    echo_choice_id: str
     echo_choice_label: str
     aligned_with_echo: bool
-    note: str
     score_delta: float
     cumulative_score: float
 
 
 @dataclass(frozen=True)
-class DecisionProgress:
-    day: int
-    total_questions: int
-    answered_questions: int
-    open_card_ids: list[str]
-
-
-@dataclass(frozen=True)
 class MetricSnapshot:
-    day: int
-    jobs_completed: int
     jobs_remaining: int
     total_remaining_days: int
     projected_completion_day: int
@@ -108,14 +91,12 @@ class MetricSnapshot:
 
 @dataclass
 class Scenario:
-    scenario_id: str
     seed: int
     jobs: dict[str, Job]
 
 
 @dataclass
 class SimulationState:
-    scenario_id: str
     seed: int
     jobs: dict[str, Job]
     current_day: int = 1
@@ -123,13 +104,11 @@ class SimulationState:
     final_item_completed: bool = False
     completion_day: int | None = None
     daily_notes: list[str] = field(default_factory=list)
-    metric_history: list[MetricSnapshot] = field(default_factory=list)
     decision_cards: dict[str, DecisionCard] = field(default_factory=dict)
     decision_history: list[DecisionRecord] = field(default_factory=list)
     decision_score: float = 0.0
     shown_follow_up_decision_ids: set[str] = field(default_factory=set)
     pending_follow_ups: list[PendingFollowUp] = field(default_factory=list)
-    is_echo_benchmark: bool = False
 
     def incomplete_jobs(self) -> list[Job]:
         return [job for job in self.jobs.values() if not job.is_complete]

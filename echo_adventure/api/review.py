@@ -56,9 +56,4 @@ class ReviewMixin:
             "outcome": outcome,
             "headline": headline,
             "reasons": reasons,
-            "decisionReview": {
-                "totalChoices": len(player_records),
-                "alignedChoices": aligned,
-                "divergentChoices": len(player_records) - aligned,
-            },
         }

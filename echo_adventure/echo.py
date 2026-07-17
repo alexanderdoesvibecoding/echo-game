@@ -45,19 +45,3 @@ def advance_omniscient_day(
     if transition.next_node_id is None and not state.final_item_completed:
         raise RuntimeError("ECHO reached a terminal web edge before completing every job.")
     return transition.next_node_id
-
-
-def run_omniscient_echo(state: SimulationState, web: DecisionWeb) -> None:
-    """Traverse the entire globally optimal policy, primarily for offline callers."""
-    node_id = web.root_node_id
-    while not state.final_item_completed:
-        transition = apply_omniscient_choice(state, web, node_id)
-        if transition.advances_day:
-            next_node_id = advance_omniscient_day(state, transition)
-            if next_node_id is None:
-                return
-            node_id = next_node_id
-        else:
-            if transition.next_node_id is None:
-                raise RuntimeError("ECHO reached a non-daily transition without a successor.")
-            node_id = transition.next_node_id

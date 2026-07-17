@@ -21,7 +21,6 @@ def generate_scenario(config: GameConfig) -> Scenario:
             remaining_days=duration,
         )
     scenario = Scenario(
-        scenario_id=f"SCN-{(config.seed or 0) % 1_000_000:06d}",
         seed=config.seed or 0,
         jobs=jobs,
     )

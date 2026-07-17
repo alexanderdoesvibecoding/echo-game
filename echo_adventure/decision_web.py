@@ -28,7 +28,6 @@ class DecisionWebState:
 
 @dataclass(frozen=True)
 class DecisionWebTransition:
-    choice_id: str
     next_node_id: str | None
     advances_day: bool
     completion_day: int | None = None
@@ -37,8 +36,6 @@ class DecisionWebTransition:
 
 @dataclass
 class DecisionWebNode:
-    id: str
-    step: int
     state: DecisionWebState
     card: DecisionCard
     transitions: dict[str, DecisionWebTransition] = field(default_factory=dict)
@@ -51,16 +48,10 @@ class DecisionWebNode:
 class DecisionWeb:
     """One fully materialized DAG shared by the player and ECHO."""
 
-    seed: int
-    max_day: int
     root_node_id: str
     nodes: dict[str, DecisionWebNode]
     question_counts: dict[int, int]
     optimal_completion_day: int
-    optimal_score: float
-    terminal_transition_count: int
-    overtime_transition_count: int
-    generation_attempt: int
 
     def node(self, node_id: str) -> DecisionWebNode:
         return self.nodes[node_id]
@@ -94,8 +85,6 @@ class _DecisionWebBuilder:
         self.nodes: dict[str, DecisionWebNode] = {}
         self.nodes_by_state: dict[DecisionWebState, str] = {}
         self.nodes_by_step: dict[int, list[str]] = {}
-        self.terminal_transition_count = 0
-        self.overtime_transition_count = 0
         self.question_counts = {
             day: random.Random(
                 _stable_seed(
@@ -127,16 +116,10 @@ class _DecisionWebBuilder:
         self._solve()
         root = self.nodes[root_node_id]
         return DecisionWeb(
-            seed=self.scenario.seed,
-            max_day=self.config.max_campaign_day,
             root_node_id=root_node_id,
             nodes=self.nodes,
             question_counts=self.question_counts,
             optimal_completion_day=root.optimal_completion_day,
-            optimal_score=root.optimal_future_score,
-            terminal_transition_count=self.terminal_transition_count,
-            overtime_transition_count=self.overtime_transition_count,
-            generation_attempt=self.generation_attempt,
         )
 
     def _build_base_schedule(self) -> dict[tuple[int, int], DecisionDefinition]:
@@ -178,7 +161,7 @@ class _DecisionWebBuilder:
         node_id = f"NODE-{len(self.nodes) + 1:07d}"
         step = self.step_offsets[state.day] + state.question_index
         card = self._build_card(state, node_id)
-        node = DecisionWebNode(id=node_id, step=step, state=state, card=card)
+        node = DecisionWebNode(state=state, card=card)
         self.nodes_by_state[state] = node_id
         self.nodes[node_id] = node
         self.nodes_by_step.setdefault(step, []).append(node_id)
@@ -232,7 +215,6 @@ class _DecisionWebBuilder:
             if is_complete:
                 completed.add(job_id)
         return SimulationState(
-            scenario_id=self.scenario.scenario_id,
             seed=self.scenario.seed,
             jobs=jobs,
             current_day=state.day,
@@ -283,7 +265,6 @@ class _DecisionWebBuilder:
                 pending_trigger_delta=pending_trigger_delta,
             )
             return DecisionWebTransition(
-                choice_id=choice.id,
                 next_node_id=self._ensure_node(next_state),
                 advances_day=False,
             )
@@ -301,17 +282,13 @@ class _DecisionWebBuilder:
 
         all_completed_mask = (1 << len(remaining)) - 1
         if completed_mask == all_completed_mask:
-            self.terminal_transition_count += 1
             return DecisionWebTransition(
-                choice_id=choice.id,
                 next_node_id=None,
                 advances_day=True,
                 completion_day=state.day,
             )
         if state.day + 1 >= self.config.max_campaign_day:
-            self.overtime_transition_count += 1
             return DecisionWebTransition(
-                choice_id=choice.id,
                 next_node_id=None,
                 advances_day=True,
                 enters_overtime=True,
@@ -324,7 +301,6 @@ class _DecisionWebBuilder:
             completed_mask=completed_mask,
         )
         return DecisionWebTransition(
-            choice_id=choice.id,
             next_node_id=self._ensure_node(next_state),
             advances_day=True,
         )

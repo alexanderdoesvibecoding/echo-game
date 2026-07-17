@@ -59,25 +59,22 @@ function statePayload(overrides = {}) {
     currentDate: "July 1",
     scheduleStartDate: "July 1",
     gameOver: false,
+    jobCount: 2,
     dayCycleDurationMs: 1000,
     dailySummaryCounterDurationMs: 50,
-    snapshot: { jobsCompleted: 0, jobsRemaining: 2, totalRemainingDays: 5 },
     timelines: {
       player: { progressPercent: 25, displayCompletion: "July 4", projectedCompletion: "July 4", completion: null },
       echo: { progressPercent: 50, displayCompletion: "July 3", projectedCompletion: "July 3", completion: null },
     },
-    decisionProgress: { completed: 0, total: 1, visibleCards: 1, openCardIds: ["CARD-1"] },
+    decisionProgress: { completed: 0, total: 1 },
     decisions: [
       {
         id: "CARD-1",
-        type: "Opportunity",
         title: "Recover <time>",
         description: "Remove one day from Job 1.",
-        context: "Job 1",
-        selectedChoice: null,
         choices: [
-          { id: "choice-1", label: "Accelerate", description: "Remove one day.", icon: "accelerate" },
-          { id: "choice-2", label: "Wait", description: "No change.", icon: "wait" },
+          { id: "choice-1", label: "Accelerate", icon: "accelerate" },
+          { id: "choice-2", label: "Wait", icon: "wait" },
         ],
       },
     ],
@@ -87,8 +84,8 @@ function statePayload(overrides = {}) {
 
 const puzzle = {
   tiles: [
-    { id: "JOB-01", label: "Job 1", name: "Job <One>", completed: true, newlyCompleted: true, completedAt: "July 1" },
-    { id: "JOB-02", label: "Job 2", name: "Job Two", completed: false, newlyCompleted: false, remainingDays: 2 },
+    { label: "Job 1", name: "Job <One>", completed: true, newlyCompleted: true, completedAt: "July 1" },
+    { label: "Job 2", name: "Job Two", completed: false, newlyCompleted: false },
   ],
 };
 
@@ -98,12 +95,11 @@ beforeEach(() => {
 });
 
 test("submarine puzzle renders assembled, waiting, and accessible image slices", () => {
-  const markup = renderSubmarinePuzzle(puzzle, "unit", { showCaption: true, showPlacedToday: true });
+  const markup = renderSubmarinePuzzle(puzzle, { showCaption: true });
 
   assert.match(markup, /puzzle-image-slice placed newly-placed/);
   assert.match(markup, /puzzle-image-placeholder/);
   assert.match(markup, /puzzle-loose-row/);
-  assert.match(markup, /Placed today:/);
   assert.match(markup, /virginia-submarine-cutout\.png/);
   assert.match(markup, /Job &lt;One&gt;/);
   assert.doesNotMatch(markup, /\stitle=/);
@@ -125,11 +121,9 @@ test("summary renders the live assembly and current daily metrics", () => {
   uiState.modalVisible = true;
   uiState.pendingAdvanceState = statePayload({
     lastSummary: {
-      day: 1,
       date: "July 1",
       completedToday: 1,
       jobsRemaining: 1,
-      jobsComplete: 1,
       previousTotalRemainingDays: 5,
       totalRemainingDays: 2,
       projectedCompletion: "July 3",
@@ -166,7 +160,7 @@ test("summary counters support integers, ratios, and descending values", () => {
 test("day clock creates deterministic decision thresholds and blocks at the right states", () => {
   uiState.runCycleId = 2;
   uiState.state = statePayload({
-    decisionProgress: { completed: 0, total: 2, visibleCards: 1, openCardIds: ["CARD-1"] },
+    decisionProgress: { completed: 0, total: 2 },
   });
   resetDayCycle();
   syncDayCycleForState();
@@ -264,7 +258,7 @@ test("automatic clock advances at 100 percent and stops cleanly at game over", (
   });
   uiState.state = statePayload({
     dayCycleDurationMs: 1000,
-    decisionProgress: { completed: 0, total: 0, visibleCards: 0, openCardIds: [] },
+    decisionProgress: { completed: 0, total: 0 },
     decisions: [],
   });
   dom.setNow(0);
@@ -320,7 +314,7 @@ test("summary and decision queue hide or idle safely when content is unavailable
   uiState.state = statePayload({
     livePuzzle: null,
     lastSummary: null,
-    decisionProgress: { completed: 0, total: 0, visibleCards: 0, openCardIds: [] },
+    decisionProgress: { completed: 0, total: 0 },
     decisions: [],
   });
 

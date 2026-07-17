@@ -10,7 +10,7 @@ from ..decision_web import DecisionWebTransition, generate_decision_web
 from ..decisions import apply_choice as apply_decision_choice
 from ..decisions import generate_daily_decision_cards
 from ..echo import advance_omniscient_day, apply_omniscient_choice
-from ..models import DecisionCard, DecisionProgress
+from ..models import DecisionCard
 from ..scenario_generator import generate_scenario
 from ..simulation import DayResult, advance_day as simulate_day, initialize_state
 from .payloads import PayloadMixin
@@ -26,7 +26,6 @@ class GameSession(PayloadMixin, ReviewMixin):
         self.decision_web = generate_decision_web(self.scenario, self.config)
         self.player_state = initialize_state(self.scenario)
         self.automated_state = initialize_state(self.scenario)
-        self.automated_state.is_echo_benchmark = True
         self.player_node_id = self.decision_web.root_node_id
         self.pending_player_transition: DecisionWebTransition | None = None
         self.echo_node_id: str | None = self.decision_web.root_node_id
@@ -39,14 +38,12 @@ class GameSession(PayloadMixin, ReviewMixin):
         self.questions_answered_today = 0
         self.decision_total_today = self.decision_web.question_count(1)
         self.current_cards: list[DecisionCard] = []
-        self.applied_choices: dict[str, str] = {}
-        self.choice_notes: list[str] = []
         self.last_result: DayResult | None = None
         self.last_summary_puzzle: dict[str, Any] | None = None
         self.day_completed_before: set[str] = set(self.player_state.completed_jobs)
         self._ensure_cards()
 
-    def apply_choice(self, card_id: str, choice_id: str) -> dict[str, Any]:
+    def apply_choice(self, card_id: str, choice_id: str) -> None:
         with self.lock:
             if self._game_over():
                 raise ValueError("The run has already ended.")
@@ -54,20 +51,16 @@ class GameSession(PayloadMixin, ReviewMixin):
             card = next((item for item in self.current_cards if item.id == card_id), None)
             if not card:
                 raise ValueError("Decision card is no longer active.")
-            if card.id in self.applied_choices:
-                raise ValueError("That decision already has a selected response.")
             choice = next((item for item in card.choices if item.id == choice_id), None)
             if not choice:
                 raise ValueError("Choice is not valid for that decision.")
-            note = apply_decision_choice(
+            apply_decision_choice(
                 self.player_state,
                 card,
                 choice,
                 actor="player",
                 schedule_follow_ups=self.player_in_overtime,
             )
-            self.applied_choices[card.id] = choice.id
-            self.choice_notes.append(f"{card.title}: {choice.label}. {note}")
             self.questions_answered_today += 1
             self._apply_echo_choice(self.questions_answered_today)
             self.current_cards = []
@@ -77,7 +70,7 @@ class GameSession(PayloadMixin, ReviewMixin):
                     self.current_cards = [self.overtime_cards[self.overtime_card_index]]
                 else:
                     self.overtime_ready_to_advance = True
-                return {"note": note, "allDecisionsMade": self.ready_to_advance()}
+                return
 
             transition = self.decision_web.transition(self.player_node_id, choice.id)
             if transition.advances_day:
@@ -87,13 +80,12 @@ class GameSession(PayloadMixin, ReviewMixin):
                     raise RuntimeError("A non-daily web edge cannot be terminal.")
                 self.player_node_id = transition.next_node_id
                 self._ensure_cards()
-            return {"note": note, "allDecisionsMade": self.ready_to_advance()}
 
-    def advance_day(self) -> dict[str, Any]:
+    def advance_day(self) -> None:
         with self.lock:
             if self._game_over():
                 self._finish_automated()
-                return {"summary": self._summary_payload(), "gameOver": True}
+                return
             if not self.ready_to_advance():
                 raise ValueError("Select a response for all decisions before advancing the day.")
             if self.player_in_overtime:
@@ -104,7 +96,7 @@ class GameSession(PayloadMixin, ReviewMixin):
                     self._finish_automated()
                 else:
                     self._start_overtime_day()
-                return {"summary": self._summary_payload(), "gameOver": self._game_over()}
+                return
 
             transition = self.pending_player_transition
             if transition is None:
@@ -128,7 +120,6 @@ class GameSession(PayloadMixin, ReviewMixin):
                     self.player_state.current_day
                 )
                 self._ensure_cards()
-            return {"summary": self._summary_payload(), "gameOver": self._game_over()}
 
     def ready_to_advance(self) -> bool:
         if self.player_in_overtime:
@@ -139,14 +130,6 @@ class GameSession(PayloadMixin, ReviewMixin):
         return (
             self.questions_answered_today == self.decision_total_today
             and self.pending_player_transition is not None
-        )
-
-    def current_decision_progress(self) -> DecisionProgress:
-        return DecisionProgress(
-            day=self.player_state.current_day,
-            total_questions=self.decision_total_today,
-            answered_questions=self.questions_answered_today,
-            open_card_ids=[card.id for card in self.current_cards],
         )
 
     def _ensure_cards(self) -> None:
@@ -169,7 +152,6 @@ class GameSession(PayloadMixin, ReviewMixin):
             self.player_state.completed_jobs - self.day_completed_before
         )
         self.last_summary_puzzle = self._build_puzzle_payload(
-            day=self.last_result.day,
             completed_before=self.day_completed_before,
         )
         self.day_completed_before = set(self.player_state.completed_jobs)
@@ -216,8 +198,6 @@ class GameSession(PayloadMixin, ReviewMixin):
 
     def _reset_daily_choices(self) -> None:
         self.current_cards = []
-        self.applied_choices = {}
-        self.choice_notes = []
 
     def _start_overtime_day(self) -> None:
         self.overtime_cards = generate_daily_decision_cards(self.player_state, self.config)
@@ -253,14 +233,10 @@ class SessionStore:
 
     def choice_payload(self, card_id: str, choice_id: str) -> dict[str, Any]:
         with self.lock:
-            action = self.session.apply_choice(card_id, choice_id)
-            payload = self.session.state_payload()
-            payload["action"] = action
-            return payload
+            self.session.apply_choice(card_id, choice_id)
+            return self.session.state_payload()
 
     def advance_payload(self) -> dict[str, Any]:
         with self.lock:
-            action = self.session.advance_day()
-            payload = self.session.state_payload()
-            payload["advance"] = action
-            return payload
+            self.session.advance_day()
+            return self.session.state_payload()

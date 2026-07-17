@@ -2,6 +2,7 @@
 
 import { uiState } from "./state.js";
 import { $, escapeHtml } from "./html.js";
+import { SUBMARINE_IMAGE_SRC } from "./submarineVisual.js";
 
 const DEFAULT_SUMMARY_COUNTER_DURATION_MS = 1800;
 
@@ -57,7 +58,7 @@ function renderSummaryMetricBar(summary) {
   `;
 }
 
-function renderSummaryGrid(summary, puzzleInstanceId) {
+function renderSummaryGrid(summary) {
   const notes = Array.isArray(summary.notes) ? summary.notes : [];
   const showUpdates = Number(summary.completedToday || 0) > 0 && notes.length;
   const notesMarkup = notes
@@ -73,7 +74,7 @@ function renderSummaryGrid(summary, puzzleInstanceId) {
     ${renderSummaryMetricBar(summary)}
     ${updatesMarkup}
     <div class="reveal-panel summary-puzzle-panel">
-      ${renderSubmarinePuzzle(summary.puzzle, puzzleInstanceId, {
+      ${renderSubmarinePuzzle(summary.puzzle, {
         showCaption: true,
         animateNewlyPlaced: true,
       })}
@@ -81,7 +82,6 @@ function renderSummaryGrid(summary, puzzleInstanceId) {
   `;
 }
 
-const PUZZLE_SUBMARINE_IMAGE = "/ui/assets/virginia-submarine-cutout.png";
 const PUZZLE_IMAGE_WIDTH = 1269;
 const PUZZLE_IMAGE_HEIGHT = 260;
 const PUZZLE_IMAGE_ASPECT = PUZZLE_IMAGE_WIDTH / PUZZLE_IMAGE_HEIGHT;
@@ -128,12 +128,12 @@ function placementMotionStyle(slice) {
 }
 
 function renderPuzzleSection(tile, slice, className, options = {}) {
-  const label = escapeHtml(tile.label || tile.id || "");
+  const label = escapeHtml(tile.label || "");
   const assembled = className === "placed";
   const status = assembled
     ? `Assembled${tile.completedAt ? ` at ${tile.completedAt}` : ""}`
-    : `Waiting outside${tile.due ? `; due ${tile.due}` : ""}`;
-  const title = `${tile.name || tile.id}: ${slice.part}. ${status}.`;
+    : "Waiting outside";
+  const title = `${tile.name}: ${slice.part}. ${status}.`;
   const highlightNewlyPlaced = options.highlightNewlyPlaced !== false;
   const animateNewlyPlaced = Boolean(options.animateNewlyPlaced);
   const newlyPlaced = assembled && tile.newlyCompleted && highlightNewlyPlaced;
@@ -151,7 +151,7 @@ function renderPuzzleSection(tile, slice, className, options = {}) {
   ].filter(Boolean).join("; ");
   return `
     <div class="${classNames}" style="${style}" role="img" aria-label="${escapeHtml(`${label}: ${title}`)}">
-      <img src="${PUZZLE_SUBMARINE_IMAGE}" alt="" aria-hidden="true" draggable="false">
+      <img src="${SUBMARINE_IMAGE_SRC}" alt="" aria-hidden="true" draggable="false">
     </div>
   `;
 }
@@ -162,7 +162,7 @@ function renderPuzzlePlaceholder(tile, slice) {
   `;
 }
 
-export function renderSubmarinePuzzle(puzzle, instanceId, options = {}) {
+export function renderSubmarinePuzzle(puzzle, options = {}) {
   const tiles = Array.isArray(puzzle?.tiles) ? puzzle.tiles : [];
   if (!tiles.length) return "";
 
@@ -184,10 +184,6 @@ export function renderSubmarinePuzzle(puzzle, instanceId, options = {}) {
       .map(item => renderPuzzleSection(item.tile, item.slice, "unplaced"))
       .join("")
     : "";
-  const placedToday = tiles.filter(tile => tile.completed && tile.newlyCompleted);
-  const placedMarkupToday = placedToday.length
-    ? placedToday.map(tile => `<span class="badge">${escapeHtml(tile.label)}</span>`).join("")
-    : `<span class="subtle">No jobs were placed today.</span>`;
   return `
     <div class="submarine-puzzle">
       ${options.showCaption ? `<div class="puzzle-caption"><strong>Assembly</strong></div>` : ""}
@@ -197,7 +193,6 @@ export function renderSubmarinePuzzle(puzzle, instanceId, options = {}) {
         </div>
         ${showUnplaced && unplacedItems.length ? `<div class="puzzle-loose-row">${unplacedMarkup}</div>` : ""}
       </div>
-      ${options.showPlacedToday ? `<div class="puzzle-added"><span>Placed today:</span>${placedMarkupToday}</div>` : ""}
     </div>
   `;
 }
@@ -210,7 +205,6 @@ function summaryAnimationKey(payload, summary) {
     payload.currentDate,
     summary.completedToday,
     summary.jobsRemaining,
-    summary.jobsComplete,
     summary.totalRemainingDays,
     summary.projectedCompletion,
   ].join("|");
@@ -308,7 +302,7 @@ export function renderSummaryModal() {
   const animationKey = summaryAnimationKey(payload, summary);
   if (uiState.summaryAnimationKey !== animationKey || !body.innerHTML) {
     uiState.summaryAnimationKey = animationKey;
-    body.innerHTML = `<div class="summary-grid">${renderSummaryGrid(summary, "summary-modal")}</div>`;
+    body.innerHTML = `<div class="summary-grid">${renderSummaryGrid(summary)}</div>`;
     body.scrollTop = 0;
     animateSummaryCounters(body, { duration: summaryCounterDurationMs(payload) });
   }
@@ -319,7 +313,7 @@ export function renderSummary() {
   $("summarySection").classList.toggle("hidden", !puzzle);
   if (!puzzle) return;
   $("summaryGrid").innerHTML = `
-    ${renderSubmarinePuzzle(puzzle, "main-submarine", {
+    ${renderSubmarinePuzzle(puzzle, {
       showUnplaced: false,
       highlightNewlyPlaced: false,
     })}

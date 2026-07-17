@@ -47,13 +47,15 @@ def run_full_campaign_case(seed: int, diverge: bool) -> dict[str, object]:
     return {
         "outcome": final["review"]["outcome"],
         "headline": final["review"]["headline"],
-        "divergent_choices": final["review"]["decisionReview"]["divergentChoices"],
+        "divergent_choices": sum(
+            not record.aligned_with_echo
+            for record in session.player_state.decision_history
+        ),
         "player_day": session.player_state.completion_day,
         "echo_day": session.automated_state.completion_day,
         "player_score": session.player_state.decision_score,
         "echo_score": session.automated_state.decision_score,
         "optimal_day": session.decision_web.optimal_completion_day,
-        "optimal_score": session.decision_web.optimal_score,
         "player_completed": len(session.player_state.completed_jobs),
         "echo_completed": len(session.automated_state.completed_jobs),
         "player_in_overtime": session.player_in_overtime,
@@ -71,7 +73,7 @@ def test_full_default_campaigns_run_exact_and_divergent_paths_in_parallel() -> N
     assert exact["outcome"] == "tied"
     assert exact["player_in_overtime"] is False
     assert exact["player_day"] == exact["echo_day"] == exact["optimal_day"]
-    assert exact["player_score"] == exact["echo_score"] == exact["optimal_score"]
+    assert exact["player_score"] == exact["echo_score"]
     assert exact["player_completed"] == exact["echo_completed"] == 20
     assert exact["all_aligned"] is True
 

@@ -50,16 +50,11 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
     assert payload["currentDate"] == "July 1"
     assert payload["jobCount"] == 3
     assert payload["gameOver"] is False
-    assert len(payload["jobs"]) == 3
-    assert payload["snapshot"]["jobsRemaining"] == 3
     assert payload["decisionProgress"] == {
-        "day": 1,
         "completed": 0,
         "total": 1,
-        "visibleCards": 1,
-        "openCardIds": [session.current_cards[0].id],
     }
-    assert payload["livePuzzle"]["total"] == 3
+    assert len(payload["livePuzzle"]["tiles"]) == 3
     assert set(payload["timelines"]) == {"player", "echo"}
     assert payload["lastSummary"] is None
 
@@ -87,19 +82,19 @@ def test_choice_and_advance_update_player_and_echo_once_per_slot(monkeypatch: py
     card = session.current_cards[0]
     choice = card.choices[0]
 
-    action = session.apply_choice(card.id, choice.id)
+    session.apply_choice(card.id, choice.id)
 
-    assert action["allDecisionsMade"] is True
     assert len(session.player_state.decision_history) == 1
     assert len(session.automated_state.decision_history) == 1
-    assert session.current_decision_progress().answered_questions == 1
+    assert session.questions_answered_today == 1
     assert session.current_cards == []
 
-    advanced = session.advance_day()
-    assert advanced["summary"]["day"] == 1
+    session.advance_day()
+    assert session.last_result is not None
+    assert session.last_result.day == 1
     assert session.player_state.current_day == 2
     assert session.automated_state.current_day == 2
-    assert session.current_decision_progress().answered_questions == 0
+    assert session.questions_answered_today == 0
     assert len(session.current_cards) == 1
 
 
@@ -141,12 +136,12 @@ def test_exact_optimal_path_ties_echo(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "exact optimal path" in final["review"]["headline"]
     assert final["player"]["completionDay"] == final["automated"]["completionDay"]
     assert final["player"]["finalScore"] == final["automated"]["finalScore"]
-    assert all(row["aligned"] for row in final["decisionComparison"])
+    assert all(record.aligned_with_echo for record in session.player_state.decision_history)
 
     with pytest.raises(ValueError, match="already ended"):
         session.apply_choice("finished", "finished")
-    repeated_advance = session.advance_day()
-    assert repeated_advance["gameOver"] is True
+    session.advance_day()
+    assert session.state_payload()["gameOver"] is True
 
 
 def test_every_first_decision_divergence_loses_to_echo(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -161,7 +156,7 @@ def test_every_first_decision_divergence_loses_to_echo(monkeypatch: pytest.Monke
         final = play_to_completion(session, first_choice_id=divergent_id)
         assert final["review"]["outcome"] == "behind"
         assert "won" in final["review"]["headline"].lower() or "earlier" in final["review"]["headline"].lower() or "higher score" in final["review"]["headline"].lower()
-        assert any(not row["aligned"] for row in final["decisionComparison"])
+        assert any(not record.aligned_with_echo for record in session.player_state.decision_history)
 
 
 @pytest.mark.parametrize("seed", [421, 422, 423, 424, 425, 426])
@@ -180,7 +175,7 @@ def test_multi_seed_exact_paths_tie_and_every_first_divergence_loses(
         divergent = session_module.GameSession(seed=seed)
         final = play_to_completion(divergent, first_choice_id=choice_id)
         assert final["review"]["outcome"] == "behind"
-        assert final["review"]["decisionReview"]["divergentChoices"] >= 1
+        assert any(not record.aligned_with_echo for record in divergent.player_state.decision_history)
 
 
 def test_slow_route_enters_overtime_and_still_loses_after_finishing(
@@ -230,14 +225,11 @@ def test_final_payload_aligns_real_player_and_echo_histories(monkeypatch: pytest
     final = play_to_completion(session, first_choice_id=divergent)
     history = final["completionHistory"]
 
-    assert history["days"][0] == 0
-    assert history["player"][0] == history["automated"][0] == 0
-    assert history["player"][-1] == history["automated"][-1] == 3
     assert history["decisionPoints"]
     first_point = history["decisionPoints"][0]
-    assert first_point["playerChoice"] == session.player_state.decision_history[0].choice_label
-    assert first_point["echoChoice"] == session.automated_state.decision_history[0].choice_label
-    assert first_point["affectedLabel"].startswith("Job")
+    assert first_point["playerDecision"]["choice"] == session.player_state.decision_history[0].choice_label
+    assert first_point["echoDecision"]["choice"] == session.automated_state.decision_history[0].choice_label
+    assert first_point["playerDecision"]["affectedLabel"].startswith("Job")
 
 
 def test_timeline_stops_rescaling_after_echo_finishes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -248,7 +240,7 @@ def test_timeline_stops_rescaling_after_echo_finishes(monkeypatch: pytest.Monkey
 
     assert final["automated"]["completionDay"] is not None
     assert payload["timelines"]["echo"]["progressPercent"] == 100.0
-    assert payload["timelines"]["echo"]["displayCompletionDay"] == final["automated"]["completionDay"]
+    assert payload["timelines"]["echo"]["displayCompletion"] == final["automated"]["completion"]
 
 
 def test_session_store_serializes_duplicate_concurrent_choices(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -423,7 +415,7 @@ def test_live_http_server_supports_a_complete_exact_path_playthrough(
                 state = request_json("/api/advance", {})
 
         assert state["finalReveal"]["review"]["outcome"] == "tied"
-        assert state["snapshot"]["jobsCompleted"] == state["jobCount"]
+        assert all(tile["completed"] for tile in state["livePuzzle"]["tiles"])
 
         state = request_json("/api/new", {"seed": 502})
         assert state["seed"] == 502

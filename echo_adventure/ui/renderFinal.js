@@ -27,43 +27,20 @@ function dateLabelParts(label) {
   return { month: match[1], day: match[2] };
 }
 
-function routeDecisionFromPoint(decisionPoint, actor, index, scoreDelta) {
+function routeDecisionFromPoint(decisionPoint, actor, index) {
   const nested = actor === "player" ? decisionPoint.playerDecision : decisionPoint.echoDecision;
-  if (nested && typeof nested === "object") {
-    return {
-      position: numberOrNull(nested.position) ?? index + 1,
-      questionId: nested.questionId || "",
-      questionTitle: nested.questionTitle || nested.questionId || "Decision",
-      questionText: nested.questionText || nested.questionTitle || "",
-      choice: nested.choice || "-",
-      scoreDelta: formatScore(nested.scoreDelta),
-      cumulativeScore: formatScore(nested.cumulativeScore),
-      affectedLabel: nested.affectedLabel || "-",
-      echoPreferredChoice: nested.echoPreferredChoice || "",
-      alignedWithEcho: Boolean(nested.alignedWithEcho),
-    };
-  }
-
-  const questionId = actor === "player"
-    ? decisionPoint.playerQuestionId
-    : decisionPoint.echoQuestionId;
-  const eventKind = actor === "player"
-    ? decisionPoint.playerEventKind
-    : decisionPoint.echoEventKind;
-  if (!questionId && !eventKind) return null;
+  if (!nested || typeof nested !== "object") return null;
   return {
-    position: index + 1,
-    questionId: questionId || "",
-    questionTitle: decisionPoint.questionTitle || questionId || "Decision",
-    questionText: decisionPoint.questionText || decisionPoint.questionTitle || "",
-    choice: actor === "player" ? decisionPoint.playerChoice || "-" : decisionPoint.echoChoice || "-",
-    scoreDelta: formatScore(scoreDelta),
-    cumulativeScore: formatScore(
-      actor === "player" ? decisionPoint.playerCumulativeScore : decisionPoint.echoCumulativeScore,
-    ),
-    affectedLabel: decisionPoint.affectedLabel || "-",
-    echoPreferredChoice: "",
-    alignedWithEcho: false,
+    position: numberOrNull(nested.position) ?? index + 1,
+    questionId: nested.questionId || "",
+    questionTitle: nested.questionTitle || nested.questionId || "Decision",
+    questionText: nested.questionText || nested.questionTitle || "",
+    choice: nested.choice || "-",
+    scoreDelta: formatScore(nested.scoreDelta),
+    cumulativeScore: formatScore(nested.cumulativeScore),
+    affectedLabel: nested.affectedLabel || "-",
+    echoPreferredChoice: nested.echoPreferredChoice || "",
+    alignedWithEcho: Boolean(nested.alignedWithEcho),
   };
 }
 
@@ -77,20 +54,18 @@ export function buildDailyDecisionGroups(decisionPoints) {
     const day = numberOrNull(decisionPoint.day) ?? index + 1;
     const dateLabel = decisionPoint.dateLabel || `Day ${day}`;
     const key = `${day}|${dateLabel}`;
-    const playerCumulative = numberOrNull(decisionPoint.playerCumulativeScore);
-    const echoCumulative = numberOrNull(decisionPoint.echoCumulativeScore);
-    const playerDelta = numberOrNull(decisionPoint.playerDelta)
+    const playerCumulative = numberOrNull(decisionPoint.playerDecision?.cumulativeScore);
+    const echoCumulative = numberOrNull(decisionPoint.echoDecision?.cumulativeScore);
+    const playerDelta = numberOrNull(decisionPoint.playerDecision?.scoreDelta)
       ?? (playerCumulative !== null ? playerCumulative - previousPlayerCumulative : 0);
-    const echoDelta = numberOrNull(decisionPoint.echoDelta)
+    const echoDelta = numberOrNull(decisionPoint.echoDecision?.scoreDelta)
       ?? (echoCumulative !== null ? echoCumulative - previousEchoCumulative : 0);
-    const sequence = numberOrNull(decisionPoint.sequence) ?? index + 1;
     let group = groupsByKey.get(key);
 
     if (!group) {
       group = {
         day,
         dateLabel,
-        decisions: [],
         playerDecisions: [],
         echoDecisions: [],
         playerDailyDelta: 0,
@@ -104,25 +79,12 @@ export function buildDailyDecisionGroups(decisionPoints) {
 
     group.playerDailyDelta += playerDelta;
     group.echoDailyDelta += echoDelta;
-    const playerDecision = routeDecisionFromPoint(decisionPoint, "player", index, playerDelta);
-    const echoDecision = routeDecisionFromPoint(decisionPoint, "echo", index, echoDelta);
+    const playerDecision = routeDecisionFromPoint(decisionPoint, "player", index);
+    const echoDecision = routeDecisionFromPoint(decisionPoint, "echo", index);
     if (playerDecision) group.playerDecisions.push(playerDecision);
     if (echoDecision) group.echoDecisions.push(echoDecision);
     group.playerDecisionCount = group.playerDecisions.length;
     group.echoDecisionCount = group.echoDecisions.length;
-    // Retain the original combined representation for callers that still consume it.
-    group.decisions.push({
-      sequence,
-      label: decisionPoint.label || `Q${sequence}`,
-      playerChoice: decisionPoint.playerChoice || "-",
-      echoChoice: decisionPoint.echoChoice || "-",
-      playerDelta: formatScore(playerDelta),
-      echoDelta: formatScore(echoDelta),
-      affected: decisionPoint.affectedLabel || "-",
-      playerEventKind: decisionPoint.playerEventKind || "decision",
-      echoEventKind: decisionPoint.echoEventKind || "decision",
-    });
-
     previousPlayerCumulative = playerCumulative !== null
       ? playerCumulative
       : previousPlayerCumulative + playerDelta;
@@ -146,7 +108,6 @@ export function buildDailyDecisionGroups(decisionPoints) {
     {
       day: 0,
       dateLabel: "Start",
-      decisions: [],
       playerDecisions: [],
       echoDecisions: [],
       playerDailyDelta: 0,
@@ -300,13 +261,7 @@ function renderDecisionScoreChart(history) {
 function renderFinalMetricBar(player, automated) {
   const playerCompletionDay = numberOrNull(player.completionDay);
   const echoCompletionDay = numberOrNull(automated.completionDay);
-  const completionTone = playerCompletionDay === null || echoCompletionDay === null
-    ? "neutral"
-    : playerCompletionDay < echoCompletionDay
-      ? "good"
-      : playerCompletionDay === echoCompletionDay
-        ? "warn"
-        : "danger";
+  const completionTone = playerCompletionDay === echoCompletionDay ? "warn" : "danger";
   const metricCards = [
     {
       label: "Completion date",

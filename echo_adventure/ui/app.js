@@ -91,7 +91,7 @@ async function startNewRun() {
   }
 }
 
-async function choose(cardId, choiceId, renderAfter = true) {
+async function choose(cardId, choiceId) {
   try {
     uiState.state = await api("/api/choice", {
       method: "POST",
@@ -99,9 +99,7 @@ async function choose(cardId, choiceId, renderAfter = true) {
     });
     uiState.pendingChoice = null;
     showError("");
-    if (renderAfter) {
-      render();
-    }
+    render();
     return uiState.state;
   } catch (error) {
     showError(error.message);
@@ -165,10 +163,8 @@ function renderMainSectionVisibility() {
 }
 
 configureDayClock({
-  render,
   renderInlineDecisions,
   prepareAdvanceDay,
-  showError,
   renderDecisionQueue,
 });
 configureDecisionActions({ choose });

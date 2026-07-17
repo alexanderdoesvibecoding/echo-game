@@ -18,14 +18,8 @@ def calculate_snapshot(state: SimulationState) -> MetricSnapshot:
     longest = max((max(0, job.remaining_days) for job in incomplete), default=0)
     projected = state.completion_day or state.current_day + max(0, longest - 1)
     return MetricSnapshot(
-        day=state.current_day,
-        jobs_completed=len(state.completed_jobs),
         jobs_remaining=len(incomplete),
         total_remaining_days=sum(max(0, job.remaining_days) for job in incomplete),
         projected_completion_day=projected,
         final_item_completed=state.final_item_completed,
     )
-
-
-def calculate_final_score(state: SimulationState) -> float:
-    return round(state.decision_score, 2)

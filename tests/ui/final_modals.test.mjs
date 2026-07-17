@@ -48,26 +48,41 @@ beforeEach(() => {
   dom.reset();
   resetUiState();
   dom.element("decisionChartTooltip");
-  hideDecisionChartTooltip({ force: true });
+  hideDecisionChartTooltip();
 });
 
 test("daily score groups begin at zero and aggregate all score events by day", () => {
   const groups = buildDailyDecisionGroups([
-    { sequence: 1, day: 1, dateLabel: "July 1", playerDelta: 1, echoDelta: -1.5, playerChoice: "A", echoChoice: "B" },
-    { sequence: 2, day: 1, dateLabel: "July 1", playerDelta: 0.5, echoDelta: 2, playerChoice: "C", echoChoice: "D" },
-    { sequence: 3, day: 2, dateLabel: "July 2", playerDelta: -1, echoDelta: 1 },
+    {
+      day: 1,
+      dateLabel: "July 1",
+      playerDecision: { scoreDelta: 1, cumulativeScore: 1, choice: "A" },
+      echoDecision: { scoreDelta: -1.5, cumulativeScore: -1.5, choice: "B" },
+    },
+    {
+      day: 1,
+      dateLabel: "July 1",
+      playerDecision: { scoreDelta: 0.5, cumulativeScore: 1.5, choice: "C" },
+      echoDecision: { scoreDelta: 2, cumulativeScore: 0.5, choice: "D" },
+    },
+    {
+      day: 2,
+      dateLabel: "July 2",
+      playerDecision: { scoreDelta: -1, cumulativeScore: 0.5 },
+      echoDecision: { scoreDelta: 1, cumulativeScore: 1.5 },
+    },
   ]);
 
   assert.equal(groups[0].dateLabel, "Start");
   assert.equal(groups[0].playerCumulativeScore, 0);
-  assert.equal(groups[1].decisions.length, 2);
+  assert.equal(groups[1].playerDecisionCount, 2);
   assert.equal(groups[1].playerDailyDelta, 1.5);
   assert.equal(groups[1].echoDailyDelta, 0.5);
   assert.equal(groups[2].playerCumulativeScore, 0.5);
   assert.equal(groups[2].echoCumulativeScore, 1.5);
 });
 
-test("decision chart tooltip safely renders, locks, and force-unlocks", () => {
+test("decision chart tooltip safely renders, locks, and closes", () => {
   const tooltip = dom.element("decisionChartTooltip");
   tooltip.offsetWidth = 300;
   tooltip.offsetHeight = 200;
@@ -75,29 +90,28 @@ test("decision chart tooltip safely renders, locks, and force-unlocks", () => {
   marker.classList.add("chart-hover-zone");
   marker.dataset = {
     dateLabel: "July <1>",
-    decisionCount: "1",
+    dayKey: "1",
+    playerDecisionCount: "1",
+    echoDecisionCount: "1",
     playerChange: "+1.00",
     playerCumulative: "+1.00",
     echoChange: "+2.00",
     echoCumulative: "+2.00",
-    decisions: JSON.stringify([
-      { label: "Q1", playerChoice: "Route <now>", echoChoice: "Optimize", playerDelta: "+1", echoDelta: "+2", affected: "Job 1" },
+    playerDecisions: JSON.stringify([
+      { position: 1, questionTitle: "Route", choice: "Route <now>", scoreDelta: "+1.00", affectedLabel: "Job 1" },
+    ]),
+    echoDecisions: JSON.stringify([
+      { position: 1, questionTitle: "Route", choice: "Optimize", scoreDelta: "+2.00", affectedLabel: "Job 1" },
     ]),
   };
 
-  showDecisionChartTooltip({ clientX: 500, clientY: 300 }, marker);
+  showDecisionChartTooltip({ preventDefault() {}, stopPropagation() {} }, marker);
   assert.equal(tooltip.classList.contains("active"), true);
+  assert.equal(tooltip.classList.contains("locked"), true);
   assert.match(tooltip.innerHTML, /July &lt;1&gt;/);
   assert.match(tooltip.innerHTML, /Route &lt;now&gt;/);
   assert.doesNotMatch(tooltip.innerHTML, /Route <now>/);
-  assert.match(tooltip.innerHTML, /Click to lock this panel/);
-
-  document.dispatchEvent("click", { target: marker, preventDefault() {}, stopPropagation() {} });
-  assert.equal(tooltip.classList.contains("locked"), true);
-  assert.match(tooltip.innerHTML, /Locked - click this day again to unlock/);
   hideDecisionChartTooltip();
-  assert.equal(tooltip.classList.contains("active"), true);
-  hideDecisionChartTooltip({ force: true });
   assert.equal(tooltip.classList.contains("active"), false);
 });
 
@@ -109,7 +123,12 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
       automated: { completion: "July 3", completionDay: 3, finalScore: 4 },
       completionHistory: {
         decisionPoints: [
-          { sequence: 1, day: 1, dateLabel: "July 1", playerDelta: 1, echoDelta: 2, playerChoice: "A", echoChoice: "B" },
+          {
+            day: 1,
+            dateLabel: "July 1",
+            playerDecision: { scoreDelta: 1, cumulativeScore: 1, choice: "A" },
+            echoDecision: { scoreDelta: 2, cumulativeScore: 2, choice: "B" },
+          },
         ],
       },
       review: { reasons: ["ECHO finished <first>."] },
@@ -141,7 +160,7 @@ test("welcome, settings, and new-run controls reflect browser-local state", () =
     renderDecisionQueue: () => { queueRenders += 1; },
     showNewRunError: value => { lastError = value; },
   });
-  uiState.state = { jobs: [{}, {}, {}] };
+  uiState.state = { jobCount: 3 };
   uiState.welcomeModalVisible = true;
 
   renderWelcomeModal();
@@ -195,11 +214,13 @@ test("final view hides without a reveal and tooltip tolerates invalid event data
   const marker = dom.createElement("bad-marker");
   marker.dataset = {
     dateLabel: "July 3",
-    decisionCount: "0",
-    decisions: "not-json",
+    playerDecisionCount: "0",
+    echoDecisionCount: "0",
+    playerDecisions: "not-json",
+    echoDecisions: "not-json",
   };
-  showDecisionChartTooltip({ clientX: 10, clientY: 10 }, marker);
-  assert.match(dom.element("decisionChartTooltip").innerHTML, /No decisions recorded for this day/);
+  showDecisionChartTooltip({ preventDefault() {}, stopPropagation() {} }, marker);
+  assert.match(dom.element("decisionChartTooltip").innerHTML, /You had no decisions on this day/);
   assert.equal(dom.element("decisionChartTooltip").classList.contains("active"), true);
 });
 

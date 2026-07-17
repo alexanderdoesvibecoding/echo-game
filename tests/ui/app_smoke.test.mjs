@@ -19,13 +19,13 @@ const initialState = {
   currentDate: "July 1",
   scheduleStartDate: "July 1",
   gameOver: false,
-  jobs: [{ id: "JOB-01" }, { id: "JOB-02" }],
+  jobCount: 2,
   dayCycleDurationMs: 1000,
   timelines: {
     player: { progressPercent: 0, displayCompletion: "July 3", projectedCompletion: "July 3" },
     echo: { progressPercent: 0, displayCompletion: "July 2", projectedCompletion: "July 2" },
   },
-  decisionProgress: { completed: 0, total: 0, openCardIds: [] },
+  decisionProgress: { completed: 0, total: 0 },
   decisions: [],
   livePuzzle: null,
   lastSummary: null,
@@ -75,10 +75,9 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
 
   uiState.state = {
     ...initialState,
-    decisionProgress: { completed: 0, total: 1, openCardIds: ["CARD-1"] },
+    decisionProgress: { completed: 0, total: 1 },
     decisions: [{
       id: "CARD-1",
-      selectedChoice: null,
       title: "Decision",
       description: "Choose",
       choices: [{ id: "choice-1", label: "Choose", icon: "adjust" }],

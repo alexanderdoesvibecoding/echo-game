@@ -8,7 +8,6 @@ from echo_adventure.decision_web import generate_decision_web
 from echo_adventure.decisions.cards import (
     _avoid_exact_cancellation,
     _day_changes,
-    decision_progress,
     generate_daily_decision_cards,
     select_echo_choice_from_choices,
 )
@@ -19,7 +18,6 @@ from echo_adventure.decisions.definitions import (
     SUPPORTED_CHOICE_ICON_KEYS,
 )
 from echo_adventure.decisions.effects import apply_choice
-from echo_adventure.echo import run_omniscient_echo
 from echo_adventure.models import DecisionFollowUp, PendingFollowUp
 from echo_adventure.scenario_generator import generate_scenario
 from echo_adventure.simulation import initialize_state
@@ -60,21 +58,13 @@ def test_inverse_follow_up_never_exactly_cancels_the_trigger() -> None:
     assert _avoid_exact_cancellation({"JOB-01": -1}, 2, "JOB-01") == {"JOB-01": -1}
 
 
-def test_echo_choice_and_progress_have_stable_tiebreaks() -> None:
+def test_echo_choice_has_a_stable_tiebreak() -> None:
     choices = [
         make_choice("choice-1", score=2),
         make_choice("choice-2", score=2),
         make_choice("choice-3", score=1),
     ]
     assert select_echo_choice_from_choices(choices).id == "choice-2"
-
-    cards = [make_card(choices[0]), make_card(choices[1])]
-    cards[1].id = "SECOND"
-    progress = decision_progress(cards, {cards[0].id: "choice-1"}, day=4)
-    assert progress.day == 4
-    assert progress.total_questions == 2
-    assert progress.answered_questions == 1
-    assert progress.open_card_ids == ["SECOND"]
 
 
 def test_apply_choice_changes_only_unfinished_known_jobs_and_records_score() -> None:
@@ -88,14 +78,13 @@ def test_apply_choice_changes_only_unfinished_known_jobs_and_records_score() -> 
     )
     card = make_card(choice)
 
-    note = apply_choice(state, card, choice, actor="player")
+    apply_choice(state, card, choice, actor="player")
 
     assert state.jobs["JOB-01"].remaining_days == -1
     assert state.jobs["JOB-02"].remaining_days == 0
-    assert "3 day(s) removed from Job 1" in note
     assert state.decision_score == 2.25
     record = state.decision_history[0]
-    assert (record.actor, record.choice_id, record.aligned_with_echo) == ("player", "choice-1", True)
+    assert (record.actor, record.aligned_with_echo) == ("player", True)
     assert record.cumulative_score == 2.25
 
 
@@ -127,10 +116,9 @@ def test_daily_card_generation_is_deterministic_varied_and_free_of_subjob_copy()
     assert len(first) == 3
     assert len({card.definition_id for card in first}) == 3
     assert len({card.primary_job_id for card in first}) == 3
-    assert all(card.primary_job_id in card.target_ids for card in first)
     assert all(card.echo_choice_id in {choice.id for choice in card.choices} for card in first)
     assert "subjob" not in " ".join(
-        [part for card in first for part in (card.title, card.description, *(choice.description for choice in card.choices))]
+        [part for card in first for part in (card.title, card.description)]
     ).lower()
 
 
@@ -166,7 +154,11 @@ def test_decision_web_is_deterministic_and_every_node_is_fully_solved(solved_web
 
     assert web == duplicate
     assert web.optimal_completion_day < config.max_campaign_day
-    assert web.terminal_transition_count > 0
+    assert any(
+        transition.completion_day is not None
+        for node in web.nodes.values()
+        for transition in node.transitions.values()
+    )
     for node in web.nodes.values():
         assert set(node.transitions) == {choice.id for choice in node.card.choices}
         assert node.card.echo_choice_id == node.optimal_choice_id
@@ -197,19 +189,6 @@ def test_decision_web_detects_runtime_drift(solved_web_bundle) -> None:
     state.jobs["JOB-01"].remaining_days += 1
     with pytest.raises(RuntimeError, match="diverged"):
         web.assert_runtime_matches(state, web.root_node_id)
-
-
-def test_omniscient_echo_completes_on_the_solved_day_and_score(solved_web_bundle) -> None:
-    _, scenario, web = solved_web_bundle
-    state = initialize_state(scenario)
-    state.is_echo_benchmark = True
-
-    run_omniscient_echo(state, web)
-
-    assert state.final_item_completed
-    assert state.completion_day == web.optimal_completion_day
-    assert state.decision_score == web.optimal_score
-    assert all(record.actor == "ECHO" and record.aligned_with_echo for record in state.decision_history)
 
 
 def test_optimal_route_never_enters_overtime(solved_web_bundle) -> None:
@@ -263,16 +242,17 @@ def test_every_route_through_a_small_web_respects_echo_objective_order(seed: int
         transition = node.transitions[node.optimal_choice_id]
         node_id = transition.next_node_id
 
-    assert globally_best == (web.optimal_completion_day, web.optimal_score, tuple(echo_path))
+    optimal_score = web.node(web.root_node_id).optimal_future_score
+    assert globally_best == (web.optimal_completion_day, optimal_score, tuple(echo_path))
     for completion_day, score, path in routes:
         if path == tuple(echo_path):
             continue
         assert (
             completion_day > web.optimal_completion_day
-            or (completion_day == web.optimal_completion_day and score < web.optimal_score)
+            or (completion_day == web.optimal_completion_day and score < optimal_score)
             or (
                 completion_day == web.optimal_completion_day
-                and score == web.optimal_score
+                and score == optimal_score
                 and path > tuple(echo_path)
             )
         )

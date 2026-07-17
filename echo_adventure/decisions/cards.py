@@ -1,4 +1,4 @@
-"""Construct state-specific cards from the restored 75-decision catalog."""
+"""Construct state-specific cards from the 75-decision catalog."""
 
 from __future__ import annotations
 
@@ -6,12 +6,10 @@ import hashlib
 import random
 
 from ..config import GameConfig
-from ..enums import DecisionType
 from ..models import (
     DecisionCard,
     DecisionChoice,
     DecisionFollowUp,
-    DecisionProgress,
     Job,
     PendingFollowUp,
     SimulationState,
@@ -21,8 +19,6 @@ from .definitions import (
     DEFINITIONS_BY_ID,
     CatalogChoice,
     DecisionDefinition,
-    choice_schedule_score,
-    definition_schedule_score,
 )
 
 
@@ -141,17 +137,13 @@ def _build_card(
         for index, catalog_choice in enumerate(definition.choices, start=1)
     ]
     echo_choice = select_echo_choice_from_choices(choices)
-    target_ids = list(dict.fromkeys([primary.id, *(job_id for choice in choices for job_id in choice.day_changes)]))
     context = _format_job_list([job.name for job in targets])
     tie_text = "This follow-up remains tied to" if pending else "Today's affected job is"
     description = f"{_simplify_language(definition.description)} {tie_text} {primary.name}."
     return DecisionCard(
         id=f"DEC-D{state.current_day:03d}-{ordinal:02d}-{definition.id}",
-        day=state.current_day,
-        type=_decision_type(definition),
         title=_simplify_language(definition.title),
         description=description,
-        target_ids=target_ids,
         choices=choices,
         echo_choice_id=echo_choice.id,
         context_label=context,
@@ -184,20 +176,14 @@ def build_preplanned_decision_card(
         for index, catalog_choice in enumerate(definition.choices, start=1)
     ]
     echo_choice = select_echo_choice_from_choices(choices)
-    target_ids = list(
-        dict.fromkeys([primary.id, *(job_id for choice in choices for job_id in choice.day_changes)])
-    )
     context = _format_job_list([job.name for job in targets])
     is_follow_up = definition.is_follow_up
     tie_text = "This follow-up remains tied to" if is_follow_up else "Today's affected job is"
     description = f"{_simplify_language(definition.description)} {tie_text} {primary.name}."
     return DecisionCard(
         id=f"DEC-D{state.current_day:03d}-Q{question_number:02d}-{node_token}-{definition.id}",
-        day=state.current_day,
-        type=_decision_type(definition),
         title=_simplify_language(definition.title),
         description=description,
-        target_ids=target_ids,
         choices=choices,
         echo_choice_id=echo_choice.id,
         context_label=context,
@@ -216,11 +202,9 @@ def _build_preplanned_choice(
 ) -> DecisionChoice:
     """Keep web branching exact and tractable by changing one known job."""
     changes = {primary.id: day_delta} if day_delta else {}
-    schedule_text = _format_change_summary(changes, targets)
     return DecisionChoice(
         id=f"choice-{index}",
         label=_simplify_language(catalog_choice.label),
-        description=f"{_simplify_language(catalog_choice.description)} {schedule_text}",
         day_changes=changes,
         score_delta=float(-sum(changes.values())),
         icon_key=catalog_choice.icon_key,
@@ -235,15 +219,12 @@ def _build_choice(
     index: int,
     trigger_delta: int = 0,
 ) -> DecisionChoice:
-    schedule_score = choice_schedule_score(definition, catalog_choice)
-    changes = _day_changes(schedule_score, targets)
+    changes = _day_changes(catalog_choice.score_delta, targets)
     changes = _avoid_exact_cancellation(changes, trigger_delta, targets[0].id if targets else "")
-    schedule_text = _format_change_summary(changes, targets)
     follow_ups = _choice_follow_ups(definition, catalog_choice)
     return DecisionChoice(
         id=f"choice-{index}",
         label=_simplify_language(catalog_choice.label),
-        description=f"{_simplify_language(catalog_choice.description)} {schedule_text}",
         day_changes=changes,
         score_delta=float(-sum(changes.values())),
         icon_key=catalog_choice.icon_key,
@@ -263,7 +244,7 @@ def _preplanned_deltas(
     small tiers. When their direction opposes the triggering answer, its exact
     magnitude is reserved so no answer can merely refund the earlier change.
     """
-    scores = [choice_schedule_score(definition, choice) for choice in definition.choices]
+    scores = [choice.score_delta for choice in definition.choices]
     if not definition.is_follow_up:
         deltas: list[int] = []
         for score in scores:
@@ -342,52 +323,13 @@ def _choice_follow_ups(
     return tuple(unique.values())
 
 
-def _decision_type(definition: DecisionDefinition) -> DecisionType:
-    score = definition_schedule_score(definition)
-    if score > _NEUTRAL_THRESHOLD:
-        return DecisionType.OPPORTUNITY
-    if score < -_NEUTRAL_THRESHOLD:
-        return DecisionType.DELAY
-    return DecisionType.NEUTRAL
-
-
-def _format_change_summary(changes: dict[str, int], targets: list[Job]) -> str:
-    if not changes:
-        return "Schedule effect: no days added or removed."
-    names = {job.id: job.name for job in targets}
-    delta = next(iter(changes.values()))
-    verb = "Remove" if delta < 0 else "Add"
-    amount = abs(delta)
-    job_names = _format_job_list([names[job_id] for job_id in changes])
-    each = " each" if len(changes) > 1 else ""
-    return f"Schedule effect: {verb} {amount} day{'s' if amount != 1 else ''}{each} {'from' if delta < 0 else 'to'} {job_names}."
-
-
 def _simplify_language(value: str) -> str:
     """Remove obsolete subjob terminology while retaining manufacturing flavor."""
     return value.replace("subjobs", "jobs").replace("Subjobs", "Jobs").replace("subjob", "job").replace("Subjob", "Job")
 
 
-def select_echo_choice(card: DecisionCard) -> DecisionChoice:
-    return select_echo_choice_from_choices(card.choices)
-
-
 def select_echo_choice_from_choices(choices: list[DecisionChoice]) -> DecisionChoice:
     return max(choices, key=lambda choice: (choice.score_delta, choice.id))
-
-
-def decision_progress(
-    cards: list[DecisionCard],
-    selected_choices: dict[str, str],
-    day: int,
-) -> DecisionProgress:
-    open_ids = [card.id for card in cards if card.id not in selected_choices]
-    return DecisionProgress(
-        day=day,
-        total_questions=len(cards),
-        answered_questions=len(cards) - len(open_ids),
-        open_card_ids=open_ids,
-    )
 
 
 def _stable_seed(seed: int, day: int, suffix: str) -> int:

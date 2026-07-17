@@ -34,7 +34,9 @@
 - [ ] Final summary update
     - [ ] Make score easier to understand – Alexander
         - 0-100 scale
-    - [ ] Graph should show how questions impacted – Matt
+    - [ ] Update outcome deciders (or whatever it was called) to use AI, maybe to explain how the questions impacted
+      you. I.e., it can say something like "oh on day 3 question 2 you made a really bad choice, and it affected you
+      here here here and here because of it" – Matt
     - [ ] Center the text inside the boxes – Alexander
     - [x] The graph gets hard to see as days increase to beyond like 10–20 – Ethan
 

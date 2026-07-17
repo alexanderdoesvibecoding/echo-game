@@ -9,7 +9,7 @@ from echo_adventure.decisions.cards import (
     _format_job_list,
     build_preplanned_decision_card,
     generate_daily_decision_cards,
-    select_echo_choice,
+    select_echo_choice_from_choices,
 )
 from echo_adventure.decisions.definitions import (
     BASE_DEFINITIONS,
@@ -45,14 +45,12 @@ def test_every_catalog_definition_builds_a_truthful_preplanned_card(definition) 
 
     assert card.definition_id == definition.id
     assert card.primary_job_id == "JOB-01"
-    assert card.echo_choice_id == select_echo_choice(card).id
+    assert card.echo_choice_id == select_echo_choice_from_choices(card.choices).id
     assert "subjob" not in f"{card.title} {card.description}".lower()
     for choice in card.choices:
         assert set(choice.day_changes) <= {"JOB-01"}
         assert choice.score_delta == float(-sum(choice.day_changes.values()))
         assert choice.icon_key in SUPPORTED_CHOICE_ICON_KEYS
-        assert "Schedule effect:" in choice.description
-        assert "subjob" not in choice.description.lower()
         delta = sum(choice.day_changes.values())
         assert abs(delta) <= (4 if definition.is_follow_up else 2)
         if definition.is_follow_up:
@@ -113,15 +111,15 @@ def test_echo_guardrails_reject_completed_non_daily_overtime_and_early_terminal_
     with pytest.raises(RuntimeError, match="cannot advance before"):
         advance_omniscient_day(
             state,
-            DecisionWebTransition("choice-1", None, advances_day=False),
+            DecisionWebTransition(None, advances_day=False),
         )
     with pytest.raises(RuntimeError, match="crossed the runtime-generation boundary"):
         advance_omniscient_day(
             state,
-            DecisionWebTransition("choice-1", None, advances_day=True, enters_overtime=True),
+            DecisionWebTransition(None, advances_day=True, enters_overtime=True),
         )
     with pytest.raises(RuntimeError, match="terminal web edge before completing"):
         advance_omniscient_day(
             state,
-            DecisionWebTransition("choice-1", None, advances_day=True),
+            DecisionWebTransition(None, advances_day=True),
         )

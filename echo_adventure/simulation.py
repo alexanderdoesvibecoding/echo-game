@@ -21,7 +21,6 @@ class DayResult:
 
 def initialize_state(scenario: Scenario) -> SimulationState:
     state = SimulationState(
-        scenario_id=scenario.scenario_id,
         seed=scenario.seed,
         jobs=copy.deepcopy(scenario.jobs),
     )
@@ -55,7 +54,6 @@ def advance_day(state: SimulationState) -> DayResult:
 
     update_state_metrics(state)
     end_snapshot = calculate_snapshot(state)
-    state.metric_history.append(end_snapshot)
     completed_today = sorted(state.completed_jobs - completed_before)
     result = DayResult(
         day=day,

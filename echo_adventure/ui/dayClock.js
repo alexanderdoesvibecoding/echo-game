@@ -10,11 +10,9 @@ const TIMELINE_ACTORS = [
   { key: "echo", label: "ECHO:", spokenLabel: "ECHO" },
 ];
 const callbacks = {
-  render: () => {},
   renderInlineDecisions: () => {},
   renderDecisionQueue: () => {},
   prepareAdvanceDay: () => {},
-  showError: () => {},
 };
 
 export function configureDayClock(overrides) {
@@ -22,7 +20,7 @@ export function configureDayClock(overrides) {
 }
 
 export function decisionProgress() {
-  return uiState.state?.decisionProgress || { completed: 0, total: 0, openCardIds: [] };
+  return uiState.state?.decisionProgress || { completed: 0, total: 0 };
 }
 
 export function readyToAdvance() {
@@ -111,7 +109,7 @@ export function nextDecisionIsDue() {
 }
 
 export function currentOpenDecisionCard() {
-  return uiState.state?.decisions?.find(card => !card.selectedChoice) || null;
+  return uiState.state?.decisions?.[0] || null;
 }
 
 export function decisionInteractionBlocked() {

@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import replace
 
 from echo_adventure.config import GameConfig
-from echo_adventure.enums import DecisionType
 from echo_adventure.models import (
     DecisionCard,
     DecisionChoice,
@@ -40,7 +39,7 @@ def scenario_from_durations(*durations: int, seed: int = 123) -> Scenario:
         )
         for index, duration in enumerate(durations, start=1)
     }
-    return Scenario(scenario_id=f"SCN-{seed:06d}", seed=seed, jobs=jobs)
+    return Scenario(seed=seed, jobs=jobs)
 
 
 def make_choice(
@@ -54,7 +53,6 @@ def make_choice(
     return DecisionChoice(
         id=choice_id,
         label=f"Choice {choice_id}",
-        description=f"Description {choice_id}",
         day_changes=dict(changes or {}),
         score_delta=score,
         icon_key=icon,
@@ -71,11 +69,8 @@ def make_card(
     card_choices = list(choices or (make_choice("choice-1"),))
     return DecisionCard(
         id="DEC-D001-Q01-UNIT-unit-decision",
-        day=1,
-        type=DecisionType.NEUTRAL,
         title="Unit decision",
         description="Choose a schedule response.",
-        target_ids=[primary_job_id],
         choices=card_choices,
         echo_choice_id=echo_choice_id or card_choices[0].id,
         context_label="Job 1",
