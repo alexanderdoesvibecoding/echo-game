@@ -56,6 +56,23 @@ def test_every_catalog_definition_builds_a_truthful_preplanned_card(definition) 
         if definition.is_follow_up:
             assert trigger_delta + delta != 0
 
+    last_job_state = initialize_state(scenario_from_durations(4))
+    last_job = next(iter(last_job_state.jobs.values()))
+    last_job_card = build_preplanned_decision_card(
+        last_job_state,
+        definition,
+        last_job,
+        [last_job],
+        question_number=1,
+        node_token="LASTJOB",
+        trigger_delta=trigger_delta,
+    )
+    assert all(
+        delta <= 0
+        for choice in last_job_card.choices
+        for delta in choice.day_changes.values()
+    )
+
 
 @pytest.mark.parametrize(
     "definition",

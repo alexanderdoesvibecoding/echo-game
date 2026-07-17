@@ -25,7 +25,10 @@ from .definitions import (
 _NEUTRAL_THRESHOLD = 0.15
 
 
-def generate_daily_decision_cards(state: SimulationState, config: GameConfig) -> list[DecisionCard]:
+def generate_daily_decision_cards(
+    state: SimulationState,
+    config: GameConfig,
+) -> list[DecisionCard]:
     """Create two-to-four varied questions, including eligible follow-ups."""
     incomplete = sorted(state.incomplete_jobs(), key=lambda job: (-job.remaining_days, job.id))
     if not incomplete:
@@ -61,8 +64,18 @@ def generate_daily_decision_cards(state: SimulationState, config: GameConfig) ->
         assigned_jobs.add(primary.id)
 
     cards: list[DecisionCard] = []
+    prevent_delays = len(incomplete) == 1
     for ordinal, (definition, primary, pending) in enumerate(selected, start=1):
-        card = _build_card(state, incomplete, rng, ordinal, definition, primary, pending)
+        card = _build_card(
+            state,
+            incomplete,
+            rng,
+            ordinal,
+            definition,
+            primary,
+            pending,
+            prevent_delays=prevent_delays,
+        )
         cards.append(card)
         state.decision_cards[card.id] = card
         if definition.is_follow_up:
@@ -122,6 +135,7 @@ def _build_card(
     definition: DecisionDefinition,
     primary: Job,
     pending: PendingFollowUp | None,
+    prevent_delays: bool = False,
 ) -> DecisionCard:
     others = [job for job in incomplete if job.id != primary.id]
     rng.shuffle(others)
@@ -133,6 +147,7 @@ def _build_card(
             targets,
             index,
             trigger_delta=pending.trigger_delta if pending else 0,
+            prevent_delays=prevent_delays,
         )
         for index, catalog_choice in enumerate(definition.choices, start=1)
     ]
@@ -164,6 +179,8 @@ def build_preplanned_decision_card(
     """Build one immutable-web question for an exact precomputed state."""
     targets = [primary, *(job for job in ordered_targets if job.id != primary.id)][:5]
     deltas = _preplanned_deltas(definition, targets, trigger_delta)
+    if len(targets) == 1:
+        deltas = [min(0, delta) for delta in deltas]
     choices = [
         _build_preplanned_choice(
             definition,
@@ -218,9 +235,12 @@ def _build_choice(
     targets: list[Job],
     index: int,
     trigger_delta: int = 0,
+    prevent_delays: bool = False,
 ) -> DecisionChoice:
     changes = _day_changes(catalog_choice.score_delta, targets)
     changes = _avoid_exact_cancellation(changes, trigger_delta, targets[0].id if targets else "")
+    if prevent_delays:
+        changes = _remove_delays(changes)
     follow_ups = _choice_follow_ups(definition, catalog_choice)
     return DecisionChoice(
         id=f"choice-{index}",
@@ -230,6 +250,11 @@ def _build_choice(
         icon_key=catalog_choice.icon_key,
         follow_ups=follow_ups,
     )
+
+
+def _remove_delays(changes: dict[str, int]) -> dict[str, int]:
+    """Keep the last unfinished job from being extended forever."""
+    return {job_id: delta for job_id, delta in changes.items() if delta < 0}
 
 
 def _preplanned_deltas(

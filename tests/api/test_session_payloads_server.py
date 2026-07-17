@@ -210,9 +210,16 @@ def test_slow_route_enters_overtime_and_still_loses_after_finishing(
     guard = 0
     while not session.player_state.final_item_completed:
         guard += 1
-        assert guard < 30
+        assert guard < 50
         card = session.current_cards[0]
-        session.apply_choice(card.id, card.echo_choice_id)
+        if len(session.player_state.incomplete_jobs()) == 1:
+            assert all(
+                delta <= 0
+                for choice in card.choices
+                for delta in choice.day_changes.values()
+            )
+        slowest = min(card.choices, key=lambda choice: (choice.score_delta, choice.id))
+        session.apply_choice(card.id, slowest.id)
         if session.ready_to_advance():
             session.advance_day()
 

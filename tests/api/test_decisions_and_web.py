@@ -121,6 +121,19 @@ def test_daily_card_generation_is_deterministic_varied_and_free_of_subjob_copy()
         [part for card in first for part in (card.title, card.description)]
     ).lower()
 
+    last_job_state = initialize_state(scenario_from_durations(2))
+    last_job_cards = generate_daily_decision_cards(
+        last_job_state,
+        config,
+    )
+    assert last_job_cards
+    assert all(
+        delta <= 0
+        for card in last_job_cards
+        for choice in card.choices
+        for delta in choice.day_changes.values()
+    )
+
 
 def test_due_follow_up_is_prioritized_and_stale_follow_ups_are_discarded() -> None:
     config = small_config()
