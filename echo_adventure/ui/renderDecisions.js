@@ -163,7 +163,15 @@ function updateQueueDayClock(section, paused) {
   if (!clock) return;
   const percent = dayCyclePercent();
   const roundedPercent = Math.round(percent);
-  clock.style.setProperty("--day-cycle-angle", `${percent * 3.6}deg`);
+  const dayKey = `${uiState.runCycleId}:${uiState.state.seed}:${uiState.state.day}`;
+  const previousDayKey = clock.dataset.dayClockKey || "";
+  const previousRotationBase = Number(clock.dataset.dayClockRotationBase || 0);
+  const rotationBase = previousDayKey && previousDayKey !== dayKey
+    ? previousRotationBase + 360
+    : previousRotationBase;
+  clock.dataset.dayClockKey = dayKey;
+  clock.dataset.dayClockRotationBase = String(rotationBase);
+  clock.style.setProperty("--day-cycle-angle", `${rotationBase + percent * 3.6}deg`);
   clock.setAttribute("aria-valuenow", String(roundedPercent));
   clock.setAttribute(
     "aria-valuetext",

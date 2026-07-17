@@ -240,6 +240,29 @@ test("decision queue reveals due choices, tracks selection, and submits the sele
   assert.doesNotMatch(body.innerHTML, /Confirm response[\s\S]*disabled/);
   await submitDecision();
   assert.deepEqual(calls, [["CARD-1", "choice-1"]]);
+
+  uiState.state = statePayload({
+    decisionProgress: { completed: 0, total: 0 },
+    decisions: [],
+  });
+  uiState.dayCycleProgress = 100;
+  renderDecisionQueue();
+  assert.equal(queueClock.style.getPropertyValue("--day-cycle-angle"), "360deg");
+
+  uiState.state = statePayload({
+    day: 2,
+    currentDate: "July 2",
+    decisionProgress: { completed: 0, total: 0 },
+    decisions: [],
+  });
+  uiState.dayCycleProgress = 0;
+  renderDecisionQueue();
+  assert.equal(queueClock.style.getPropertyValue("--day-cycle-angle"), "360deg");
+
+  uiState.dayCycleProgress = 10;
+  renderDecisionQueue();
+  assert.equal(queueClock.style.getPropertyValue("--day-cycle-angle"), "396deg");
+  assert.match(body.innerHTML, /No decision currently requires your attention/);
 });
 
 test("inline decision area contains the shared player and ECHO clock", () => {
