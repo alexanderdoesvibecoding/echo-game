@@ -5,9 +5,12 @@ import { $, escapeHtml } from "./html.js";
 
 let selectedDecisionChartDayKey = null;
 
-const formatScore = (value) => {
+const SCORE_BASELINE = 50;
+
+const formatScore = (value, options = {}) => {
   const number = Number(value) || 0;
-  return `${number >= 0 ? "+" : ""}${number.toFixed(2)}`;
+  const signed = options.signed !== false;
+  return `${signed && number >= 0 ? "+" : ""}${number.toFixed(2)}`;
 };
 
 function numberOrNull(value) {
@@ -37,7 +40,7 @@ function routeDecisionFromPoint(decisionPoint, actor, index) {
     questionText: nested.questionText || nested.questionTitle || "",
     choice: nested.choice || "-",
     scoreDelta: formatScore(nested.scoreDelta),
-    cumulativeScore: formatScore(nested.cumulativeScore),
+    cumulativeScore: formatScore(nested.cumulativeScore, { signed: false }),
     affectedLabel: nested.affectedLabel || "-",
     echoPreferredChoice: nested.echoPreferredChoice || "",
     alignedWithEcho: Boolean(nested.alignedWithEcho),
@@ -47,8 +50,8 @@ function routeDecisionFromPoint(decisionPoint, actor, index) {
 export function buildDailyDecisionGroups(decisionPoints) {
   const groups = [];
   const groupsByKey = new Map();
-  let previousPlayerCumulative = 0;
-  let previousEchoCumulative = 0;
+  let previousPlayerCumulative = SCORE_BASELINE;
+  let previousEchoCumulative = SCORE_BASELINE;
 
   decisionPoints.forEach((decisionPoint, index) => {
     const day = numberOrNull(decisionPoint.day) ?? index + 1;
@@ -93,8 +96,8 @@ export function buildDailyDecisionGroups(decisionPoints) {
       : previousEchoCumulative + echoDelta;
   });
 
-  let playerRunning = 0;
-  let echoRunning = 0;
+  let playerRunning = SCORE_BASELINE;
+  let echoRunning = SCORE_BASELINE;
   groups.forEach((group) => {
     group.playerDailyDelta = roundScore(group.playerDailyDelta);
     group.echoDailyDelta = roundScore(group.echoDailyDelta);
@@ -112,8 +115,8 @@ export function buildDailyDecisionGroups(decisionPoints) {
       echoDecisions: [],
       playerDailyDelta: 0,
       echoDailyDelta: 0,
-      playerCumulativeScore: 0,
-      echoCumulativeScore: 0,
+      playerCumulativeScore: SCORE_BASELINE,
+      echoCumulativeScore: SCORE_BASELINE,
       playerDecisionCount: 0,
       echoDecisionCount: 0,
       isBaseline: true,
@@ -133,11 +136,8 @@ function renderDecisionScoreChart(history) {
   const pad = { left: 58, right: 58, top: 18, bottom: 68 };
   const playerScore = dailyGroups.map(group => Number(group.playerCumulativeScore) || 0);
   const echoScore = dailyGroups.map(group => Number(group.echoCumulativeScore) || 0);
-  const rawMin = Math.min(0, ...playerScore, ...echoScore);
-  const rawMax = Math.max(0, ...playerScore, ...echoScore);
-  const scoreSpan = Math.max(1, rawMax - rawMin);
-  const minScore = rawMin - scoreSpan * 0.15;
-  const maxScore = rawMax + scoreSpan * 0.15;
+  const minScore = 0;
+  const maxScore = 100;
   const plotWidth = width - pad.left - pad.right;
   const plotHeight = height - pad.top - pad.bottom;
   const point = (value, index) => {
@@ -149,14 +149,12 @@ function renderDecisionScoreChart(history) {
     const [x, y] = point(Number(value) || 0, index);
     return `${index ? "L" : "M"} ${x.toFixed(1)} ${y.toFixed(1)}`;
   }).join(" ");
-  const yTicks = rawMin === rawMax
-    ? [-1, 0, 1]
-    : [...new Set([rawMin, 0, rawMax].map(value => Number(value.toFixed(2))))].sort((a, b) => a - b);
+  const yTicks = [0, 50, 100];
   const yGrid = yTicks.map(value => {
     const [, y] = point(value, 0);
     return `
       <line class="chart-grid" x1="${pad.left}" y1="${y.toFixed(1)}" x2="${(width - pad.right).toFixed(1)}" y2="${y.toFixed(1)}"></line>
-      <text class="chart-label" x="${pad.left - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">${formatScore(value)}</text>
+      <text class="chart-label" x="${pad.left - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">${formatScore(value, { signed: false })}</text>
     `;
   }).join("");
   const xLabels = dailyGroups.map((group, index) => {
@@ -175,8 +173,8 @@ function renderDecisionScoreChart(history) {
     const ariaLabel = [
       `${group.dateLabel}.`,
       `${group.playerDecisionCount} of your decisions and ${group.echoDecisionCount} ECHO decisions.`,
-      `Your cumulative score ${formatScore(group.playerCumulativeScore)}.`,
-      `ECHO cumulative score ${formatScore(group.echoCumulativeScore)}.`,
+      `Your cumulative score ${formatScore(group.playerCumulativeScore, { signed: false })}.`,
+      `ECHO cumulative score ${formatScore(group.echoCumulativeScore, { signed: false })}.`,
       "Select to review both routes.",
     ].join(" ");
     return `
@@ -193,8 +191,8 @@ function renderDecisionScoreChart(history) {
       data-echo-decision-count="${escapeHtml(group.echoDecisionCount)}"
       data-player-change="${escapeHtml(formatScore(group.playerDailyDelta))}"
       data-echo-change="${escapeHtml(formatScore(group.echoDailyDelta))}"
-      data-player-cumulative="${escapeHtml(formatScore(group.playerCumulativeScore))}"
-      data-echo-cumulative="${escapeHtml(formatScore(group.echoCumulativeScore))}"
+      data-player-cumulative="${escapeHtml(formatScore(group.playerCumulativeScore, { signed: false }))}"
+      data-echo-cumulative="${escapeHtml(formatScore(group.echoCumulativeScore, { signed: false }))}"
       data-player-decisions="${escapeHtml(JSON.stringify(group.playerDecisions))}"
       data-echo-decisions="${escapeHtml(JSON.stringify(group.echoDecisions))}"
     `;

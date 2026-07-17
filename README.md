@@ -55,6 +55,28 @@ The question is not whether ECHO made a mistake. It is whether you can avoid mak
 4. **Assemble the submarine.** Each completed job reveals another piece of the final submarine.
 5. **Compare against ECHO.** When all work is complete, the game reveals completion timing, score history, choice alignment, and the reason ECHO won—or why the exact-path run tied.
 
+## Decision score
+
+The displayed decision score is a 0-100 rating derived from raw schedule points. It starts at **50.00**, which represents a neutral route before any decisions are made.
+
+Each choice first receives raw schedule points from its stated job-day effect:
+
+```text
+raw choice points = -1 * total job-day change
+```
+
+So a choice that removes 2 total job-days is worth `+2` raw points, a choice that adds 2 total job-days is worth `-2` raw points, and a neutral choice is worth `0`. The run's raw score is the cumulative sum of those raw choice points.
+
+The public score converts that unbounded raw total into a bounded 0-100 value:
+
+```text
+public score = 50 + (50 * raw score / (abs(raw score) + 10))
+```
+
+The result is clamped to `0-100` and rounded to two decimals. A raw score of `0` displays as `50.00`; positive raw scores move toward `100`, and negative raw scores move toward `0`. Because the conversion is monotonic, the route with the higher raw score also has the higher displayed score.
+
+ECHO still optimizes completion day first. Among routes that finish on the same day, it maximizes raw schedule points, which also maximizes the displayed 0-100 score.
+
 ## Simulation rules
 
 | System            | Behavior                                                                                                                                                                                                  |

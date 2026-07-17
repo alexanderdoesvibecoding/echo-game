@@ -51,7 +51,7 @@ beforeEach(() => {
   hideDecisionChartTooltip();
 });
 
-test("daily score groups begin at zero and aggregate all score events by day", () => {
+test("daily score groups begin at neutral score and aggregate all score events by day", () => {
   const groups = buildDailyDecisionGroups([
     {
       day: 1,
@@ -74,12 +74,12 @@ test("daily score groups begin at zero and aggregate all score events by day", (
   ]);
 
   assert.equal(groups[0].dateLabel, "Start");
-  assert.equal(groups[0].playerCumulativeScore, 0);
+  assert.equal(groups[0].playerCumulativeScore, 50);
   assert.equal(groups[1].playerDecisionCount, 2);
   assert.equal(groups[1].playerDailyDelta, 1.5);
   assert.equal(groups[1].echoDailyDelta, 0.5);
-  assert.equal(groups[2].playerCumulativeScore, 0.5);
-  assert.equal(groups[2].echoCumulativeScore, 1.5);
+  assert.equal(groups[2].playerCumulativeScore, 50.5);
+  assert.equal(groups[2].echoCumulativeScore, 51.5);
 });
 
 test("decision chart tooltip safely renders, locks, and closes", () => {

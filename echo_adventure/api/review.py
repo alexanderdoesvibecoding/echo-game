@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..scoring import public_score
+
 
 class ReviewMixin:
     def _final_review_payload(self) -> dict[str, Any]:
@@ -50,7 +52,7 @@ class ReviewMixin:
         reasons = [
             f"You completed the project on day {player_day}; ECHO completed it on day {echo_day}.",
             f"You chose ECHO's preferred response on {aligned} of {len(player_records)} questions.",
-            f"Your decision score was {self.player_state.decision_score:.0f}; ECHO's was {self.automated_state.decision_score:.0f}.",
+            f"Your decision score was {public_score(self.player_state.decision_score):.0f}/100; ECHO's was {public_score(self.automated_state.decision_score):.0f}/100.",
         ]
         return {
             "outcome": outcome,

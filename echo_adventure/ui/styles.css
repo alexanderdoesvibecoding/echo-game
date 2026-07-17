@@ -1241,14 +1241,11 @@ html[data-theme="dark"] .chart-tooltip-close {
   width: var(--slice-width);
   filter: drop-shadow(0 7px 9px rgba(32, 37, 36, 0.2));
 }
-.puzzle-image-slice.newly-placed {
-  filter: drop-shadow(0 0 7px rgba(0, 114, 178, 0.34));
-}
 .puzzle-image-slice.move-into-place {
   z-index: 2;
   transform-origin: center;
   animation: puzzle-piece-place 1200ms cubic-bezier(0.2, 0.72, 0.2, 1) var(--placement-delay, 0ms) both;
-  will-change: transform, opacity, filter;
+  will-change: transform, opacity;
 }
 html[data-theme="dark"] .puzzle-stage {
   background: linear-gradient(180deg, #d9e8f0 0%, #f4f9fc 100%);
@@ -1256,19 +1253,16 @@ html[data-theme="dark"] .puzzle-stage {
 @keyframes puzzle-piece-place {
   0% {
     opacity: 0.15;
-    filter: drop-shadow(0 14px 18px rgba(31, 36, 40, 0.26));
     transform: translate(var(--placement-x, 0), clamp(42px, 9vw, 96px)) rotate(var(--placement-rotate, 0deg)) scale(0.78);
   }
   22% {
     opacity: 1;
   }
   72% {
-    filter: drop-shadow(0 10px 14px rgba(0, 114, 178, 0.26));
     transform: translate(0, -3px) rotate(0deg) scale(1.02);
   }
   100% {
     opacity: 1;
-    filter: drop-shadow(0 0 7px rgba(0, 114, 178, 0.34));
     transform: translate(0, 0) rotate(0deg) scale(1);
   }
 }

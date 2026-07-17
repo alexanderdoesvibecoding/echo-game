@@ -6,6 +6,7 @@ from typing import Any
 
 from ..metrics import calculate_snapshot
 from ..models import DecisionCard, DecisionChoice, MetricSnapshot, SimulationState
+from ..scoring import public_score, public_score_delta
 
 
 class PayloadMixin:
@@ -156,7 +157,7 @@ class PayloadMixin:
                 if state.completion_day is not None
                 else None
             ),
-            "finalScore": round(state.decision_score, 2),
+            "finalScore": public_score(state.decision_score),
         }
 
     def _timeline_payload(
@@ -229,8 +230,11 @@ def _chart_decision_payload(
         "questionTitle": record.card_title,
         "questionText": card.description if card else record.card_title,
         "choice": record.choice_label,
-        "scoreDelta": round(record.score_delta, 2),
-        "cumulativeScore": round(record.cumulative_score, 2),
+        "scoreDelta": public_score_delta(
+            record.cumulative_score - record.score_delta,
+            record.cumulative_score,
+        ),
+        "cumulativeScore": public_score(record.cumulative_score),
         "affectedLabel": card.context_label if card else "-",
     }
     if include_echo_preference:
