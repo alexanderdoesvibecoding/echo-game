@@ -80,8 +80,12 @@ def test_apply_choice_changes_only_unfinished_known_jobs_and_records_score() -> 
 
     apply_choice(state, card, choice, actor="player")
 
-    assert state.jobs["JOB-01"].remaining_days == -1
+    assert state.jobs["JOB-01"].remaining_days == 0
+    assert state.jobs["JOB-01"].is_complete
     assert state.jobs["JOB-02"].remaining_days == 0
+    later_choice = make_choice("choice-2", changes={"JOB-01": 5})
+    apply_choice(state, make_card(later_choice), later_choice, actor="player")
+    assert state.jobs["JOB-01"].remaining_days == 0
     assert state.decision_score == 2.25
     record = state.decision_history[0]
     assert (record.actor, record.aligned_with_echo) == ("player", True)

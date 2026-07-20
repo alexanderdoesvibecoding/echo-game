@@ -229,15 +229,32 @@ class _DecisionWebBuilder:
         choice: DecisionChoice,
     ) -> DecisionWebTransition:
         remaining = list(state.remaining_days)
+        completed_mask = state.completed_mask
         for job_id, delta in choice.day_changes.items():
             index = self.job_index[job_id]
-            if not state.completed_mask & (1 << index):
+            if not completed_mask & (1 << index):
                 remaining[index] += delta
+                if remaining[index] <= 0:
+                    remaining[index] = 0
+                    completed_mask |= 1 << index
+
+        all_completed_mask = (1 << len(remaining)) - 1
+        if completed_mask == all_completed_mask:
+            return DecisionWebTransition(
+                next_node_id=None,
+                advances_day=True,
+                completion_day=state.day,
+            )
 
         pending_definition_id = ""
         pending_job_index = -1
         pending_trigger_delta = 0
-        for follow_up in choice.follow_ups:
+        primary_index = self.job_index[card.primary_job_id]
+        for follow_up in (
+            choice.follow_ups
+            if not completed_mask & (1 << primary_index)
+            else ()
+        ):
             if _preplanned_follow_up_occurs(
                 self.scenario.seed,
                 node_id,
@@ -259,7 +276,7 @@ class _DecisionWebBuilder:
                 day=state.day,
                 question_index=state.question_index + 1,
                 remaining_days=tuple(remaining),
-                completed_mask=state.completed_mask,
+                completed_mask=completed_mask,
                 pending_definition_id=pending_definition_id,
                 pending_job_index=pending_job_index,
                 pending_trigger_delta=pending_trigger_delta,
@@ -272,7 +289,6 @@ class _DecisionWebBuilder:
         if pending_definition_id:
             raise RuntimeError("A generated follow-up cannot cross a daily boundary.")
 
-        completed_mask = state.completed_mask
         for index in range(len(remaining)):
             if completed_mask & (1 << index):
                 continue
@@ -280,7 +296,6 @@ class _DecisionWebBuilder:
             if remaining[index] == 0:
                 completed_mask |= 1 << index
 
-        all_completed_mask = (1 << len(remaining)) - 1
         if completed_mask == all_completed_mask:
             return DecisionWebTransition(
                 next_node_id=None,

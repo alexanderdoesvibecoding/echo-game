@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 
 from ..models import DecisionCard, DecisionChoice, DecisionRecord, PendingFollowUp, SimulationState
+from ..simulation import complete_job
 
 
 def apply_choice(
@@ -18,12 +19,9 @@ def apply_choice(
         job = state.jobs.get(job_id)
         if not job or job.is_complete:
             continue
-        before = job.remaining_days
-        # Completion is committed by the once-per-day simulation tick. Keeping
-        # acceleration as a signed intra-day balance means every displayed
-        # question still applies its full stated change, even when several
-        # questions touch a nearly finished job on the same day.
-        job.remaining_days = before + delta
+        job.remaining_days += delta
+        if job.remaining_days <= 0:
+            complete_job(state, job.id)
     if schedule_follow_ups:
         _schedule_follow_ups(state, card, choice)
     echo_choice = next(item for item in card.choices if item.id == card.echo_choice_id)

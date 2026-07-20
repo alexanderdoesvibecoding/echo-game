@@ -65,6 +65,9 @@ class GameSession(PayloadMixin, ReviewMixin):
             self.questions_answered_today += 1
             self._apply_echo_choice(self.questions_answered_today)
             self.current_cards = []
+            if self._game_over():
+                self._finish_automated()
+                return
             if self.player_in_overtime:
                 self.overtime_card_index += 1
                 if self.overtime_card_index < len(self.overtime_cards):
@@ -215,8 +218,32 @@ class GameSession(PayloadMixin, ReviewMixin):
         return self.player_state.final_item_completed
 
     def _finish_automated(self) -> None:
-        if not self.automated_state.final_item_completed:
-            raise RuntimeError("ECHO's incremental solved-web traversal did not complete.")
+        """Finish ECHO's solved route when the player completes during a question."""
+        while not self.automated_state.final_item_completed:
+            if self.pending_echo_transition is not None:
+                transition = self.pending_echo_transition
+                self.echo_node_id = advance_omniscient_day(
+                    self.automated_state,
+                    transition,
+                )
+                self.pending_echo_transition = None
+                self.echo_choices_applied_today = 0
+                continue
+            if self.echo_node_id is None:
+                raise RuntimeError("ECHO's solved route ended before completing every job.")
+            transition = apply_omniscient_choice(
+                self.automated_state,
+                self.decision_web,
+                self.echo_node_id,
+            )
+            self.echo_choices_applied_today += 1
+            if transition.advances_day:
+                self.pending_echo_transition = transition
+                self.echo_node_id = None
+            else:
+                if transition.next_node_id is None:
+                    raise RuntimeError("ECHO's non-daily transition has no successor.")
+                self.echo_node_id = transition.next_node_id
 
 
 class SessionStore:

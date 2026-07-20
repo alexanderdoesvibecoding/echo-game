@@ -117,7 +117,7 @@ def test_choice_and_advance_update_player_and_echo_once_per_slot(monkeypatch: py
     assert session.state_payload()["lastSummary"]["remainingJobs"] == first_summary_remaining_jobs
 
 
-def test_multi_question_days_traverse_non_daily_web_edges_before_advancing(
+def test_multi_question_days_traverse_web_and_end_on_an_early_final_choice(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     install_fast_session_config(
@@ -143,6 +143,28 @@ def test_multi_question_days_traverse_non_daily_web_edges_before_advancing(
     session.advance_day()
     assert session.player_state.current_day == 2
     assert session.automated_state.current_day == 2
+
+    early_finish = session_module.GameSession(seed=1)
+    for choice_id in ("choice-1", "choice-1", "choice-2", "choice-1"):
+        card = early_finish.current_cards[0]
+        early_finish.apply_choice(card.id, choice_id)
+        if early_finish.ready_to_advance():
+            early_finish.advance_day()
+
+    assert early_finish.player_state.current_day == 3
+    assert early_finish.questions_answered_today == 0
+    assert early_finish.decision_total_today == 2
+    final_card = early_finish.current_cards[0]
+
+    early_finish.apply_choice(final_card.id, "choice-1")
+
+    payload = early_finish.state_payload()
+    assert payload["gameOver"] is True
+    assert payload["decisionProgress"] == {"completed": 1, "total": 2}
+    assert payload["decisions"] == []
+    assert early_finish.player_state.jobs["JOB-03"].remaining_days == 0
+    with pytest.raises(ValueError, match="already ended"):
+        early_finish.apply_choice(final_card.id, "choice-2")
 
 
 def test_exact_optimal_path_ties_echo(monkeypatch: pytest.MonkeyPatch) -> None:
