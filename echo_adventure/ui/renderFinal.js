@@ -44,6 +44,9 @@ function routeDecisionFromPoint(decisionPoint, actor, index) {
     affectedLabel: nested.affectedLabel || "-",
     echoPreferredChoice: nested.echoPreferredChoice || "",
     alignedWithEcho: Boolean(nested.alignedWithEcho),
+    echoSituationMatches: Boolean(nested.echoSituationMatches),
+    echoPreferenceState: nested.echoPreferenceState || "",
+    echoPreferenceBasis: nested.echoPreferenceBasis || "",
   };
 }
 
@@ -302,20 +305,47 @@ function parseDecisionList(value) {
   }
 }
 
-function renderRouteDecision(decision, actor, sharedQuestionIds) {
+function preferencePresentation(decision) {
+  const state = decision.echoPreferenceState || [
+    decision.echoSituationMatches ? "same-situation" : "different-situation",
+    decision.alignedWithEcho ? "same-choice" : "different-choice",
+  ].join("-");
+  const presentations = {
+    "same-situation-same-choice": {
+      label: "Same situation · preference matched",
+      detail: "You and ECHO faced the same situation, and your response matched ECHO's preference.",
+    },
+    "same-situation-different-choice": {
+      label: "Same situation · different response",
+      detail: "You and ECHO faced the same situation, and your response differed from ECHO's preference.",
+    },
+    "different-situation-same-choice": {
+      label: "Different situations · preference matched",
+      detail: "ECHO faced a different situation on its route. In your situation, it would have preferred the response you chose.",
+    },
+    "different-situation-different-choice": {
+      label: "Different situations · different response",
+      detail: "ECHO faced a different situation on its route. In your situation, it would have preferred a different response.",
+    },
+  };
+  return { state, ...(presentations[state] || presentations["different-situation-different-choice"]) };
+}
+
+function renderRouteDecision(decision, actor) {
   const title = decision.questionTitle || "Decision";
   const detail = decision.questionText && decision.questionText !== title
     ? `<p class="chart-decision-context">${escapeHtml(decision.questionText)}</p>`
     : "";
-  const sharedBadge = decision.questionId && sharedQuestionIds.has(decision.questionId)
-    ? `<span class="chart-shared-badge">Shared situation</span>`
+  const sharedBadge = actor === "player" && decision.echoPreferredChoice
+    ? `<span class="chart-shared-badge">${decision.echoSituationMatches ? "Same situation" : "Different situations"}</span>`
     : "";
+  const presentation = preferencePresentation(decision);
   const preference = actor === "player" && decision.echoPreferredChoice
     ? `
-      <div class="chart-echo-preference ${decision.alignedWithEcho ? "is-aligned" : ""}">
-        <span>ECHO's preferred response to your situation</span>
+      <div class="chart-echo-preference ${decision.alignedWithEcho ? "is-aligned" : ""}" data-preference-state="${escapeHtml(presentation.state)}">
+        <span>${escapeHtml(presentation.label)}</span>
         <strong>${escapeHtml(decision.echoPreferredChoice)}</strong>
-        <small>${decision.alignedWithEcho ? "You matched this response." : "This is not ECHO's actual-route decision."}</small>
+        <small>${escapeHtml(presentation.detail)}</small>
       </div>
     `
     : "";
@@ -345,7 +375,7 @@ function renderRouteDecision(decision, actor, sharedQuestionIds) {
   `;
 }
 
-function renderRouteSection(actor, decisions, sharedQuestionIds) {
+function renderRouteSection(actor, decisions) {
   const label = actor === "player" ? "Your actual route" : "ECHO's actual route";
   const emptyText = actor === "player"
     ? "You had no decisions on this day."
@@ -358,7 +388,7 @@ function renderRouteSection(actor, decisions, sharedQuestionIds) {
         <span>${decisions.length} ${decisionWord}</span>
       </div>
       <div class="chart-route-decisions">
-        ${decisions.map(decision => renderRouteDecision(decision, actor, sharedQuestionIds)).join("") || `<p class="subtle">${emptyText}</p>`}
+        ${decisions.map(decision => renderRouteDecision(decision, actor)).join("") || `<p class="subtle">${emptyText}</p>`}
       </div>
     </section>
   `;
@@ -385,10 +415,6 @@ export function showDecisionChartTooltip(event, marker) {
   const data = marker.dataset;
   const playerDecisions = parseDecisionList(data.playerDecisions);
   const echoDecisions = parseDecisionList(data.echoDecisions);
-  const playerQuestionIds = new Set(playerDecisions.map(decision => decision.questionId).filter(Boolean));
-  const sharedQuestionIds = new Set(
-    echoDecisions.map(decision => decision.questionId).filter(questionId => playerQuestionIds.has(questionId)),
-  );
   const dateLabel = data.dateLabel || data.label || "Day";
   selectedDecisionChartDayKey = data.dayKey || data.day || dateLabel;
   updateSelectedDayMarker(selectedDecisionChartDayKey);
@@ -407,8 +433,8 @@ export function showDecisionChartTooltip(event, marker) {
       <div><span>ECHO cumulative</span><strong>${escapeHtml(data.echoCumulative || "+0.00")}</strong></div>
     </div>
     <div class="chart-route-grid">
-      ${renderRouteSection("player", playerDecisions, sharedQuestionIds)}
-      ${renderRouteSection("echo", echoDecisions, sharedQuestionIds)}
+      ${renderRouteSection("player", playerDecisions)}
+      ${renderRouteSection("echo", echoDecisions)}
     </div>
   `;
   tooltip.classList.add("active", "locked");

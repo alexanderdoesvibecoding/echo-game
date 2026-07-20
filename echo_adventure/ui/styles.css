@@ -1195,6 +1195,22 @@ html[data-theme="dark"] .chart-hover-zone.is-selected {
 .chart-echo-preference.is-aligned > span {
   color: var(--green);
 }
+.chart-echo-preference[data-preference-state="same-situation-different-choice"] {
+  border-color: color-mix(in srgb, var(--red) 32%, transparent);
+  border-left-color: var(--red);
+  background: color-mix(in srgb, var(--red) 9%, transparent);
+}
+.chart-echo-preference[data-preference-state="same-situation-different-choice"] > span {
+  color: var(--red);
+}
+.chart-echo-preference[data-preference-state="different-situation-different-choice"] {
+  border-color: color-mix(in srgb, var(--amber) 32%, transparent);
+  border-left-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 11%, transparent);
+}
+.chart-echo-preference[data-preference-state="different-situation-different-choice"] > span {
+  color: var(--amber);
+}
 html[data-theme="dark"] .chart-tooltip {
   background: #1a202a;
   border-color: #3a4352;

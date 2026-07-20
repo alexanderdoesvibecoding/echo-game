@@ -9,6 +9,7 @@ from ..config import GameConfig, resolve_seed
 from ..decision_web import DecisionWebTransition, generate_decision_web
 from ..decisions import apply_choice as apply_decision_choice
 from ..decisions import generate_daily_decision_cards
+from ..decisions import select_echo_choice_for_state
 from ..echo import advance_omniscient_day, apply_omniscient_choice
 from ..models import DecisionCard
 from ..scenario_generator import generate_scenario
@@ -55,6 +56,11 @@ class GameSession(PayloadMixin, ReviewMixin):
             choice = next((item for item in card.choices if item.id == choice_id), None)
             if not choice:
                 raise ValueError("Choice is not valid for that decision.")
+            if self.player_in_overtime:
+                card.echo_choice_id = select_echo_choice_for_state(
+                    self.player_state,
+                    card.choices,
+                ).id
             apply_decision_choice(
                 self.player_state,
                 card,

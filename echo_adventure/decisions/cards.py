@@ -357,6 +357,34 @@ def select_echo_choice_from_choices(choices: list[DecisionChoice]) -> DecisionCh
     return max(choices, key=lambda choice: (choice.score_delta, choice.id))
 
 
+def select_echo_choice_for_state(
+    state: SimulationState,
+    choices: list[DecisionChoice],
+) -> DecisionChoice:
+    """Prefer the earliest resulting finish, then the highest overall score.
+
+    The preplanned campaign replaces this provisional choice with the exact
+    backward-solved route optimum. Runtime overtime cards have no successor
+    web, so their end-date comparison uses the remaining schedule after each
+    response and compares the resulting cumulative score second.
+    """
+
+    def outcome(choice: DecisionChoice) -> tuple[int, float, str]:
+        remaining = {
+            job.id: max(0, job.remaining_days)
+            for job in state.incomplete_jobs()
+        }
+        for job_id, delta in choice.day_changes.items():
+            if job_id in remaining:
+                remaining[job_id] = max(0, remaining[job_id] + delta)
+        longest = max(remaining.values(), default=0)
+        completion_day = state.current_day + max(0, longest - 1)
+        overall_score = round(state.decision_score + choice.score_delta, 2)
+        return (-completion_day, overall_score, choice.id)
+
+    return max(choices, key=outcome)
+
+
 def _stable_seed(seed: int, day: int, suffix: str) -> int:
     material = f"{seed}|{day}|{suffix}".encode("utf-8")
     return int(hashlib.sha256(material).hexdigest(), 16)

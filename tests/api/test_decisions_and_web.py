@@ -9,6 +9,7 @@ from echo_adventure.decisions.cards import (
     _avoid_exact_cancellation,
     _day_changes,
     generate_daily_decision_cards,
+    select_echo_choice_for_state,
     select_echo_choice_from_choices,
 )
 from echo_adventure.decisions.definitions import (
@@ -65,6 +66,13 @@ def test_echo_choice_has_a_stable_tiebreak() -> None:
         make_choice("choice-3", score=1),
     ]
     assert select_echo_choice_from_choices(choices).id == "choice-2"
+
+    state = initialize_state(scenario_from_durations(5))
+    outcome_choices = [
+        make_choice("choice-1", changes={"JOB-01": -3}, score=-2),
+        make_choice("choice-2", changes={}, score=5),
+    ]
+    assert select_echo_choice_for_state(state, outcome_choices).id == "choice-1"
 
 
 def test_apply_choice_changes_only_unfinished_known_jobs_and_records_score() -> None:

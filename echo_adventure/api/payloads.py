@@ -139,6 +139,10 @@ class PayloadMixin:
                         player_card,
                         position=slot + 1,
                         include_echo_preference=True,
+                        echo_situation_matches=(
+                            echo_record is not None
+                            and player_record.card_id == echo_record.card_id
+                        ),
                     )
                     if player_record
                     else None
@@ -149,6 +153,7 @@ class PayloadMixin:
                         echo_card,
                         position=slot + 1,
                         include_echo_preference=False,
+                        echo_situation_matches=False,
                     )
                     if echo_record
                     else None
@@ -236,6 +241,7 @@ def _chart_decision_payload(
     *,
     position: int,
     include_echo_preference: bool,
+    echo_situation_matches: bool,
 ) -> dict[str, Any]:
     """Keep one actor's question context attached to that actor's answer."""
     payload = {
@@ -252,10 +258,28 @@ def _chart_decision_payload(
         "affectedLabel": card.context_label if card else "-",
     }
     if include_echo_preference:
+        preferred_choice = (
+            next(
+                (
+                    choice.label
+                    for choice in card.choices
+                    if choice.id == card.echo_choice_id
+                ),
+                record.echo_choice_label,
+            )
+            if card
+            else record.echo_choice_label
+        )
+        aligned_with_preference = record.choice_label == preferred_choice
+        situation_state = "same-situation" if echo_situation_matches else "different-situation"
+        choice_state = "same-choice" if aligned_with_preference else "different-choice"
         payload.update(
             {
-                "echoPreferredChoice": record.echo_choice_label,
-                "alignedWithEcho": record.aligned_with_echo,
+                "echoPreferredChoice": preferred_choice,
+                "alignedWithEcho": aligned_with_preference,
+                "echoSituationMatches": echo_situation_matches,
+                "echoPreferenceState": f"{situation_state}-{choice_state}",
+                "echoPreferenceBasis": "completion-day-then-overall-score",
             }
         )
     return payload

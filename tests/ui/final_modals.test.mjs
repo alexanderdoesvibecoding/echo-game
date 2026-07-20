@@ -91,18 +91,35 @@ test("decision chart tooltip safely renders, locks, and closes", () => {
   marker.dataset = {
     dateLabel: "July <1>",
     dayKey: "1",
-    playerDecisionCount: "1",
-    echoDecisionCount: "1",
+    playerDecisionCount: "4",
+    echoDecisionCount: "0",
     playerChange: "+1.00",
     playerCumulative: "+1.00",
     echoChange: "+2.00",
     echoCumulative: "+2.00",
     playerDecisions: JSON.stringify([
-      { position: 1, questionTitle: "Route", choice: "Route <now>", scoreDelta: "+1.00", affectedLabel: "Job 1" },
+      {
+        position: 1, questionTitle: "Route", choice: "Route <now>", scoreDelta: "+1.00", affectedLabel: "Job 1",
+        echoPreferredChoice: "Route <now>", alignedWithEcho: true, echoSituationMatches: true,
+        echoPreferenceState: "same-situation-same-choice",
+      },
+      {
+        position: 2, questionTitle: "Materials", choice: "Hold", scoreDelta: "+0.00", affectedLabel: "Job 2",
+        echoPreferredChoice: "Release", alignedWithEcho: false, echoSituationMatches: true,
+        echoPreferenceState: "same-situation-different-choice",
+      },
+      {
+        position: 3, questionTitle: "Staffing", choice: "Reassign", scoreDelta: "+0.50", affectedLabel: "Job 3",
+        echoPreferredChoice: "Reassign", alignedWithEcho: true, echoSituationMatches: false,
+        echoPreferenceState: "different-situation-same-choice",
+      },
+      {
+        position: 4, questionTitle: "Inspection", choice: "Continue", scoreDelta: "-0.50", affectedLabel: "Job 4",
+        echoPreferredChoice: "Pause", alignedWithEcho: false, echoSituationMatches: false,
+        echoPreferenceState: "different-situation-different-choice",
+      },
     ]),
-    echoDecisions: JSON.stringify([
-      { position: 1, questionTitle: "Route", choice: "Optimize", scoreDelta: "+2.00", affectedLabel: "Job 1" },
-    ]),
+    echoDecisions: "[]",
   };
 
   showDecisionChartTooltip({ preventDefault() {}, stopPropagation() {} }, marker);
@@ -111,6 +128,14 @@ test("decision chart tooltip safely renders, locks, and closes", () => {
   assert.match(tooltip.innerHTML, /July &lt;1&gt;/);
   assert.match(tooltip.innerHTML, /Route &lt;now&gt;/);
   assert.doesNotMatch(tooltip.innerHTML, /Route <now>/);
+  assert.match(tooltip.innerHTML, /Same situation · preference matched/);
+  assert.match(tooltip.innerHTML, /Same situation · different response/);
+  assert.match(tooltip.innerHTML, /Different situations · preference matched/);
+  assert.match(tooltip.innerHTML, /Different situations · different response/);
+  assert.match(tooltip.innerHTML, /data-preference-state="same-situation-different-choice"/);
+  assert.match(tooltip.innerHTML, /data-preference-state="different-situation-different-choice"/);
+  assert.doesNotMatch(tooltip.innerHTML, /resulting completion date first, then the overall route score/);
+  assert.doesNotMatch(tooltip.innerHTML, /correct|incorrect/i);
   hideDecisionChartTooltip();
   assert.equal(tooltip.classList.contains("active"), false);
 });

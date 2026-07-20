@@ -293,6 +293,9 @@ def test_final_payload_aligns_real_player_and_echo_histories(monkeypatch: pytest
     assert first_point["playerDecision"]["choice"] == session.player_state.decision_history[0].choice_label
     assert first_point["echoDecision"]["choice"] == session.automated_state.decision_history[0].choice_label
     assert first_point["playerDecision"]["affectedLabel"].startswith("Job")
+    assert first_point["playerDecision"]["echoSituationMatches"] is True
+    assert first_point["playerDecision"]["echoPreferenceState"] == "same-situation-different-choice"
+    assert first_point["playerDecision"]["echoPreferenceBasis"] == "completion-day-then-overall-score"
 
 
 def test_timeline_stops_rescaling_after_echo_finishes(monkeypatch: pytest.MonkeyPatch) -> None:
