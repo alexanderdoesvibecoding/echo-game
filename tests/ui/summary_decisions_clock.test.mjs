@@ -129,6 +129,9 @@ test("summary renders the live assembly and current daily metrics", () => {
       jobsRemaining: 1,
       previousTotalRemainingDays: 5,
       totalRemainingDays: 2,
+      remainingJobs: [
+        { name: "Job <Two>", remainingDays: 2 },
+      ],
       projectedCompletion: "July 3",
       notes: ["Completed <one> job."],
       puzzle,
@@ -142,6 +145,10 @@ test("summary renders the live assembly and current daily metrics", () => {
   assert.match(body, /Jobs Complete/);
   assert.match(body, /Jobs Complete[\s\S]*data-summary-count-from="1"/);
   assert.match(body, /Remaining Job-Days/);
+  assert.match(body, /summary-metric-hoverable/);
+  assert.match(body, /Hover or focus for the per-job breakdown/);
+  assert.match(body, /Job &lt;Two&gt;/);
+  assert.match(body, /2 days/);
   assert.match(body, /data-summary-count-from="2"/);
   assert.match(body, /Completed &lt;one&gt; job\./);
   assert.doesNotMatch(body, /Subjobs/);

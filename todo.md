@@ -13,8 +13,8 @@
 - [ ] Finalize end-of-game screen – Alexander
     - [ ] Finalize graph
 
-- [ ] Add a location for a menu for expected completion of incomplete jobs – Matt
-    - [ ] Maybe keep it on the daily summary or make it a button
+- [x] Add a location for a menu for expected completion of incomplete jobs – Matt
+    - Maybe keep it on the daily summary or make it a button
 
 - [ ] Investigate follow-ups occurring only on the same day – Matt
     - [ ] Some things it makes sense for you and ECHO to have the same thing (like the acknowledgements), but others can

@@ -40,6 +40,7 @@ class GameSession(PayloadMixin, ReviewMixin):
         self.current_cards: list[DecisionCard] = []
         self.last_result: DayResult | None = None
         self.last_summary_puzzle: dict[str, Any] | None = None
+        self.last_summary_remaining_jobs: list[dict[str, Any]] = []
         self.day_completed_before: set[str] = set(self.player_state.completed_jobs)
         self._ensure_cards()
 
@@ -154,6 +155,7 @@ class GameSession(PayloadMixin, ReviewMixin):
         self.last_summary_puzzle = self._build_puzzle_payload(
             completed_before=self.day_completed_before,
         )
+        self.last_summary_remaining_jobs = self._build_remaining_jobs_payload()
         self.day_completed_before = set(self.player_state.completed_jobs)
 
     def _apply_echo_choice(self, player_slot: int) -> None:

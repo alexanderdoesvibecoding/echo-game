@@ -98,10 +98,23 @@ def test_choice_and_advance_update_player_and_echo_once_per_slot(monkeypatch: py
     assert payload["lastSummary"]["jobsComplete"] == job_count - session.last_result.end_snapshot.jobs_remaining
     assert payload["lastSummary"]["previousJobsRemaining"] == session.last_result.start_snapshot.jobs_remaining
     assert payload["lastSummary"]["jobsRemaining"] == session.last_result.end_snapshot.jobs_remaining
+    expected_remaining_jobs = [
+        {
+            "name": job.name,
+            "remainingDays": job.remaining_days,
+        }
+        for job in sorted(session.player_state.incomplete_jobs(), key=lambda job: job.id)
+    ]
+    assert payload["lastSummary"]["remainingJobs"] == expected_remaining_jobs
     assert session.player_state.current_day == 2
     assert session.automated_state.current_day == 2
     assert session.questions_answered_today == 0
     assert len(session.current_cards) == 1
+
+    first_summary_remaining_jobs = payload["lastSummary"]["remainingJobs"]
+    next_card = session.current_cards[0]
+    session.apply_choice(next_card.id, next_card.choices[0].id)
+    assert session.state_payload()["lastSummary"]["remainingJobs"] == first_summary_remaining_jobs
 
 
 def test_multi_question_days_traverse_non_daily_web_edges_before_advancing(

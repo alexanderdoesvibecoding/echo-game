@@ -57,10 +57,24 @@ class PayloadMixin:
             "jobsRemaining": snapshot.jobs_remaining,
             "previousTotalRemainingDays": self.last_result.start_snapshot.total_remaining_days,
             "totalRemainingDays": snapshot.total_remaining_days,
+            "remainingJobs": self.last_summary_remaining_jobs,
             "projectedCompletion": self.config.date_label_for_day(snapshot.projected_completion_day),
             "puzzle": self.last_summary_puzzle,
             "notes": self.last_result.notes[-10:] if self.last_result.completed_job_ids else [],
         }
+
+    def _build_remaining_jobs_payload(self) -> list[dict[str, Any]]:
+        remaining_jobs = sorted(
+            self.player_state.incomplete_jobs(),
+            key=lambda job: job.id,
+        )
+        return [
+            {
+                "name": job.name,
+                "remainingDays": max(0, job.remaining_days),
+            }
+            for job in remaining_jobs
+        ]
 
     def _build_puzzle_payload(self, completed_before: set[str]) -> dict[str, Any]:
         tiles = []

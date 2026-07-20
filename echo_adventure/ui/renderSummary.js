@@ -34,6 +34,43 @@ function renderSummaryMetricValue(value, startValue = 0) {
   `;
 }
 
+function renderRemainingJobDaysMetric(metric, remainingJobs) {
+  const jobs = Array.isArray(remainingJobs) ? remainingJobs : [];
+  const detailRows = jobs.map((job) => {
+    const days = Math.max(0, Number(job.remainingDays) || 0);
+    return `
+      <li>
+        <span>${escapeHtml(job.name || "Unnamed job")}</span>
+        <strong>${escapeHtml(days)} ${days === 1 ? "day" : "days"}</strong>
+      </li>
+    `;
+  }).join("");
+  const details = detailRows
+    ? `<ul class="remaining-job-days-list">${detailRows}</ul>`
+    : `<p class="remaining-job-days-empty">All jobs complete.</p>`;
+
+  return `
+    <div
+      class="metric summary-metric summary-metric-${metric.tone} summary-metric-hoverable"
+      tabindex="0"
+      aria-label="Remaining Job-Days: ${escapeHtml(metric.value)}. Hover or focus for the per-job breakdown."
+      aria-describedby="remainingJobDaysTooltip"
+    >
+      <div class="metric-title-row">
+        <span class="subtle metric-label remaining-job-days-label">
+          ${escapeHtml(metric.label)}
+          <span class="remaining-job-days-info" aria-hidden="true">i</span>
+        </span>
+      </div>
+      <div class="metric-value-row summary-metric-value-row">${renderSummaryMetricValue(metric.value, metric.startValue)}</div>
+      <div class="remaining-job-days-tooltip" id="remainingJobDaysTooltip" role="tooltip">
+        <div class="remaining-job-days-tooltip-title">Incomplete jobs</div>
+        ${details}
+      </div>
+    </div>
+  `;
+}
+
 function renderSummaryMetricBar(summary) {
   const jobsComplete = Number(summary.jobsComplete ?? summary.completedToday ?? 0);
   const metrics = [
@@ -59,12 +96,16 @@ function renderSummaryMetricBar(summary) {
   ];
   return `
     <div class="summary-metrics-bar">
-      ${metrics.map(metric => `
-        <div class="metric summary-metric summary-metric-${metric.tone}">
-          <div class="metric-title-row"><span class="subtle metric-label">${escapeHtml(metric.label)}</span></div>
-          <div class="metric-value-row summary-metric-value-row">${renderSummaryMetricValue(metric.value, metric.startValue)}</div>
-        </div>
-      `).join("")}
+      ${metrics.map(metric => (
+        metric.label === "Remaining Job-Days"
+          ? renderRemainingJobDaysMetric(metric, summary.remainingJobs)
+          : `
+            <div class="metric summary-metric summary-metric-${metric.tone}">
+              <div class="metric-title-row"><span class="subtle metric-label">${escapeHtml(metric.label)}</span></div>
+              <div class="metric-value-row summary-metric-value-row">${renderSummaryMetricValue(metric.value, metric.startValue)}</div>
+            </div>
+          `
+      )).join("")}
     </div>
   `;
 }
