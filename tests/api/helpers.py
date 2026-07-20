@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
-
 from echo_adventure.config import GameConfig
 from echo_adventure.models import (
     DecisionCard,
@@ -77,7 +75,3 @@ def make_card(
         definition_id=definition_id,
         primary_job_id=primary_job_id,
     )
-
-
-def config_with_seed(config: GameConfig, seed: int) -> GameConfig:
-    return replace(config, seed=seed)

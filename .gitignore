@@ -67,3 +67,5 @@ pnpm-debug.log*
 requirements.md
 instructions.md
 progress.md
+# Added by code-review-graph
+.code-review-graph/

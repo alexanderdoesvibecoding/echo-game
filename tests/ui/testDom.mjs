@@ -77,12 +77,6 @@ export class TestElement {
     this.listeners.set(type, callbacks);
   }
 
-  dispatchEvent(typeOrEvent, event = {}) {
-    const type = typeof typeOrEvent === "string" ? typeOrEvent : typeOrEvent.type;
-    const payload = typeof typeOrEvent === "string" ? event : typeOrEvent;
-    for (const callback of this.listeners.get(type) || []) callback(payload);
-  }
-
   setQuery(selector, ...elements) {
     this.queries.set(selector, elements.flat());
   }
@@ -160,11 +154,6 @@ export function installDom() {
       callbacks.push(callback);
       documentListeners.set(type, callbacks);
     },
-    dispatchEvent(typeOrEvent, event = {}) {
-      const type = typeof typeOrEvent === "string" ? typeOrEvent : typeOrEvent.type;
-      const payload = typeof typeOrEvent === "string" ? event : typeOrEvent;
-      for (const callback of documentListeners.get(type) || []) callback(payload);
-    },
   };
 
   const localStorage = {
@@ -214,9 +203,6 @@ export function installDom() {
     runInterval(id) {
       const callback = intervals.get(id);
       if (callback) callback();
-    },
-    runIntervals() {
-      for (const callback of [...intervals.values()]) callback();
     },
     reset() {
       for (const candidate of elements.values()) candidate.reset();
