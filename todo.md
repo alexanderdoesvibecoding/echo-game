@@ -1,9 +1,9 @@
 - [ ] Do timed tests
-    - [ ] aim for 8–10 minutes of play – Ethan
+    - [ ] Aim for 8–10 minutes of play – Ethan
 
 - [ ] Research better ways to fix the “one job left, game takes forever issue” – Matt
 
-- [ ] Make the clock more obvious – Matt
+- [x] Make the clock more obvious – Matt
 
 - [ ] Update new game screen – Alexander
 

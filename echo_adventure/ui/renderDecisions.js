@@ -92,7 +92,7 @@ export function renderDecisionQueue() {
   const progress = decisionProgress();
   const blocked = decisionInteractionBlocked();
   const due = nextDecisionIsDue();
-  updateQueueDayClock(section, due);
+  updateQueueDayProgress(section, due);
   const card = due && !blocked ? currentOpenDecisionCard() : null;
   const pendingChoiceId = card && uiState.pendingChoice?.cardId === card.id
     ? uiState.pendingChoice.choiceId
@@ -158,23 +158,15 @@ export function renderDecisionQueue() {
   `;
 }
 
-function updateQueueDayClock(section, paused) {
-  const clock = section.querySelector("[data-queue-day-clock]");
-  if (!clock) return;
+function updateQueueDayProgress(section, paused) {
+  const progress = section.querySelector("[data-queue-day-progress]");
+  if (!progress) return;
   const percent = dayCyclePercent();
   const roundedPercent = Math.round(percent);
-  const dayKey = `${uiState.runCycleId}:${uiState.state.seed}:${uiState.state.day}`;
-  const previousDayKey = clock.dataset.dayClockKey || "";
-  const previousRotationBase = Number(clock.dataset.dayClockRotationBase || 0);
-  const rotationBase = previousDayKey && previousDayKey !== dayKey
-    ? previousRotationBase + 360
-    : previousRotationBase;
-  clock.dataset.dayClockKey = dayKey;
-  clock.dataset.dayClockRotationBase = String(rotationBase);
-  clock.style.setProperty("--day-cycle-angle", `${rotationBase + percent * 3.6}deg`);
-  clock.setAttribute("aria-valuenow", String(roundedPercent));
-  clock.setAttribute(
+  progress.style.setProperty("--day-cycle-progress", `${percent}%`);
+  progress.setAttribute("aria-valuenow", String(roundedPercent));
+  progress.setAttribute(
     "aria-valuetext",
-    `Workday ${roundedPercent} percent complete${paused ? "; waiting for a decision" : ""}.`
+    `Day ${roundedPercent} percent complete${paused ? "; waiting for a decision" : ""}.`
   );
 }

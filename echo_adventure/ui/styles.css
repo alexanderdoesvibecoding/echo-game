@@ -328,57 +328,31 @@ button:disabled { opacity: 0.48; cursor: not-allowed; }
   align-self: stretch;
 }
 
-.queue-day-clock {
-  --day-cycle-angle: 0deg;
-  display: inline-flex;
-  align-items: center;
+.decision-queue-heading {
+  display: grid;
+  width: 100%;
   gap: 7px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-  opacity: 0.7;
 }
 
-.queue-day-clock-face {
+.queue-day-progress {
+  --day-cycle-progress: 0%;
   position: relative;
-  display: block;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: var(--panel);
-}
-
-.queue-day-clock-face::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: currentColor;
-  transform: translate(-50%, -50%);
-}
-
-.queue-day-clock-hand {
-  position: absolute;
-  inset: 2px;
-  transform: rotate(var(--day-cycle-angle));
-  transition: transform 180ms linear;
-}
-
-.queue-day-clock-hand::before {
-  content: "";
-  position: absolute;
-  top: 1px;
-  left: 50%;
-  width: 1px;
-  height: 10px;
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
   border-radius: 999px;
-  background: currentColor;
-  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--amber) 22%, var(--panel));
+}
+
+.queue-day-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--day-cycle-progress);
+  border-radius: inherit;
+  background: #e3b11f;
+  box-shadow: 0 0 7px rgba(227, 177, 31, 0.55);
+  transition: width 180ms linear;
 }
 
 .decision-queue-body {
@@ -623,7 +597,7 @@ section { overflow: visible; }
   100% { color: var(--muted); transform: translateX(0); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .queue-day-clock-hand,
+  .queue-day-progress::after,
   .timeline-submarine,
   .completion-timeline-fill {
     transition: none;

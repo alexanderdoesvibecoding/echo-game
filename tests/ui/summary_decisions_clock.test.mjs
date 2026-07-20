@@ -218,8 +218,8 @@ test("day clock markup and timeline updates expose both player and ECHO progress
 test("decision queue reveals due choices, tracks selection, and submits the selected pair", async () => {
   const section = dom.element("decisionQueueSection");
   const body = dom.element("decisionQueueBody");
-  const queueClock = dom.createElement("queue-clock");
-  section.setQuery("[data-queue-day-clock]", queueClock);
+  const queueProgress = dom.createElement("queue-progress");
+  section.setQuery("[data-queue-day-progress]", queueProgress);
   uiState.state = statePayload();
   uiState.dayDecisionThresholds = [20];
   uiState.dayCycleProgress = 20;
@@ -232,7 +232,9 @@ test("decision queue reveals due choices, tracks selection, and submits the sele
   assert.match(body.innerHTML, /Confirm response/);
   assert.match(body.innerHTML, /disabled/);
   assert.equal(section.classList.contains("is-empty"), false);
-  assert.equal(queueClock.getAttribute("aria-valuenow"), "20");
+  assert.equal(queueProgress.getAttribute("aria-valuenow"), "20");
+  assert.equal(queueProgress.getAttribute("aria-valuetext"), "Day 20 percent complete; waiting for a decision.");
+  assert.equal(queueProgress.style.getPropertyValue("--day-cycle-progress"), "20%");
 
   selectPendingChoice("CARD-1", "choice-1");
   assert.deepEqual(uiState.pendingChoice, { cardId: "CARD-1", choiceId: "choice-1" });
@@ -247,7 +249,7 @@ test("decision queue reveals due choices, tracks selection, and submits the sele
   });
   uiState.dayCycleProgress = 100;
   renderDecisionQueue();
-  assert.equal(queueClock.style.getPropertyValue("--day-cycle-angle"), "360deg");
+  assert.equal(queueProgress.style.getPropertyValue("--day-cycle-progress"), "100%");
 
   uiState.state = statePayload({
     day: 2,
@@ -257,11 +259,11 @@ test("decision queue reveals due choices, tracks selection, and submits the sele
   });
   uiState.dayCycleProgress = 0;
   renderDecisionQueue();
-  assert.equal(queueClock.style.getPropertyValue("--day-cycle-angle"), "360deg");
+  assert.equal(queueProgress.style.getPropertyValue("--day-cycle-progress"), "0%");
 
   uiState.dayCycleProgress = 10;
   renderDecisionQueue();
-  assert.equal(queueClock.style.getPropertyValue("--day-cycle-angle"), "396deg");
+  assert.equal(queueProgress.style.getPropertyValue("--day-cycle-progress"), "10%");
   assert.match(body.innerHTML, /No decision currently requires your attention/);
 });
 
