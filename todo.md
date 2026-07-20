@@ -1,48 +1,26 @@
-- [x] Welcome screen update
-    - [x] Remove critical path jobs list – Alexander
-    - [x] Reword text – Alexander
-    - [x] Make text and start button bigger – Alexander
+ECHO weekly to-do list week of 7/20
 
-- [x] Remove the job/subjob split
-    - [x] Refactor the submarine puzzle and questions – Matt/Ethan
-    - [x] Make each job take 5–15 days, and daily decisions add or remove days – Matt
-        - Workstation-related flavor remains without a hidden workstation state
 
-- [x] Daily summary update
-    - [x] Animate jobs into place in submarine once completed – Alexander
-    - [x] Number fields tick up/down rather than display – Alexander
-    - [x] Remove risk – Alexander
+Do timed tests  aim for 8-10 minutes of play - Ethan
 
-- [x] Main screen update
-    - [x] Remove project position – Alexander
-    - [x] Create submarine progress bars moving across – Matt/Ethan
-        - Representing player and ECHO
-        - Metric is days to completion
-        - Submarine rides above bar
-        - Decision symbols on the progress bar – maybe
-        - Grows/shrinks as decisions add or take away days to completion
-    - [x] Decisions appear below bars – Matt
-    - [x] Refactor submarine “puzzle” under – Matt
-        - [x] Shouldn’t show pieces under the main submarine
-        - [x] Remove the live updates
-        - [x] Gray out main submarine, gets filled in as jobs are completed
+Research better ways to fix the “one job left, game takes forever issue” - Matt
 
-- [x] Decisions update
-    - [x] Fix the issue where the same decisions repeat – Matt
-    - [x] Add more icons and symbols to decisions – Ethan
+Make the clock more obvious - Matt
 
-- [ ] Final summary update
-    - [x] Make score easier to understand – Alexander
-        - 0-100 scale
-    - [ ] Update outcome deciders (or whatever it was called) to use AI, maybe to explain how the questions impacted
-      you. I.e., it can say something like "oh on day 3 question 2 you made a really bad choice, and it affected you
-      here here here and here because of it" – Matt
-    - [ ] Center the text inside the boxes – Alexander
-        - Alexander 7/17 - idk about this one, going to wait to see if this is really needed as we revamp end screen
-    - [x] The graph gets hard to see as days increase to beyond like 10–20 – Ethan
+Update new game screen - Alexander
 
-- [x] Change the timeline of the game so that it doesn’t end until all jobs have been completed – Matt
+Update the outcome deciders to use AI or something that to better describe the outcomes because right now they are preset and foolish - Matt
 
-- [x] Finishing early grants points, remove that – Matt
+Finalize end-of-game screen - Alexander
+•	Finalize graph
 
-- [x] It starts on July “0” technically when looking at the end-of-game summary – Matt
+Add a location for a menu for expected completion of incomplete jobs - Matt
+•	Maybe just keep it on the daily summary or make it a button
+
+Investigate follow ups occurring only on the same day – Matt
+•	Some things it makes sense for you and ECHO to have the same thing (like the acknowledges) but others can be otherwise
+
+Impact of decisions randomized – Ethan and Matt
+•	Maybe just increase amount of decisions if possible
+
+On the final day if you reach the end of the progress bar the day doesn’t finish instantly when it feels like you are done - Matt
