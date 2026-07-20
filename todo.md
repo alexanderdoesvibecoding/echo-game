@@ -7,7 +7,7 @@
 - [x] Add a location for a menu for expected completion of incomplete jobs – Matt
     - Maybe keep it on the daily summary or make it a button
 
-- [ ] On the final day if you reach the end of the progress bar, the day doesn’t finish instantly when it feels like you
+- [x] On the final day if you reach the end of the progress bar, the day doesn’t finish instantly when it feels like you
   are done – Matt
 
 - [ ] Research better ways to fix the “one job left, game takes forever issue” – Matt
