@@ -178,6 +178,9 @@ def test_exact_optimal_path_ties_echo(monkeypatch: pytest.MonkeyPatch) -> None:
     assert final["player"]["completionDay"] == final["automated"]["completionDay"]
     assert final["player"]["finalScore"] == final["automated"]["finalScore"]
     assert all(record.aligned_with_echo for record in session.player_state.decision_history)
+    assert len(final["review"]["reasons"]) == 1
+    assert "matched ECHO on all" in final["review"]["reasons"][0]
+    assert len([final["review"]["headline"], *final["review"]["reasons"]]) <= 3
 
     with pytest.raises(ValueError, match="already ended"):
         session.apply_choice("finished", "finished")
@@ -185,19 +188,31 @@ def test_exact_optimal_path_ties_echo(monkeypatch: pytest.MonkeyPatch) -> None:
     assert session.state_payload()["gameOver"] is True
 
 
-def test_every_first_decision_divergence_loses_to_echo(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("seed", [402, 411])
+def test_every_first_decision_divergence_loses_to_echo(
+    monkeypatch: pytest.MonkeyPatch,
+    seed: int,
+) -> None:
     install_fast_session_config(monkeypatch)
-    reference = session_module.GameSession(seed=411)
+    reference = session_module.GameSession(seed=seed)
     first_card = reference.current_cards[0]
     divergent_ids = [choice.id for choice in first_card.choices if choice.id != first_card.echo_choice_id]
     assert divergent_ids
 
     for divergent_id in divergent_ids:
-        session = session_module.GameSession(seed=411)
+        session = session_module.GameSession(seed=seed)
         final = play_to_completion(session, first_choice_id=divergent_id)
         assert final["review"]["outcome"] == "behind"
         assert "won" in final["review"]["headline"].lower() or "earlier" in final["review"]["headline"].lower() or "higher score" in final["review"]["headline"].lower()
         assert any(not record.aligned_with_echo for record in session.player_state.decision_history)
+        reasons = final["review"]["reasons"]
+        assert reasons
+        assert reasons[0].startswith("On day 1, question 1, choosing ")
+        assert "instead of" in reasons[0]
+        assert any(job.name in reasons[0] for job in session.player_state.jobs.values())
+        assert len([final["review"]["headline"], *reasons]) <= 3
+        if seed == 402:
+            assert "same immediate job-day total" in reasons[0]
 
 
 @pytest.mark.parametrize("seed", [421, 422, 423, 424, 425, 426])

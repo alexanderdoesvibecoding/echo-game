@@ -77,6 +77,7 @@ class DecisionRecord:
     choice_label: str
     echo_choice_label: str
     aligned_with_echo: bool
+    applied_day_changes: dict[str, int]
     score_delta: float
     cumulative_score: float
 

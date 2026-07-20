@@ -89,7 +89,9 @@ def test_apply_choice_changes_only_unfinished_known_jobs_and_records_score() -> 
     assert state.decision_score == 2.25
     record = state.decision_history[0]
     assert (record.actor, record.aligned_with_echo) == ("player", True)
+    assert record.applied_day_changes == {"JOB-01": -3}
     assert record.cumulative_score == 2.25
+    assert state.decision_history[1].applied_day_changes == {}
 
 
 def test_apply_choice_schedules_each_valid_follow_up_at_most_once() -> None:

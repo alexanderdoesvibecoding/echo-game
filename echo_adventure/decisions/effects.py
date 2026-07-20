@@ -15,10 +15,12 @@ def apply_choice(
     actor: str,
     schedule_follow_ups: bool = True,
 ) -> None:
+    applied_day_changes: dict[str, int] = {}
     for job_id, delta in choice.day_changes.items():
         job = state.jobs.get(job_id)
         if not job or job.is_complete:
             continue
+        applied_day_changes[job_id] = delta
         job.remaining_days += delta
         if job.remaining_days <= 0:
             complete_job(state, job.id)
@@ -35,6 +37,7 @@ def apply_choice(
             choice_label=choice.label,
             echo_choice_label=echo_choice.label,
             aligned_with_echo=choice.id == echo_choice.id,
+            applied_day_changes=applied_day_changes,
             score_delta=choice.score_delta,
             cumulative_score=state.decision_score,
         )
