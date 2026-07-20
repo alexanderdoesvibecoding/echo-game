@@ -1,4 +1,4 @@
-- [ ] Do timed tests – Ethan
+- [x] Do timed tests – Ethan
     - Aim for 8–10 minutes of play
     - Bug finding as well
 
