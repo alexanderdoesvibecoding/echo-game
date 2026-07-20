@@ -12,7 +12,7 @@
 
 - [ ] Research better ways to fix the “one job left, game takes forever issue” – Matt
 
-- [ ] Update the outcome deciders to use AI or something that are to better describe the outcomes because right now they
+- [x] Update the outcome deciders to use AI or something that are to better describe the outcomes because right now they
   are preset and foolish – Matt
 
 - [ ] Investigate follow-ups occurring only on the same day – Matt
