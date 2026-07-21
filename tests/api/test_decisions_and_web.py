@@ -203,16 +203,37 @@ def test_decision_web_is_deterministic_and_every_node_is_fully_solved(solved_web
         choices = {choice.id: choice for choice in node.card.choices}
         for choice_id, transition in node.transitions.items():
             if transition.completion_day is not None:
-                completion_day, future_score = transition.completion_day, 0.0
+                completion_day, future_score, future_unfinished_job_days = (
+                    transition.completion_day,
+                    0.0,
+                    0,
+                )
             elif transition.enters_overtime:
-                completion_day, future_score = config.max_campaign_day, 0.0
+                completion_day, future_score, future_unfinished_job_days = (
+                    config.max_campaign_day,
+                    0.0,
+                    0,
+                )
             else:
                 successor = web.node(transition.next_node_id)
-                completion_day, future_score = successor.optimal_completion_day, successor.optimal_future_score
-            expected.append((completion_day, round(choices[choice_id].score_delta + future_score, 2), choice_id))
-        assert min(expected, key=lambda candidate: (candidate[0], -candidate[1], candidate[2])) == (
+                completion_day = successor.optimal_completion_day
+                future_score = successor.optimal_future_score
+                future_unfinished_job_days = successor.optimal_future_unfinished_job_days
+            expected.append(
+                (
+                    completion_day,
+                    round(choices[choice_id].score_delta + future_score, 2),
+                    transition.unfinished_job_days + future_unfinished_job_days,
+                    choice_id,
+                )
+            )
+        assert min(
+            expected,
+            key=lambda candidate: (candidate[0], -candidate[1], candidate[2], candidate[3]),
+        ) == (
             node.optimal_completion_day,
             node.optimal_future_score,
+            node.optimal_future_unfinished_job_days,
             node.optimal_choice_id,
         )
 
@@ -250,25 +271,55 @@ def test_every_route_through_a_small_web_respects_echo_objective_order(seed: int
     )
     scenario = generate_scenario(config)
     web = generate_decision_web(scenario, config)
-    routes: list[tuple[int, float, tuple[str, ...]]] = []
+    routes: list[tuple[int, float, int, tuple[str, ...]]] = []
 
-    def visit(node_id: str, score: float, path: tuple[str, ...]) -> None:
+    def visit(
+        node_id: str,
+        score: float,
+        unfinished_job_days: int,
+        path: tuple[str, ...],
+    ) -> None:
         node = web.node(node_id)
         choices = {choice.id: choice for choice in node.card.choices}
         for choice_id, transition in node.transitions.items():
             next_score = round(score + choices[choice_id].score_delta, 2)
+            next_unfinished_job_days = (
+                unfinished_job_days + transition.unfinished_job_days
+            )
             next_path = (*path, choice_id)
             if transition.completion_day is not None:
-                routes.append((transition.completion_day, next_score, next_path))
+                routes.append(
+                    (
+                        transition.completion_day,
+                        next_score,
+                        next_unfinished_job_days,
+                        next_path,
+                    )
+                )
             elif transition.enters_overtime:
-                routes.append((config.max_campaign_day, next_score, next_path))
+                routes.append(
+                    (
+                        config.max_campaign_day,
+                        next_score,
+                        next_unfinished_job_days,
+                        next_path,
+                    )
+                )
             else:
                 assert transition.next_node_id is not None
-                visit(transition.next_node_id, next_score, next_path)
+                visit(
+                    transition.next_node_id,
+                    next_score,
+                    next_unfinished_job_days,
+                    next_path,
+                )
 
-    visit(web.root_node_id, 0.0, ())
+    visit(web.root_node_id, 0.0, 0, ())
     assert routes
-    globally_best = min(routes, key=lambda route: (route[0], -route[1], route[2]))
+    globally_best = min(
+        routes,
+        key=lambda route: (route[0], -route[1], route[2], route[3]),
+    )
 
     echo_path: list[str] = []
     node_id: str | None = web.root_node_id
@@ -279,8 +330,13 @@ def test_every_route_through_a_small_web_respects_echo_objective_order(seed: int
         node_id = transition.next_node_id
 
     optimal_score = web.node(web.root_node_id).optimal_future_score
-    assert globally_best == (web.optimal_completion_day, optimal_score, tuple(echo_path))
-    for completion_day, score, path in routes:
+    assert globally_best == (
+        web.optimal_completion_day,
+        optimal_score,
+        web.optimal_unfinished_job_days,
+        tuple(echo_path),
+    )
+    for completion_day, score, unfinished_job_days, path in routes:
         if path == tuple(echo_path):
             continue
         assert (
@@ -289,6 +345,12 @@ def test_every_route_through_a_small_web_respects_echo_objective_order(seed: int
             or (
                 completion_day == web.optimal_completion_day
                 and score == optimal_score
+                and unfinished_job_days > web.optimal_unfinished_job_days
+            )
+            or (
+                completion_day == web.optimal_completion_day
+                and score == optimal_score
+                and unfinished_job_days == web.optimal_unfinished_job_days
                 and path > tuple(echo_path)
             )
         )

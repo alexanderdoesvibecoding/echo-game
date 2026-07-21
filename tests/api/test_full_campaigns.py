@@ -58,7 +58,10 @@ def run_full_campaign_case(seed: int, diverge: bool) -> dict[str, object]:
         "echo_day": session.automated_state.completion_day,
         "player_score": session.player_state.decision_score,
         "echo_score": session.automated_state.decision_score,
+        "player_unfinished_job_days": session.player_state.cumulative_unfinished_job_days,
+        "echo_unfinished_job_days": session.automated_state.cumulative_unfinished_job_days,
         "optimal_day": session.decision_web.optimal_completion_day,
+        "optimal_unfinished_job_days": session.decision_web.optimal_unfinished_job_days,
         "player_completed": len(session.player_state.completed_jobs),
         "echo_completed": len(session.automated_state.completed_jobs),
         "player_in_overtime": session.player_in_overtime,
@@ -77,6 +80,11 @@ def test_full_default_campaigns_run_exact_and_divergent_paths_in_parallel() -> N
     assert exact["player_in_overtime"] is False
     assert exact["player_day"] == exact["echo_day"] == exact["optimal_day"]
     assert exact["player_score"] == exact["echo_score"]
+    assert (
+        exact["player_unfinished_job_days"]
+        == exact["echo_unfinished_job_days"]
+        == exact["optimal_unfinished_job_days"]
+    )
     assert exact["player_completed"] == exact["echo_completed"] == 20
     assert exact["all_aligned"] is True
 
@@ -86,5 +94,6 @@ def test_full_default_campaigns_run_exact_and_divergent_paths_in_parallel() -> N
     assert (
         divergent["player_day"] > divergent["echo_day"]
         or divergent["player_score"] < divergent["echo_score"]
-        or divergent["headline"] == "ECHO won the stable path tiebreak after your route diverged."
+        or divergent["player_unfinished_job_days"] > divergent["echo_unfinished_job_days"]
+        or "ECHO prevailed" in divergent["headline"]
     )

@@ -144,8 +144,8 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
   for (const id of ["finalSection", "finalMetricsBar", "finalCompletionChart", "finalNotes"]) dom.element(id);
   uiState.state = {
     finalReveal: {
-      player: { completion: "July 4", completionDay: 4, finalScore: 2 },
-      automated: { completion: "July 3", completionDay: 3, finalScore: 4 },
+      player: { completion: "July 4", completionDay: 4, finalScore: 2, unfinishedJobDays: 48 },
+      automated: { completion: "July 3", completionDay: 3, finalScore: 4, unfinishedJobDays: 42 },
       completionHistory: {
         decisionPoints: [
           {
@@ -166,6 +166,9 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
   assert.match(dom.element("finalMetricsBar").innerHTML, /Completion Date/);
   assert.match(dom.element("finalMetricsBar").innerHTML, /<strong>July 4<\/strong>/);
   assert.match(dom.element("finalMetricsBar").innerHTML, /ECHO: July 3/);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /Cumulative Unfinished Work/);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /48 job-days/);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /ECHO 42 job-days/);
   assert.doesNotMatch(dom.element("finalMetricsBar").innerHTML, /Day [34]/);
   assert.match(dom.element("finalCompletionChart").innerHTML, /Your score/);
   assert.match(dom.element("finalCompletionChart").innerHTML, /ECHO score/);

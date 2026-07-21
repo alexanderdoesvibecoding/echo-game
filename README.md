@@ -39,10 +39,10 @@ Meanwhile, ECHO independently follows the globally optimal route it calculated b
 
 ### The outcome is guaranteed
 
-ECHO minimizes completion day, maximizes decision score among equally fast routes, and applies a stable path tiebreak when both are equal. As a result:
+ECHO minimizes completion day, maximizes decision score among equally fast routes, and then minimizes cumulative unfinished job-days measured after each day's decisions. A stable path tiebreak applies only when all three scheduling outcomes are equal. As a result:
 
 - Reproduce ECHO's exact optimal path and the run ends in a tie.
-- Diverge anywhere and ECHO wins by completion day, decision score, or the stable path tiebreak.
+- Diverge anywhere and ECHO wins by completion day, decision score, cumulative unfinished work, or the stable path tiebreak.
 - No divergent route can defeat, outsmart, or surpass ECHO.
 
 The question is not whether ECHO made a mistake. It is whether you can avoid making one.

@@ -45,6 +45,7 @@ def advance_day(state: SimulationState) -> DayResult:
     day = state.current_day
     state.daily_notes.clear()
     start_snapshot = calculate_snapshot(state)
+    state.cumulative_unfinished_job_days += start_snapshot.total_remaining_days
     completed_before = set(state.completed_jobs)
 
     incomplete = list(state.incomplete_jobs())

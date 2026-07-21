@@ -177,6 +177,7 @@ class PayloadMixin:
                 else None
             ),
             "finalScore": public_score(state.decision_score),
+            "unfinishedJobDays": state.cumulative_unfinished_job_days,
         }
 
     def _timeline_payload(
@@ -279,7 +280,7 @@ def _chart_decision_payload(
                 "alignedWithEcho": aligned_with_preference,
                 "echoSituationMatches": echo_situation_matches,
                 "echoPreferenceState": f"{situation_state}-{choice_state}",
-                "echoPreferenceBasis": "completion-day-then-overall-score",
+                "echoPreferenceBasis": "completion-day-then-score-then-unfinished-work",
             }
         )
     return payload

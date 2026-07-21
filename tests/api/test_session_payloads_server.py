@@ -177,6 +177,11 @@ def test_exact_optimal_path_ties_echo(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "exact optimal path" in final["review"]["headline"]
     assert final["player"]["completionDay"] == final["automated"]["completionDay"]
     assert final["player"]["finalScore"] == final["automated"]["finalScore"]
+    assert final["player"]["unfinishedJobDays"] == final["automated"]["unfinishedJobDays"]
+    assert (
+        final["automated"]["unfinishedJobDays"]
+        == session.decision_web.optimal_unfinished_job_days
+    )
     assert all(record.aligned_with_echo for record in session.player_state.decision_history)
     assert len(final["review"]["reasons"]) == 1
     assert "matched ECHO on all" in final["review"]["reasons"][0]
@@ -203,7 +208,12 @@ def test_every_first_decision_divergence_loses_to_echo(
         session = session_module.GameSession(seed=seed)
         final = play_to_completion(session, first_choice_id=divergent_id)
         assert final["review"]["outcome"] == "behind"
-        assert "won" in final["review"]["headline"].lower() or "earlier" in final["review"]["headline"].lower() or "higher score" in final["review"]["headline"].lower()
+        assert (
+            "prevailed" in final["review"]["headline"].lower()
+            or "earlier" in final["review"]["headline"].lower()
+            or "higher score" in final["review"]["headline"].lower()
+            or "fewer unfinished" in final["review"]["headline"].lower()
+        )
         assert any(not record.aligned_with_echo for record in session.player_state.decision_history)
         reasons = final["review"]["reasons"]
         assert reasons
@@ -295,7 +305,9 @@ def test_final_payload_aligns_real_player_and_echo_histories(monkeypatch: pytest
     assert first_point["playerDecision"]["affectedLabel"].startswith("Job")
     assert first_point["playerDecision"]["echoSituationMatches"] is True
     assert first_point["playerDecision"]["echoPreferenceState"] == "same-situation-different-choice"
-    assert first_point["playerDecision"]["echoPreferenceBasis"] == "completion-day-then-overall-score"
+    assert first_point["playerDecision"]["echoPreferenceBasis"] == (
+        "completion-day-then-score-then-unfinished-work"
+    )
 
 
 def test_timeline_stops_rescaling_after_echo_finishes(monkeypatch: pytest.MonkeyPatch) -> None:

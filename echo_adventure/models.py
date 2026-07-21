@@ -108,6 +108,7 @@ class SimulationState:
     decision_cards: dict[str, DecisionCard] = field(default_factory=dict)
     decision_history: list[DecisionRecord] = field(default_factory=list)
     decision_score: float = 0.0
+    cumulative_unfinished_job_days: int = 0
     shown_follow_up_decision_ids: set[str] = field(default_factory=set)
     pending_follow_ups: list[PendingFollowUp] = field(default_factory=list)
 

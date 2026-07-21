@@ -33,6 +33,7 @@ class DecisionWebTransition:
     advances_day: bool
     completion_day: int | None = None
     enters_overtime: bool = False
+    unfinished_job_days: int = 0
 
 
 @dataclass
@@ -43,6 +44,7 @@ class DecisionWebNode:
     optimal_choice_id: str = ""
     optimal_completion_day: int = 0
     optimal_future_score: float = 0.0
+    optimal_future_unfinished_job_days: int = 0
 
 
 @dataclass
@@ -53,6 +55,7 @@ class DecisionWeb:
     nodes: dict[str, DecisionWebNode]
     question_counts: dict[int, int]
     optimal_completion_day: int
+    optimal_unfinished_job_days: int
 
     def node(self, node_id: str) -> DecisionWebNode:
         return self.nodes[node_id]
@@ -121,6 +124,7 @@ class _DecisionWebBuilder:
             nodes=self.nodes,
             question_counts=self.question_counts,
             optimal_completion_day=root.optimal_completion_day,
+            optimal_unfinished_job_days=root.optimal_future_unfinished_job_days,
         )
 
     def _build_base_schedule(self) -> dict[tuple[int, int], DecisionDefinition]:
@@ -295,6 +299,7 @@ class _DecisionWebBuilder:
             for index in range(len(remaining))
             if not completed_mask & (1 << index)
         ]
+        unfinished_job_days = sum(remaining[index] for index in incomplete_indexes)
         progress = daily_progress_days([remaining[index] for index in incomplete_indexes])
         for index, progress_days in zip(incomplete_indexes, progress, strict=True):
             remaining[index] = max(0, remaining[index] - progress_days)
@@ -306,12 +311,14 @@ class _DecisionWebBuilder:
                 next_node_id=None,
                 advances_day=True,
                 completion_day=state.day,
+                unfinished_job_days=unfinished_job_days,
             )
         if state.day + 1 >= self.config.max_campaign_day:
             return DecisionWebTransition(
                 next_node_id=None,
                 advances_day=True,
                 enters_overtime=True,
+                unfinished_job_days=unfinished_job_days,
             )
 
         next_state = DecisionWebState(
@@ -323,37 +330,59 @@ class _DecisionWebBuilder:
         return DecisionWebTransition(
             next_node_id=self._ensure_node(next_state),
             advances_day=True,
+            unfinished_job_days=unfinished_job_days,
         )
 
     def _solve(self) -> None:
-        """Solve every node backward: earliest finish, then highest score."""
+        """Solve backward by finish, score, unfinished work, then stable choice ID."""
         for step in sorted(self.nodes_by_step, reverse=True):
             for node_id in self.nodes_by_step[step]:
                 node = self.nodes[node_id]
-                candidates: list[tuple[int, float, str]] = []
+                candidates: list[tuple[int, float, int, str]] = []
                 choices = {choice.id: choice for choice in node.card.choices}
                 for choice_id, transition in node.transitions.items():
                     choice = choices[choice_id]
                     if transition.completion_day is not None:
                         completion_day = transition.completion_day
                         future_score = 0.0
+                        future_unfinished_job_days = 0
                     elif transition.enters_overtime:
                         completion_day = self.config.max_campaign_day
                         future_score = 0.0
+                        future_unfinished_job_days = 0
                     else:
                         successor = self.nodes[transition.next_node_id or ""]
                         completion_day = successor.optimal_completion_day
                         future_score = successor.optimal_future_score
+                        future_unfinished_job_days = (
+                            successor.optimal_future_unfinished_job_days
+                        )
                     total_score = round(choice.score_delta + future_score, 2)
-                    candidates.append((completion_day, total_score, choice_id))
+                    total_unfinished_job_days = (
+                        transition.unfinished_job_days + future_unfinished_job_days
+                    )
+                    candidates.append(
+                        (
+                            completion_day,
+                            total_score,
+                            total_unfinished_job_days,
+                            choice_id,
+                        )
+                    )
 
-                completion_day, total_score, choice_id = min(
+                completion_day, total_score, unfinished_job_days, choice_id = min(
                     candidates,
-                    key=lambda candidate: (candidate[0], -candidate[1], candidate[2]),
+                    key=lambda candidate: (
+                        candidate[0],
+                        -candidate[1],
+                        candidate[2],
+                        candidate[3],
+                    ),
                 )
                 node.optimal_choice_id = choice_id
                 node.optimal_completion_day = completion_day
                 node.optimal_future_score = total_score
+                node.optimal_future_unfinished_job_days = unfinished_job_days
                 node.card.echo_choice_id = choice_id
 
 

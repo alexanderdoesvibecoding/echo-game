@@ -277,6 +277,12 @@ function renderFinalMetricBar(player, automated) {
       echoValue: Number(automated.finalScore || 0).toFixed(2),
       tone: Number(player.finalScore || 0) >= Number(automated.finalScore || 0) ? "good" : "warn",
     },
+    {
+      label: "Cumulative Unfinished Work",
+      playerValue: `${Number(player.unfinishedJobDays || 0)} job-days`,
+      echoValue: `${Number(automated.unfinishedJobDays || 0)} job-days`,
+      tone: Number(player.unfinishedJobDays || 0) <= Number(automated.unfinishedJobDays || 0) ? "good" : "warn",
+    },
   ];
 
   return metricCards.map(metric => `

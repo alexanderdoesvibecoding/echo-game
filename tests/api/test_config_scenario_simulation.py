@@ -115,6 +115,7 @@ def test_advance_day_ticks_every_unfinished_job_once_and_records_summary() -> No
     assert state.current_day == 2
     assert result.start_snapshot.total_remaining_days == 6
     assert result.end_snapshot.total_remaining_days == 3
+    assert state.cumulative_unfinished_job_days == 6
 
     outlier_state = initialize_state(scenario_from_durations(4, 7, 16))
     advance_day(outlier_state)

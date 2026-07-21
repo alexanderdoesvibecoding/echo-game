@@ -34,6 +34,8 @@ class ReviewMixin:
         )
         player_score = round(self.player_state.decision_score, 2)
         echo_score = round(self.automated_state.decision_score, 2)
+        player_unfinished_job_days = self.player_state.cumulative_unfinished_job_days
+        echo_unfinished_job_days = self.automated_state.cumulative_unfinished_job_days
 
         if identical_optimal_path:
             headline = "You reproduced ECHO's exact optimal path, so the run is tied."
@@ -49,8 +51,27 @@ class ReviewMixin:
         elif player_day == echo_day and player_score < echo_score:
             headline = "You matched ECHO's completion day, but ECHO achieved the higher score."
             outcome = "behind"
-        elif player_day == echo_day and player_score == echo_score:
-            headline = "ECHO won the stable path tiebreak after your route diverged."
+        elif (
+            player_day == echo_day
+            and player_score == echo_score
+            and player_unfinished_job_days > echo_unfinished_job_days
+        ):
+            difference = player_unfinished_job_days - echo_unfinished_job_days
+            unit = "job-day" if difference == 1 else "job-days"
+            headline = (
+                "You matched ECHO's completion day and score, but ECHO carried "
+                f"{difference} fewer unfinished {unit}."
+            )
+            outcome = "behind"
+        elif (
+            player_day == echo_day
+            and player_score == echo_score
+            and player_unfinished_job_days == echo_unfinished_job_days
+        ):
+            headline = (
+                "You matched ECHO's completion day, score, and unfinished-work total, "
+                "but ECHO prevailed after your routes diverged."
+            )
             outcome = "behind"
         else:
             raise RuntimeError("A player route surpassed the globally solved ECHO route.")
@@ -81,7 +102,9 @@ class ReviewMixin:
         if identical_optimal_path:
             score = public_score(self.player_state.decision_score)
             return [
-                f"You matched ECHO on all {len(player_records)} questions; both routes finished on day {player_day} with a {score:.0f}/100 decision score."
+                f"You matched ECHO on all {len(player_records)} questions; both routes "
+                f"finished on day {player_day} with a {score:.0f}/100 decision score and "
+                f"{self.player_state.cumulative_unfinished_job_days} cumulative unfinished job-days."
             ]
 
         question_number_by_day: dict[int, int] = {}

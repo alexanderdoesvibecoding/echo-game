@@ -94,8 +94,8 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
     gameOver: true,
     currentDate: "July 9",
     finalReveal: {
-      player: { completion: "July 9", completionDay: 9, finalScore: 2 },
-      automated: { completion: "July 8", completionDay: 8, finalScore: 3 },
+      player: { completion: "July 9", completionDay: 9, finalScore: 2, unfinishedJobDays: 48 },
+      automated: { completion: "July 8", completionDay: 8, finalScore: 3, unfinishedJobDays: 42 },
       completionHistory: { decisionPoints: [] },
       review: { reasons: ["ECHO finished first."] },
     },
