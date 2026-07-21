@@ -100,7 +100,7 @@ def test_initialization_deep_copies_jobs_and_builds_initial_metrics() -> None:
     snapshot = calculate_snapshot(state)
     assert snapshot.jobs_remaining == 3
     assert snapshot.total_remaining_days == 104
-    assert snapshot.projected_completion_day == 99
+    assert snapshot.projected_completion_day == 48
 
 
 def test_advance_day_ticks_every_unfinished_job_once_and_records_summary() -> None:
@@ -116,9 +116,13 @@ def test_advance_day_ticks_every_unfinished_job_once_and_records_summary() -> No
     assert result.start_snapshot.total_remaining_days == 6
     assert result.end_snapshot.total_remaining_days == 3
 
+    outlier_state = initialize_state(scenario_from_durations(4, 7, 16))
+    advance_day(outlier_state)
+    assert [job.remaining_days for job in outlier_state.jobs.values()] == [3, 6, 13]
 
-def test_complete_job_is_idempotent_and_final_completion_keeps_the_final_day() -> None:
-    state = initialize_state(scenario_from_durations(1, 2))
+
+def test_complete_job_is_idempotent_and_final_job_advances_two_days_at_a_time() -> None:
+    state = initialize_state(scenario_from_durations(1, 9))
 
     complete_job(state, "JOB-01")
     complete_job(state, "JOB-01")
@@ -127,21 +131,27 @@ def test_complete_job_is_idempotent_and_final_completion_keeps_the_final_day() -
 
     advance_day(state)
     assert state.final_item_completed is False
+    assert state.jobs["JOB-02"].remaining_days == 7
     assert state.current_day == 2
+    for expected_remaining in (5, 3, 1):
+        advance_day(state)
+        assert state.jobs["JOB-02"].remaining_days == expected_remaining
     advance_day(state)
     assert state.final_item_completed is True
-    assert state.completion_day == 2
-    assert state.current_day == 2
+    assert state.completion_day == 5
+    assert state.current_day == 5
 
 
-def test_snapshot_projection_uses_only_current_job_days() -> None:
+def test_snapshot_projection_accounts_for_final_job_acceleration() -> None:
     state = initialize_state(scenario_from_durations(2, 5))
     state.current_day = 4
 
     snapshot = calculate_snapshot(state)
 
-    assert snapshot.projected_completion_day == 8
+    assert snapshot.projected_completion_day == 6
     assert snapshot.total_remaining_days == 7
     state.jobs["JOB-01"].status = JobStatus.COMPLETE
     state.jobs["JOB-01"].remaining_days = 0
-    assert calculate_snapshot(state).jobs_remaining == 1
+    final_job_snapshot = calculate_snapshot(state)
+    assert final_job_snapshot.jobs_remaining == 1
+    assert final_job_snapshot.projected_completion_day == 6

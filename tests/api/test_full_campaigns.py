@@ -42,7 +42,10 @@ def run_full_campaign_case(seed: int, diverge: bool) -> dict[str, object]:
     assert all(
         decisions_by_day[day] == session.decision_web.question_count(day)
         for day in decisions_by_day
-        if day < session.config.max_campaign_day
+        if day < min(
+            session.player_state.completion_day or session.config.max_campaign_day,
+            session.config.max_campaign_day,
+        )
     )
     return {
         "outcome": final["review"]["outcome"],

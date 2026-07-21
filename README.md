@@ -31,9 +31,9 @@ echo-adventure --seed 12345 --host 127.0.0.1 --port 8765
 
 ## The challenge
 
-Your mission is to finish all 20 jobs and assemble the complete submarine. Each job begins with its own remaining duration, and every game day advances all unfinished work by one day. Before the day can end, you must answer a queue of operational questions.
+Your mission is to finish all 20 jobs and assemble the complete submarine. Each job begins with its own remaining duration, and every game day advances all unfinished work by one day. A unique longest outlier receives three days of focused progress per workday, and a smooth two-day pace continues once only one job remains. Before the day can end, you must answer a queue of operational questions.
 
-Each answer changes the remaining duration of one or more jobs. Some choices also unlock preplanned follow-ups, so a decision may continue to shape the run several days later. The interface reveals the stated schedule effect of every choice; scenario copy adds context, never hidden simulation rules.
+Each answer changes the remaining duration of one or more jobs. If a job is already more than two days behind the next-longest job, its choices cannot add further delay. Some choices also unlock preplanned follow-ups, so a decision may continue to shape the run several days later. The interface reveals the stated schedule effect of every choice; scenario copy adds context, never hidden simulation rules.
 
 Meanwhile, ECHO independently follows the globally optimal route it calculated before play began.
 
@@ -51,7 +51,7 @@ The question is not whether ECHO made a mistake. It is whether you can avoid mak
 
 1. **Generate the scenario.** A seed creates 20 jobs, their starting durations, and a complete decision web shared by the player and ECHO.
 2. **Answer the day's questions.** Each day presents two to four decisions. Answers explicitly add or remove days from affected jobs.
-3. **Advance the workday.** After every question is answered, all unfinished jobs lose one remaining day.
+3. **Advance the workday.** After every question is answered, all unfinished jobs lose one remaining day. A single longest job more than two days behind the next-longest receives three days of progress instead; the final remaining job receives two.
 4. **Assemble the submarine.** Each completed job reveals another piece of the final submarine.
 5. **Compare against ECHO.** When all work is complete, the game reveals completion timing, score history, choice alignment, and the reason ECHO won—or why the exact-path run tied.
 
@@ -85,7 +85,7 @@ ECHO still optimizes completion day first. Among routes that finish on the same 
 | Starting duration | Jobs begin at 5–15 days, weighted toward shorter durations while keeping every configured duration possible.                                                                                              |
 | Daily decisions   | Each day presents a configurable two to four questions.                                                                                                                                                   |
 | Choice effects    | A choice only adds or removes stated job-days; narrative context creates no hidden state.                                                                                                                 |
-| Daily progress    | Every unfinished job loses one remaining day when the day advances.                                                                                                                                       |
+| Daily progress    | Every unfinished job loses one remaining day when the day advances. A unique longest job more than two days behind the next-longest loses three days instead; the final job loses two.                  |
 | Follow-ups        | Eligible follow-ups are rolled during web generation and stored as preplanned successor questions. They may amplify, reverse, or preserve an earlier effect, but never exactly cancel its job-day change. |
 | Decision web      | Equivalent future states reconverge, forming a directed acyclic graph instead of a duplicated history tree.                                                                                               |
 | Solved horizon    | The complete web covers days 1–24. If ECHO's route would reach day 25, the web is regenerated around the same job scenario so ECHO always finishes inside the solved region.                              |
