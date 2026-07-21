@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import random
+from dataclasses import replace
 
 from ..config import GameConfig
 from ..models import (
@@ -177,6 +178,13 @@ def build_preplanned_decision_card(
 ) -> DecisionCard:
     """Build one immutable-web question for an exact precomputed state."""
     targets = [primary, *(job for job in ordered_targets if job.id != primary.id)][:5]
+    definition = _select_preplanned_follow_up_result(
+        state,
+        definition,
+        primary,
+        question_number,
+        trigger_delta,
+    )
     deltas = _preplanned_deltas(definition, targets, trigger_delta)
     if _should_prevent_delays(primary, ordered_targets):
         deltas = [min(0, delta) for delta in deltas]
@@ -205,6 +213,48 @@ def build_preplanned_decision_card(
         context_label=context,
         definition_id=definition.id,
         primary_job_id=primary.id,
+    )
+
+
+def _select_preplanned_follow_up_result(
+    state: SimulationState,
+    definition: DecisionDefinition,
+    primary: Job,
+    question_number: int,
+    trigger_delta: int,
+) -> DecisionDefinition:
+    """Resolve one result without adding a chance branch to the startup web."""
+    if not definition.alternate_results:
+        return definition
+
+    remaining = ",".join(
+        f"{job_id}:{state.jobs[job_id].remaining_days}"
+        for job_id in sorted(state.jobs)
+    )
+    material = "|".join(
+        (
+            str(state.seed),
+            str(state.current_day),
+            str(question_number),
+            definition.id,
+            primary.id,
+            str(trigger_delta),
+            remaining,
+        )
+    ).encode("utf-8")
+    result_index = int(hashlib.sha256(material).hexdigest(), 16) % (
+        len(definition.alternate_results) + 1
+    )
+    if result_index == 0:
+        return definition
+
+    result = definition.alternate_results[result_index - 1]
+    return replace(
+        definition,
+        title=result.title,
+        description=result.description,
+        choices=result.choices,
+        alternate_results=(),
     )
 
 

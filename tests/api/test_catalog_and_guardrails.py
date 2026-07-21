@@ -7,6 +7,7 @@ from echo_adventure.decisions.cards import (
     _available_base_definitions,
     _build_choice,
     _format_job_list,
+    _select_preplanned_follow_up_result,
     build_preplanned_decision_card,
     generate_daily_decision_cards,
     select_echo_choice_from_choices,
@@ -89,6 +90,24 @@ def test_every_catalog_definition_builds_a_truthful_preplanned_card(definition) 
         for choice in outlier_card.choices
         for delta in choice.day_changes.values()
     )
+
+    if definition.alternate_results:
+        expected_titles = {
+            definition.title,
+            *(result.title for result in definition.alternate_results),
+        }
+        selected_titles = set()
+        for seed in range(1, 33):
+            varied_state = initialize_state(scenario_from_durations(4, 5, 6, seed=seed))
+            selected = _select_preplanned_follow_up_result(
+                varied_state,
+                definition,
+                varied_state.jobs["JOB-01"],
+                question_number=1,
+                trigger_delta=trigger_delta,
+            )
+            selected_titles.add(selected.title)
+        assert selected_titles == expected_titles
 
 
 @pytest.mark.parametrize(

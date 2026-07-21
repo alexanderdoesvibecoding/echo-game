@@ -23,6 +23,15 @@ class CatalogChoice:
 
 
 @dataclass(frozen=True)
+class FollowUpResult:
+    """An alternate startup-selected result for one follow-up definition."""
+
+    title: str
+    description: str
+    choices: tuple[CatalogChoice, ...]
+
+
+@dataclass(frozen=True)
 class DecisionDefinition:
     id: str
     title: str
@@ -30,6 +39,7 @@ class DecisionDefinition:
     choices: tuple[CatalogChoice, ...]
     is_follow_up: bool = False
     unavoidable_follow_up_edges: tuple[FollowUpEdge, ...] = ()
+    alternate_results: tuple[FollowUpResult, ...] = ()
 
 
 def F(target: str, probability: float, delay_days: int = 3) -> FollowUpEdge:
@@ -49,6 +59,14 @@ def C(
     )
 
 
+def R(
+    title: str,
+    description: str,
+    *choices: CatalogChoice,
+) -> FollowUpResult:
+    return FollowUpResult(title=title, description=description, choices=choices)
+
+
 def D(
     definition_id: str,
     title: str,
@@ -56,6 +74,7 @@ def D(
     *choices: CatalogChoice,
     is_follow_up: bool = False,
     card_follow: tuple[FollowUpEdge, ...] = (),
+    alternate_results: tuple[FollowUpResult, ...] = (),
 ) -> DecisionDefinition:
     icon_keys = DECISION_CHOICE_ICON_KEYS.get(definition_id)
     if icon_keys is None or len(icon_keys) != len(choices):
@@ -65,17 +84,31 @@ def D(
     unknown_icon_keys = set(icon_keys) - SUPPORTED_CHOICE_ICON_KEYS
     if unknown_icon_keys:
         raise ValueError(f"Decision {definition_id!r} uses unknown icon keys: {sorted(unknown_icon_keys)}")
-    choices_with_icons = tuple(
-        replace(choice, icon_key=icon_key)
-        for choice, icon_key in zip(choices, icon_keys, strict=True)
+    if alternate_results and not is_follow_up:
+        raise ValueError(f"Decision {definition_id!r} cannot vary a base-question result.")
+
+    def choices_with_icons(result_choices: tuple[CatalogChoice, ...]) -> tuple[CatalogChoice, ...]:
+        if len(result_choices) != len(icon_keys):
+            raise ValueError(
+                f"Decision {definition_id!r} must keep the same choice count in every result."
+            )
+        return tuple(
+            replace(choice, icon_key=icon_key)
+            for choice, icon_key in zip(result_choices, icon_keys, strict=True)
+        )
+
+    results_with_icons = tuple(
+        replace(result, choices=choices_with_icons(result.choices))
+        for result in alternate_results
     )
     return DecisionDefinition(
         id=definition_id,
         title=title,
         description=description,
-        choices=choices_with_icons,
+        choices=choices_with_icons(choices),
         is_follow_up=is_follow_up,
         unavoidable_follow_up_edges=card_follow,
+        alternate_results=results_with_icons,
     )
 
 
@@ -246,7 +279,7 @@ BASE_DEFINITIONS = (
     D(
         "coolant-change-due", "A machine needs coolant service", "A cutting or machining station is approaching its finish-quality limit.",
         C("Service it now", follow=(F("finish-window-restored", 0.66),), score=0.27),
-        C("Run one more shift", score=-0.54),
+        C("Run one more shift", follow=(F("finish-window-restored", 0.62),), score=-0.54),
         C("Move precision work away", score=0.21),
     ),
     D(
@@ -274,7 +307,7 @@ BASE_DEFINITIONS = (
     ),
     D(
         "old-setup-sheet", "An old setup sheet might help", "A proven setup sheet exists for similar work, but its applicability is not yet controlled.",
-        C("Use it as-is", score=0.18),
+        C("Use it as-is", follow=(F("wrong-revision-loaded", 0.52),), score=0.18),
         C("Validate first", follow=(F("setup-library-update", 0.67),), score=-0.05),
         C("Ignore it", score=0.0),
     ),
@@ -473,11 +506,20 @@ FOLLOW_UP_DEFINITIONS = (
         is_follow_up=True,
     ),
     D(
-        "finish-window-restored", "Finish quality is restored", "The serviced process is holding finish quality better than expected.",
+        "finish-window-restored", "Finish quality is holding", "The process is holding finish quality better than expected.",
         C("Run precision work through it", score=1.01),
         C("Run only the critical job", score=0.78),
         C("Return to normal dispatch", score=0.0),
         is_follow_up=True,
+        alternate_results=(
+            R(
+                "The finish limit was exceeded",
+                "The process check found that finish quality deteriorated before the next planned service.",
+                C("Rework all affected parts", score=-1.42),
+                C("Recheck only precision work", score=-0.91),
+                C("Hold the machine for review", score=-0.43),
+            ),
+        ),
     ),
     D(
         "combined-lift", "One crane window can move several jobs", "The delayed crane window is long enough to move several staged jobs together.",
@@ -555,6 +597,15 @@ FOLLOW_UP_DEFINITIONS = (
         C("Sort only critical parts", score=-1.02),
         C("Accept the marks", score=-1.24),
         is_follow_up=True,
+        alternate_results=(
+            R(
+                "Air pressure recovered before parts were marked",
+                "The monitored pressure recovered and the held work shows no clamp damage.",
+                C("Release all held work", score=1.24),
+                C("Release only critical work", score=0.7),
+                C("Keep the original queue", score=0.0),
+            ),
+        ),
     ),
     D(
         "covered-work-reopened", "Covered work must be reopened", "Inspectors require covered work to be reopened before acceptance.",
@@ -562,6 +613,15 @@ FOLLOW_UP_DEFINITIONS = (
         C("Reopen only due work", score=-0.62),
         C("Argue the containment", score=-0.56),
         is_follow_up=True,
+        alternate_results=(
+            R(
+                "Covered work passed containment review",
+                "Inspectors accepted the containment record without reopening the protected work.",
+                C("Release all covered work", score=1.27),
+                C("Release only due work", score=0.74),
+                C("Keep the covers in place", score=0.0),
+            ),
+        ),
     ),
     D(
         "wrong-revision-loaded", "The wrong document revision was used", "A cached or floor-controlled file was not the current revision.",
@@ -569,6 +629,15 @@ FOLLOW_UP_DEFINITIONS = (
         C("Stop the whole family", score=-0.93),
         C("Patch only the next step", score=-0.63),
         is_follow_up=True,
+        alternate_results=(
+            R(
+                "The uncontrolled copy matches the current revision",
+                "Document control confirmed that the working copy contains the currently approved instructions.",
+                C("Release the affected family", score=1.03),
+                C("Release only current work", score=0.61),
+                C("Return to controlled copies", score=0.0),
+            ),
+        ),
     ),
     D(
         "phantom-stock-confirmed", "Expected stock is missing", "The missing inventory is real and the family cannot support every planned start.",
@@ -583,6 +652,15 @@ FOLLOW_UP_DEFINITIONS = (
         C("Clean at the fitting station", score=-1.19),
         C("Force the fit", score=-0.63),
         is_follow_up=True,
+        alternate_results=(
+            R(
+                "The rough release passed its fit check",
+                "Downstream fitting confirmed that the released surfaces still meet the planned fit.",
+                C("Release the matching batch", score=1.12),
+                C("Release only the checked work", score=0.69),
+                C("Keep normal cleanup", score=0.0),
+            ),
+        ),
     ),
     D(
         "cure-failure-found", "A cured part failed inspection", "The forced part failed a later cure or bond check.",
@@ -590,6 +668,15 @@ FOLLOW_UP_DEFINITIONS = (
         C("Add a repair patch", score=-1.17),
         C("Keep building over it", score=-1.5),
         is_follow_up=True,
+        alternate_results=(
+            R(
+                "The accelerated cure met its acceptance margin",
+                "Inspection confirmed that the forced process step still achieved an acceptable cure.",
+                C("Release matching cured work", score=1.02),
+                C("Release only the tested part", score=0.62),
+                C("Keep the standard dwell", score=0.0),
+            ),
+        ),
     ),
     D(
         "vacuum-trace-failed", "The vacuum trace crossed the limit", "The monitoring record crossed the allowed process limit.",
@@ -597,6 +684,15 @@ FOLLOW_UP_DEFINITIONS = (
         C("Rework the suspect zone", score=-0.97),
         C("Ask for a deviation", score=-1.0),
         is_follow_up=True,
+        alternate_results=(
+            R(
+                "The monitored vacuum stayed within its limit",
+                "The complete pressure trace shows that the monitored setup remained acceptable.",
+                C("Release the monitored work", score=0.94),
+                C("Release only the critical part", score=0.56),
+                C("Retain the extra monitoring", score=0.0),
+            ),
+        ),
     ),
     D(
         "waste-lane-blocked", "Waste carts are blocking movement", "Interim carts now obstruct material movement through the shop.",
@@ -611,6 +707,15 @@ FOLLOW_UP_DEFINITIONS = (
         C("Reinspect only critical work", score=-0.67),
         C("Contest the audit", score=-0.6),
         is_follow_up=True,
+        alternate_results=(
+            R(
+                "Calibration records clear the expired tool tags",
+                "The controlled records show that the tools remained calibrated despite their outdated stickers.",
+                C("Release all affected work", score=1.08),
+                C("Release only critical work", score=0.64),
+                C("Resticker before release", score=0.0),
+            ),
+        ),
     ),
     D(
         "weather-cleared-early", "Weather cleared earlier than expected", "The exposed stations can reopen sooner than the revised weather plan expected.",
@@ -618,6 +723,15 @@ FOLLOW_UP_DEFINITIONS = (
         C("Restart critical work only", score=0.81),
         C("Keep the revised queue", score=0.0),
         is_follow_up=True,
+        alternate_results=(
+            R(
+                "The weather closure lasted longer than forecast",
+                "Exposed stations remain closed and the revised indoor queue is beginning to back up.",
+                C("Keep all exposed work held", score=-1.43),
+                C("Move critical work inside", score=-0.82),
+                C("Rebuild tomorrow's queue", score=-0.34),
+            ),
+        ),
     ),
     D(
         "setup-mismatch-found", "The moved setup does not match", "The receiving machine's setup datum does not match the moved work's plan.",

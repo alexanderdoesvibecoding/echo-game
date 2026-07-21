@@ -34,9 +34,15 @@ def test_catalog_is_large_unique_and_has_valid_choice_icons() -> None:
 
     for definition in DEFINITIONS_BY_ID.values():
         assert len(definition.choices) >= 1
-        icons = [choice.icon_key for choice in definition.choices]
-        assert len(icons) == len(set(icons))
-        assert set(icons) <= SUPPORTED_CHOICE_ICON_KEYS
+        result_choices = (
+            definition.choices,
+            *(result.choices for result in definition.alternate_results),
+        )
+        for choices in result_choices:
+            assert len(choices) == len(definition.choices)
+            icons = [choice.icon_key for choice in choices]
+            assert len(icons) == len(set(icons))
+            assert set(icons) <= SUPPORTED_CHOICE_ICON_KEYS
 
 
 @pytest.mark.parametrize(
