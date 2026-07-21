@@ -73,6 +73,23 @@ def test_every_catalog_definition_builds_a_truthful_preplanned_card(definition) 
         for delta in choice.day_changes.values()
     )
 
+    outlier_state = initialize_state(scenario_from_durations(10, 3, 2))
+    outlier = outlier_state.jobs["JOB-01"]
+    outlier_card = build_preplanned_decision_card(
+        outlier_state,
+        definition,
+        outlier,
+        list(outlier_state.jobs.values()),
+        question_number=1,
+        node_token="OUTLIER",
+        trigger_delta=trigger_delta,
+    )
+    assert all(
+        delta <= 0
+        for choice in outlier_card.choices
+        for delta in choice.day_changes.values()
+    )
+
 
 @pytest.mark.parametrize(
     "definition",
@@ -124,7 +141,7 @@ def test_echo_guardrails_reject_completed_non_daily_overtime_and_early_terminal_
     with pytest.raises(RuntimeError, match="cannot choose after completing"):
         apply_omniscient_choice(completed, web, web.root_node_id)
 
-    state = initialize_state(scenario_from_durations(2))
+    state = initialize_state(scenario_from_durations(3))
     with pytest.raises(RuntimeError, match="cannot advance before"):
         advance_omniscient_day(
             state,

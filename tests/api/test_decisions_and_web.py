@@ -148,6 +148,15 @@ def test_daily_card_generation_is_deterministic_varied_and_free_of_subjob_copy()
         for delta in choice.day_changes.values()
     )
 
+    outlier_state = initialize_state(scenario_from_durations(10, 3, 2))
+    outlier_cards = generate_daily_decision_cards(outlier_state, config)
+    outlier_card = next(card for card in outlier_cards if card.primary_job_id == "JOB-01")
+    assert all(
+        delta <= 0
+        for choice in outlier_card.choices
+        for delta in choice.day_changes.values()
+    )
+
 
 def test_due_follow_up_is_prioritized_and_stale_follow_ups_are_discarded() -> None:
     config = small_config()

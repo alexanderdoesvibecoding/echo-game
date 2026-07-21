@@ -265,11 +265,10 @@ function renderFinalMetricBar(player, automated) {
   const completionTone = playerCompletionDay === echoCompletionDay ? "warn" : "danger";
   const metricCards = [
     {
-      label: "Completion date",
+      label: "Completion Date",
       playerValue: player.completion || "-",
-      playerDetail: playerCompletionDay === null ? "Day -" : `Day ${playerCompletionDay}`,
       echoValue: automated.completion || "-",
-      echoDetail: echoCompletionDay === null ? "Day -" : `Day ${echoCompletionDay}`,
+      echoLabel: "ECHO:",
       tone: completionTone,
     },
     {
@@ -288,9 +287,8 @@ function renderFinalMetricBar(player, automated) {
       <div class="metric-value-row final-metric-value-row">
         <strong>${escapeHtml(metric.playerValue)}</strong>
       </div>
-      ${metric.playerDetail ? `<div class="final-metric-secondary">${escapeHtml(metric.playerDetail)}</div>` : ""}
       <div class="final-metric-benchmark">
-        ECHO ${escapeHtml(metric.echoValue)}${metric.echoDetail ? ` <span aria-hidden="true">&middot;</span> ${escapeHtml(metric.echoDetail)}` : ""}
+        ${escapeHtml(metric.echoLabel || "ECHO")} ${escapeHtml(metric.echoValue)}
       </div>
     </div>
   `).join("");

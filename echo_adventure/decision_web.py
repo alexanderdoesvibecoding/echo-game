@@ -10,6 +10,7 @@ from .config import GameConfig
 from .decisions.cards import build_preplanned_decision_card
 from .decisions.definitions import BASE_DEFINITIONS, DEFINITIONS_BY_ID, DecisionDefinition
 from .enums import JobStatus
+from .metrics import daily_progress_days
 from .models import DecisionCard, DecisionChoice, Job, Scenario, SimulationState
 
 
@@ -289,10 +290,14 @@ class _DecisionWebBuilder:
         if pending_definition_id:
             raise RuntimeError("A generated follow-up cannot cross a daily boundary.")
 
-        for index in range(len(remaining)):
-            if completed_mask & (1 << index):
-                continue
-            remaining[index] = max(0, remaining[index] - 1)
+        incomplete_indexes = [
+            index
+            for index in range(len(remaining))
+            if not completed_mask & (1 << index)
+        ]
+        progress = daily_progress_days([remaining[index] for index in incomplete_indexes])
+        for index, progress_days in zip(incomplete_indexes, progress, strict=True):
+            remaining[index] = max(0, remaining[index] - progress_days)
             if remaining[index] == 0:
                 completed_mask |= 1 << index
 
