@@ -123,6 +123,25 @@ config = GameConfig(
 )
 ```
 
+## Benchmark decision-web generation
+
+Run the repeatable startup benchmark after changes that may affect decision-web size or generation performance:
+
+```bash
+python3 scripts/benchmark_decision_web.py
+```
+
+The default benchmark runs seeds 1 through 10 in isolated processes and reports scenario-generation time, web-generation time, node and edge counts, solved completion day, throughput, and peak resident memory. Imports are excluded from the timings, while memory includes the Python process and the retained web.
+
+Use a shorter seed list, repeat each seed, or emit JSON for automated comparisons:
+
+```bash
+python3 scripts/benchmark_decision_web.py --seeds 1 2 3 --runs 3
+python3 scripts/benchmark_decision_web.py --json
+```
+
+Optional `--max-median-web-seconds` and `--max-peak-rss-mib` thresholds make the command exit unsuccessfully when an explicitly configured performance limit is exceeded. Without thresholds, performance results are informational and only generation failures produce an unsuccessful exit.
+
 ## Architecture
 
 ```text
