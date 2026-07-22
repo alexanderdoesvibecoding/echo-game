@@ -21,6 +21,7 @@ def test_config_defaults_describe_the_twenty_job_game() -> None:
     assert (config.min_job_duration_days, config.max_job_duration_days) == (5, 15)
     assert (config.min_decisions_per_day, config.max_decisions_per_day) == (2, 3)
     assert config.max_campaign_day == 25
+    assert config.day_cycle_duration_ms == 6000
 
 
 def test_calendar_labels_are_one_based_and_cross_month_boundaries() -> None:
@@ -115,6 +116,8 @@ def test_advance_day_ticks_every_unfinished_job_once_and_records_summary() -> No
     assert state.current_day == 2
     assert result.start_snapshot.total_remaining_days == 6
     assert result.end_snapshot.total_remaining_days == 3
+    assert result.end_snapshot.projected_completion_day == 3
+    assert result.end_snapshot == calculate_snapshot(state)
     assert state.cumulative_unfinished_job_days == 6
 
     outlier_state = initialize_state(scenario_from_durations(4, 7, 16))

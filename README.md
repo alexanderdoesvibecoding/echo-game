@@ -112,7 +112,7 @@ The game is configured through `GameConfig` in `echo_adventure/config.py`.
 | `min_decisions_per_day`             |          `2` | Minimum daily question count.                                 |
 | `max_decisions_per_day`             |          `3` | Maximum daily question count.                                 |
 | `max_campaign_day`                  |         `25` | Boundary between the preplanned web and runtime continuation. |
-| `day_cycle_duration_ms`             |       `8000` | Workday animation duration.                                   |
+| `day_cycle_duration_ms`             |       `6000` | Workday animation duration.                                   |
 | `daily_summary_counter_duration_ms` |       `2000` | Daily-summary counter animation duration.                     |
 | `seed`                              |       `None` | Optional deterministic scenario seed.                         |
 

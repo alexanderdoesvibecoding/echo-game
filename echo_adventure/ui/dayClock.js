@@ -3,7 +3,7 @@
 import { uiState } from "./state.js";
 import { SUBMARINE_IMAGE_SRC } from "./submarineVisual.js";
 
-const DEFAULT_DAY_CYCLE_DURATION_MS = 8000;
+const DEFAULT_DAY_CYCLE_DURATION_MS = 6000;
 const TICK_MS = 180;
 const TIMELINE_ACTORS = [
   { key: "player", label: "YOU:", spokenLabel: "You" },

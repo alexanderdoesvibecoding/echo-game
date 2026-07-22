@@ -54,8 +54,10 @@ def advance_day(state: SimulationState) -> DayResult:
             complete_job(state, job.id)
 
     update_state_metrics(state)
-    end_snapshot = calculate_snapshot(state)
     completed_today = sorted(state.completed_jobs - completed_before)
+    if not state.final_item_completed:
+        state.current_day += 1
+    end_snapshot = calculate_snapshot(state)
     result = DayResult(
         day=day,
         completed_job_ids=completed_today,
@@ -63,6 +65,4 @@ def advance_day(state: SimulationState) -> DayResult:
         start_snapshot=start_snapshot,
         end_snapshot=end_snapshot,
     )
-    if not state.final_item_completed:
-        state.current_day += 1
     return result

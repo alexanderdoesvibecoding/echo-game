@@ -24,7 +24,7 @@ class GameConfig:
     min_decisions_per_day: int = 2
     max_decisions_per_day: int = 3
     max_campaign_day: int = 25
-    day_cycle_duration_ms: int = 8000
+    day_cycle_duration_ms: int = 6000
     daily_summary_counter_duration_ms: int = 2000
     seed: int | None = None
 

@@ -149,6 +149,7 @@ def test_daily_card_generation_is_deterministic_varied_and_free_of_subjob_copy()
     assert "subjob" not in " ".join(
         [part for card in first for part in (card.title, card.description)]
     ).lower()
+    assert all("Today's affected job is" not in card.description for card in first)
 
     last_job_state = initialize_state(scenario_from_durations(2))
     last_job_cards = generate_daily_decision_cards(
@@ -187,6 +188,7 @@ def test_due_follow_up_is_prioritized_and_stale_follow_ups_are_discarded() -> No
 
     assert cards[0].definition_id == due_id
     assert cards[0].primary_job_id == "JOB-01"
+    assert "This follow-up remains tied to Job 1." in cards[0].description
     assert state.pending_follow_ups == []
     assert due_id in state.shown_follow_up_decision_ids
     assert all(sum(choice.day_changes.values()) != -2 for choice in cards[0].choices)

@@ -154,8 +154,9 @@ def _build_card(
     ]
     echo_choice = select_echo_choice_from_choices(choices)
     context = _format_job_list([job.name for job in targets])
-    tie_text = "This follow-up remains tied to" if pending else "Today's affected job is"
-    description = f"{_simplify_language(definition.description)} {tie_text} {primary.name}."
+    description = _simplify_language(definition.description)
+    if pending:
+        description = f"{description} This follow-up remains tied to {primary.name}."
     return DecisionCard(
         id=f"DEC-D{state.current_day:03d}-{ordinal:02d}-{definition.id}",
         title=_simplify_language(definition.title),
@@ -203,8 +204,9 @@ def build_preplanned_decision_card(
     echo_choice = select_echo_choice_from_choices(choices)
     context = _format_job_list([job.name for job in targets])
     is_follow_up = definition.is_follow_up
-    tie_text = "This follow-up remains tied to" if is_follow_up else "Today's affected job is"
-    description = f"{_simplify_language(definition.description)} {tie_text} {primary.name}."
+    description = _simplify_language(definition.description)
+    if is_follow_up:
+        description = f"{description} This follow-up remains tied to {primary.name}."
     return DecisionCard(
         id=f"DEC-D{state.current_day:03d}-Q{question_number:02d}-{node_token}-{definition.id}",
         title=_simplify_language(definition.title),

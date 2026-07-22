@@ -132,6 +132,10 @@ def test_choice_and_advance_update_player_and_echo_once_per_slot(monkeypatch: py
     assert payload["lastSummary"]["jobsComplete"] == job_count - session.last_result.end_snapshot.jobs_remaining
     assert payload["lastSummary"]["previousJobsRemaining"] == session.last_result.start_snapshot.jobs_remaining
     assert payload["lastSummary"]["jobsRemaining"] == session.last_result.end_snapshot.jobs_remaining
+    assert (
+        payload["lastSummary"]["projectedCompletion"]
+        == payload["timelines"]["player"]["projectedCompletion"]
+    )
     expected_remaining_jobs = [
         {
             "name": job.name,
@@ -189,11 +193,16 @@ def test_multi_question_days_traverse_web_and_end_on_an_early_final_choice(
     assert early_finish.questions_answered_today == 0
     assert early_finish.decision_total_today == 2
     final_card = early_finish.current_cards[0]
+    in_progress_payload = early_finish.state_payload()
+
+    assert in_progress_payload["timelines"]["player"]["displayCompletion"] == "July 3"
+    assert in_progress_payload["timelines"]["player"]["progressPercent"] == 66.6667
 
     early_finish.apply_choice(final_card.id, "choice-1")
 
     payload = early_finish.state_payload()
     assert payload["gameOver"] is True
+    assert payload["timelines"]["player"]["progressPercent"] == 100.0
     assert payload["decisionProgress"] == {"completed": 1, "total": 2}
     assert payload["decisions"] == []
     assert early_finish.player_state.jobs["JOB-03"].remaining_days == 0

@@ -196,15 +196,15 @@ class PayloadMixin:
             progress_percent = 100.0
         else:
             display_completion_day = max(story_day, snapshot.projected_completion_day)
-            represented_days = display_completion_day - start_day
-            if represented_days <= 0:
-                progress_percent = 100.0 if story_day >= display_completion_day else 0.0
-            else:
-                elapsed_days = max(0, story_day - start_day)
-                progress_percent = max(
-                    0.0,
-                    min(100.0, elapsed_days / represented_days * 100.0),
-                )
+            # The completion date is a workday, not a point reached at its start.
+            # Count it in the represented duration so an unfinished actor stays
+            # short of 100% while that day's decisions are still being answered.
+            represented_days = display_completion_day - start_day + 1
+            elapsed_days = max(0, story_day - start_day)
+            progress_percent = max(
+                0.0,
+                min(100.0, elapsed_days / represented_days * 100.0),
+            )
         return {
             "projectedCompletion": self.config.date_label_for_day(
                 snapshot.projected_completion_day
