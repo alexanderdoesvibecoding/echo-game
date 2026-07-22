@@ -29,13 +29,16 @@ def play_to_completion(session: session_module.GameSession, first_choice_id: str
     while not session.player_state.final_item_completed:
         guard += 1
         assert guard < 100
-        assert len(session.current_cards) == 1
-        card = session.current_cards[0]
-        choice_id = first_choice_id if first and first_choice_id else card.echo_choice_id
-        session.apply_choice(card.id, choice_id)
-        first = False
-        if session.ready_to_advance():
+        if session.current_cards:
+            assert len(session.current_cards) == 1
+            card = session.current_cards[0]
+            choice_id = first_choice_id if first and first_choice_id else card.echo_choice_id
+            session.apply_choice(card.id, choice_id)
+            first = False
+        elif session.ready_to_advance():
             session.advance_day()
+        else:
+            raise AssertionError("Unfinished session has neither a decision nor a ready workday.")
     return session.state_payload()["finalReveal"]
 
 
@@ -50,6 +53,7 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
     assert payload["currentDate"] == "July 1"
     assert payload["jobCount"] == 3
     assert payload["gameOver"] is False
+    assert payload["finalAssembly"] is None
     assert payload["decisionProgress"] == {
         "completed": 0,
         "total": 1,
@@ -166,6 +170,7 @@ def test_multi_question_days_traverse_web_and_end_on_an_early_final_choice(
     session = session_module.GameSession(seed=407)
     assert session.decision_total_today == 2
     first = session.current_cards[0]
+    monkeypatch.setattr(session, "_should_start_final_assembly", lambda: True)
 
     session.apply_choice(first.id, first.echo_choice_id)
 
@@ -175,6 +180,7 @@ def test_multi_question_days_traverse_web_and_end_on_an_early_final_choice(
     assert session.current_cards[0].id != first.id
     assert session.ready_to_advance() is False
 
+    monkeypatch.setattr(session, "_should_start_final_assembly", lambda: False)
     second = session.current_cards[0]
     session.apply_choice(second.id, second.echo_choice_id)
     assert session.ready_to_advance() is True
@@ -287,7 +293,7 @@ def test_multi_seed_exact_paths_tie_and_every_first_divergence_loses(
         assert any(not record.aligned_with_echo for record in divergent.player_state.decision_history)
 
 
-def test_slow_route_enters_overtime_and_still_loses_after_finishing(
+def test_slow_route_uses_one_player_only_final_assembly_batch_then_normal_workdays(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     install_fast_session_config(
@@ -299,37 +305,94 @@ def test_slow_route_enters_overtime_and_still_loses_after_finishing(
     )
     session = session_module.GameSession(seed=1)
 
-    while not session.player_in_overtime:
-        card = session.current_cards[0]
-        slowest = min(card.choices, key=lambda choice: (choice.score_delta, choice.id))
-        session.apply_choice(card.id, slowest.id)
-        if session.ready_to_advance():
-            session.advance_day()
-
-    assert session.player_state.current_day == 5
-    assert not session.player_state.final_item_completed
-    assert session.overtime_cards
-
     guard = 0
-    while not session.player_state.final_item_completed:
+    while not session.player_final_assembly_started:
         guard += 1
         assert guard < 50
+        if session.current_cards:
+            card = session.current_cards[0]
+            slowest = min(card.choices, key=lambda choice: (choice.score_delta, choice.id))
+            session.apply_choice(card.id, slowest.id)
+        elif session.ready_to_advance():
+            session.advance_day()
+        else:
+            raise AssertionError("Slow route stalled before final assembly.")
+
+    assert session.automated_state.final_item_completed
+    assert len(session.player_state.incomplete_jobs()) == 1
+    assert session.player_state.current_day >= (session.automated_state.completion_day or 0)
+    assert session.final_assembly_cards
+    assert all(card.player_only for card in session.final_assembly_cards)
+    assert all(
+        abs(delta) == 1
+        for card in session.final_assembly_cards
+        for choice in card.choices
+        for delta in choice.day_changes.values()
+    )
+    projected_day = (
+        session.player_state.current_day
+        + session.player_state.incomplete_jobs()[0].remaining_days
+        - 1
+    )
+    safe_removal_budget = projected_day - (session.automated_state.completion_day or 0) - 1
+    accelerating_cards = sum(
+        any(
+            delta < 0
+            for choice in card.choices
+            for delta in choice.day_changes.values()
+        )
+        for card in session.final_assembly_cards
+    )
+    assert accelerating_cards <= max(0, safe_removal_budget)
+    echo_history_count = len(session.automated_state.decision_history)
+
+    while not session.player_final_assembly_locked and not session.player_state.final_item_completed:
         card = session.current_cards[0]
-        if len(session.player_state.incomplete_jobs()) == 1:
-            assert all(
-                delta <= 0
-                for choice in card.choices
-                for delta in choice.day_changes.values()
-            )
         slowest = min(card.choices, key=lambda choice: (choice.score_delta, choice.id))
         session.apply_choice(card.id, slowest.id)
-        if session.ready_to_advance():
-            session.advance_day()
+
+    final_records = [
+        record
+        for record in session.player_state.decision_history
+        if record.card_id.startswith("FINAL-")
+    ]
+    assert final_records
+    assert all(record.aligned_with_echo is None for record in final_records)
+    assert len(session.automated_state.decision_history) == echo_history_count
+
+    if not session.player_state.final_item_completed:
+        assert session.current_cards == []
+        assert session.ready_to_advance()
+        locked_payload = session.state_payload()
+        assert locked_payload["dayCycleDurationMs"] == 2_000
+        assert locked_payload["dailySummaryCounterDurationMs"] == 500
+        remaining_before = session.player_state.incomplete_jobs()[0].remaining_days
+        session.advance_day()
+        if not session.player_state.final_item_completed:
+            assert session.player_state.incomplete_jobs()[0].remaining_days == remaining_before - 1
+            assert session.current_cards == []
+            assert session.decision_total_today == 0
+
+    while not session.player_state.final_item_completed:
+        assert session.current_cards == []
+        assert session.ready_to_advance()
+        session.advance_day()
 
     final = session.state_payload()["finalReveal"]
     assert final["review"]["outcome"] == "behind"
-    assert session.player_state.completion_day >= session.config.max_campaign_day
-    assert any(record.day >= session.config.max_campaign_day for record in session.player_state.decision_history)
+    assert session.player_state.completion_day > session.automated_state.completion_day
+    final_points = [
+        point
+        for point in final["completionHistory"]["decisionPoints"]
+        if point["playerDecision"]
+        and point["playerDecision"]["questionId"].startswith("FINAL-")
+    ]
+    assert final_points
+    assert all(point["echoDecision"] is None for point in final_points)
+    assert all(
+        "echoPreferredChoice" not in point["playerDecision"]
+        for point in final_points
+    )
 
 
 def test_final_payload_aligns_real_player_and_echo_histories(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -526,14 +589,17 @@ def test_live_http_server_supports_a_complete_exact_path_playthrough(
         state = request_json("/api/state")
         assert state["seed"] == 501
         while not state["gameOver"]:
-            card = state["decisions"][0]
-            echo_choice_id = store.session.current_cards[0].echo_choice_id
-            state = request_json(
-                "/api/choice",
-                {"cardId": card["id"], "choiceId": echo_choice_id},
-            )
-            if state["decisionProgress"]["completed"] == state["decisionProgress"]["total"]:
+            if state["decisions"]:
+                card = state["decisions"][0]
+                echo_choice_id = store.session.current_cards[0].echo_choice_id
+                state = request_json(
+                    "/api/choice",
+                    {"cardId": card["id"], "choiceId": echo_choice_id},
+                )
+            elif state["decisionProgress"]["completed"] == state["decisionProgress"]["total"]:
                 state = request_json("/api/advance", {})
+            else:
+                raise AssertionError("Exact HTTP run has no decision or ready workday.")
 
         assert state["finalReveal"]["review"]["outcome"] == "tied"
         assert all(tile["completed"] for tile in state["livePuzzle"]["tiles"])
@@ -548,15 +614,22 @@ def test_live_http_server_supports_a_complete_exact_path_playthrough(
         )
         first_decision = True
         while not state["gameOver"]:
-            card = state["decisions"][0]
-            choice_id = divergent_choice if first_decision else store.session.current_cards[0].echo_choice_id
-            first_decision = False
-            state = request_json(
-                "/api/choice",
-                {"cardId": card["id"], "choiceId": choice_id},
-            )
-            if state["decisionProgress"]["completed"] == state["decisionProgress"]["total"]:
+            if state["decisions"]:
+                card = state["decisions"][0]
+                choice_id = (
+                    divergent_choice
+                    if first_decision
+                    else store.session.current_cards[0].echo_choice_id
+                )
+                first_decision = False
+                state = request_json(
+                    "/api/choice",
+                    {"cardId": card["id"], "choiceId": choice_id},
+                )
+            elif state["decisionProgress"]["completed"] == state["decisionProgress"]["total"]:
                 state = request_json("/api/advance", {})
+            else:
+                raise AssertionError("Divergent HTTP run has no decision or ready workday.")
         assert state["finalReveal"]["review"]["outcome"] == "behind"
 
         bad_request = Request(

@@ -37,7 +37,7 @@ echo-adventure --seed 12345 --host 127.0.0.1 --port 8765
 
 Your mission is to finish all 20 jobs and assemble the complete submarine. Each job begins with its own remaining duration, and every game day advances every unfinished job by exactly one day. Before the day can end, you must answer a queue of operational questions.
 
-Each answer changes the remaining duration of one or more jobs. Ordinary preplanned questions use a deterministic seed-derived job schedule with alternating two-day and one-day target windows. Some choices also unlock preplanned follow-ups tied to their originating job, so a decision may continue to shape the run several days later. The interface reveals the stated schedule effect of every choice; scenario copy adds context, never hidden simulation rules.
+Each answer changes the remaining duration of one or more jobs. Ordinary preplanned questions use a deterministic seed-derived job schedule with alternating two-day and one-day target windows. Some choices also unlock preplanned follow-ups tied to their originating job, so a decision may continue to shape the run several days later. Ordinary decisions reveal their stated schedule effects; scenario copy adds context, never hidden simulation rules. If ECHO has already finished while the player has fallen behind with one job remaining at the end of a workday, the player receives one bounded Final Assembly Lock-In batch after that day's summary. Any ordinary questions already in progress are completed first. Final choices can preserve, delay, or accelerate the remaining job without displaying exact time changes. The job remains ordinary work and continues progressing one day at a time after the batch, without further questions; those question-free workdays run at an accelerated pace and retain their end-of-day summaries.
 
 Meanwhile, ECHO independently follows the globally optimal route it calculated before play began.
 
@@ -54,7 +54,7 @@ The question is not whether ECHO made a mistake. It is whether you can avoid mak
 ## How a run works
 
 1. **Generate the scenario.** A seed creates 20 jobs, their starting durations, and a complete decision web shared by the player and ECHO.
-2. **Answer the day's questions.** Each day presents two to three decisions. Answers explicitly add or remove days from affected jobs.
+2. **Answer the day's questions.** Each ordinary day presents two to three decisions. Answers explicitly add or remove days from affected jobs. A lagging player receives only one final bounded batch after ECHO is done and a single job remains.
 3. **Advance the workday.** After every question is answered, every unfinished job loses exactly one remaining day.
 4. **Assemble the submarine.** Each completed job reveals another piece of the final submarine.
 5. **Compare against ECHO.** When all work is complete, the game reveals completion timing, score history, choice alignment, and the reason ECHO won—or why the exact-path run tied.
@@ -94,7 +94,7 @@ ECHO still optimizes completion day first. Among routes that finish on the same 
 | Follow-ups        | Eligible follow-ups are rolled during web generation and stored as preplanned successor questions. Follow-ups with multiple possible results select one result during startup, before either route begins. They may amplify, reverse, or preserve an earlier effect, but never exactly cancel its job-day change. |
 | Decision web      | Equivalent future states reconverge, forming a directed acyclic graph instead of a duplicated history tree.                                                                                               |
 | Solved horizon    | The complete web covers days 1–24. If ECHO's route would reach day 25, the web is regenerated around the same job scenario so ECHO always finishes inside the solved region.                              |
-| Extended play     | If the player still has unfinished work on day 25, runtime generation continues with eligible questions and follow-ups until every job is complete.                                                       |
+| Extended play     | Runtime generation continues after day 24 while multiple player jobs remain. Once ECHO is finished and a lagging player has one job left, one player-only Final Assembly Lock-In batch replaces all later questions; the unchanged job then progresses normally to completion. |
 | Win condition     | Only an exact reproduction of ECHO's optimal path ties. Every divergent path loses.                                                                                                                       |
 
 There are deliberately no subjobs, dependencies, shifts, resources, queues, deadlines, workstations, employees, materials, inspections, routing, or rework systems. The model is entirely about job-days, decisions, and the gap between a human route and ECHO's optimum.

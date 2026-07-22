@@ -94,6 +94,7 @@ export function renderDecisionQueue() {
   const due = nextDecisionIsDue();
   updateQueueDayProgress(section, due);
   const card = due && !blocked ? currentOpenDecisionCard() : null;
+  const finalAssembly = uiState.state.finalAssembly;
   const pendingChoiceId = card && uiState.pendingChoice?.cardId === card.id
     ? uiState.pendingChoice.choiceId
     : "";
@@ -107,6 +108,8 @@ export function renderDecisionQueue() {
     progress.total,
     card?.id || "",
     pendingChoiceId,
+    finalAssembly?.status || "",
+    finalAssembly?.jobName || "",
   ]);
 
   section.classList.toggle("is-empty", !card);
@@ -114,7 +117,13 @@ export function renderDecisionQueue() {
   body.dataset.renderKey = renderKey;
 
   if (!card) {
-    body.innerHTML = `<div class="decision-queue-empty">No decision currently requires your attention.</div>`;
+    let message = "No decision currently requires your attention.";
+    if (finalAssembly?.status === "planning") {
+      message = `Final Assembly Lock-In is ready for ${finalAssembly.jobName}; the next decision will appear as the workday reaches it.`;
+    } else if (finalAssembly?.status === "locked") {
+      message = `Final assembly is locked. ${finalAssembly.jobName} remains a normal job and is continuing through its production schedule.`;
+    }
+    body.innerHTML = `<div class="decision-queue-empty">${escapeHtml(message)}</div>`;
 
     return;
   }

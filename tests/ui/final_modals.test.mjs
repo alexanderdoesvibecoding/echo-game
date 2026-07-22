@@ -169,6 +169,13 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
   assert.match(dom.element("finalMetricsBar").innerHTML, /Cumulative Unfinished Work/);
   assert.match(dom.element("finalMetricsBar").innerHTML, /48 job-days/);
   assert.match(dom.element("finalMetricsBar").innerHTML, /ECHO 42 job-days/);
+  assert.equal((dom.element("finalMetricsBar").innerHTML.match(/final-metric-[a-z]+ final-metric-hoverable/g) || []).length, 3);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /Earlier is better\./);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /Higher is better\./);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /Lower is better\./);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /aria-describedby="finalCompletionDateTooltip"/);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /aria-describedby="finalDecisionScoreTooltip"/);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /aria-describedby="finalUnfinishedWorkTooltip"/);
   assert.doesNotMatch(dom.element("finalMetricsBar").innerHTML, /Day [34]/);
   assert.match(dom.element("finalCompletionChart").innerHTML, /Your score/);
   assert.match(dom.element("finalCompletionChart").innerHTML, /ECHO score/);

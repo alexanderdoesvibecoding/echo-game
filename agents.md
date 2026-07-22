@@ -55,6 +55,7 @@
 
 ## Verification
 
+- Use seed `8` for routine deterministic build/startup verification because it generates a representative default-size exact web quickly. Keep behavior-specific seeds and required benchmark seed sets when a task calls for them.
 - Run the existing tests under `tests/` for code changes and verify that they
   still pass.
 - Update existing tests when needed to keep them aligned with current game

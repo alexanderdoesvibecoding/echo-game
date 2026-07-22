@@ -9,6 +9,10 @@ from ..models import DecisionCard, DecisionChoice, MetricSnapshot, SimulationSta
 from ..scoring import public_score, public_score_delta
 
 
+_FINAL_ASSEMBLY_DAY_CYCLE_DURATION_MS = 2_000
+_FINAL_ASSEMBLY_SUMMARY_COUNTER_DURATION_MS = 500
+
+
 class PayloadMixin:
     def state_payload(self) -> dict[str, Any]:
         with self.lock:
@@ -22,8 +26,16 @@ class PayloadMixin:
                 "currentDate": self.config.date_label_for_day(self.player_state.current_day),
                 "scheduleStartDate": self.config.date_label_for_day(1),
                 "jobCount": len(self.player_state.jobs),
-                "dayCycleDurationMs": self.config.day_cycle_duration_ms,
-                "dailySummaryCounterDurationMs": self.config.daily_summary_counter_duration_ms,
+                "dayCycleDurationMs": (
+                    _FINAL_ASSEMBLY_DAY_CYCLE_DURATION_MS
+                    if self.player_final_assembly_locked
+                    else self.config.day_cycle_duration_ms
+                ),
+                "dailySummaryCounterDurationMs": (
+                    _FINAL_ASSEMBLY_SUMMARY_COUNTER_DURATION_MS
+                    if self.player_final_assembly_locked
+                    else self.config.daily_summary_counter_duration_ms
+                ),
                 "timelines": {
                     "player": self._timeline_payload(snapshot, self.player_state),
                     "echo": self._timeline_payload(automated_snapshot, self.automated_state),
@@ -33,6 +45,7 @@ class PayloadMixin:
                     "completed": self.questions_answered_today,
                     "total": self.decision_total_today,
                 },
+                "finalAssembly": self._final_assembly_payload(),
                 "livePuzzle": self._build_puzzle_payload(
                     set(self.player_state.completed_jobs)
                 ),
@@ -42,6 +55,20 @@ class PayloadMixin:
                 self._finish_automated()
                 payload["finalReveal"] = self._final_payload()
             return payload
+
+    def _final_assembly_payload(self) -> dict[str, Any] | None:
+        if not self.player_final_assembly_started:
+            return None
+        job_name = (
+            self.final_assembly_cards[0].context_label
+            if self.final_assembly_cards
+            else "the final job"
+        )
+        return {
+            "active": True,
+            "status": "locked" if self.player_final_assembly_locked else "planning",
+            "jobName": job_name,
+        }
 
     def _summary_payload(self) -> dict[str, Any] | None:
         if not self.last_result:
@@ -138,7 +165,9 @@ class PayloadMixin:
                         player_record,
                         player_card,
                         position=slot + 1,
-                        include_echo_preference=True,
+                        include_echo_preference=(
+                            player_record.aligned_with_echo is not None
+                        ),
                         echo_situation_matches=(
                             echo_record is not None
                             and player_record.card_id == echo_record.card_id

@@ -56,6 +56,7 @@ class DecisionCard:
     context_label: str
     definition_id: str = ""
     primary_job_id: str = ""
+    player_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -75,8 +76,8 @@ class DecisionRecord:
     card_title: str
     actor: str
     choice_label: str
-    echo_choice_label: str
-    aligned_with_echo: bool
+    echo_choice_label: str | None
+    aligned_with_echo: bool | None
     applied_day_changes: dict[str, int]
     score_delta: float
     cumulative_score: float

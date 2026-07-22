@@ -26,7 +26,11 @@ def apply_choice(
             complete_job(state, job.id)
     if schedule_follow_ups:
         _schedule_follow_ups(state, card, choice)
-    echo_choice = next(item for item in card.choices if item.id == card.echo_choice_id)
+    echo_choice = (
+        None
+        if card.player_only
+        else next(item for item in card.choices if item.id == card.echo_choice_id)
+    )
     state.decision_score = round(state.decision_score + choice.score_delta, 2)
     state.decision_history.append(
         DecisionRecord(
@@ -35,8 +39,8 @@ def apply_choice(
             card_title=card.title,
             actor=actor,
             choice_label=choice.label,
-            echo_choice_label=echo_choice.label,
-            aligned_with_echo=choice.id == echo_choice.id,
+            echo_choice_label=echo_choice.label if echo_choice else None,
+            aligned_with_echo=(choice.id == echo_choice.id) if echo_choice else None,
             applied_day_changes=applied_day_changes,
             score_delta=choice.score_delta,
             cumulative_score=state.decision_score,

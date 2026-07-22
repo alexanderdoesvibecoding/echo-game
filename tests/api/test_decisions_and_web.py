@@ -18,6 +18,7 @@ from echo_adventure.decisions.cards import (
     _avoid_exact_cancellation,
     _day_changes,
     generate_daily_decision_cards,
+    generate_final_assembly_cards,
     select_echo_choice_for_state,
     select_echo_choice_from_choices,
 )
@@ -173,6 +174,56 @@ def test_daily_card_generation_is_deterministic_varied_and_free_of_subjob_copy()
         for delta in choice.day_changes.values()
     )
 
+    final_state = initialize_state(scenario_from_durations(4))
+    final_state.pending_follow_ups = [
+        PendingFollowUp("narrow-drift-found", "JOB-01", available_day=99, trigger_delta=1)
+    ]
+    final_cards = generate_final_assembly_cards(
+        final_state,
+        config,
+        maximum_total_days_removed=2,
+    )
+    assert len(final_cards) == 3
+    assert final_cards[0].definition_id == "narrow-drift-found"
+    assert all(card.player_only for card in final_cards)
+    assert all(card.primary_job_id == "JOB-01" for card in final_cards)
+    assert all("Only Job 1 remains" in card.description for card in final_cards)
+    assert all(
+        abs(delta) == 1
+        for card in final_cards
+        for choice in card.choices
+        for delta in choice.day_changes.values()
+    )
+    assert any(
+        delta < 0
+        for card in final_cards
+        for choice in card.choices
+        for delta in choice.day_changes.values()
+    )
+    assert any(
+        delta > 0
+        for card in final_cards
+        for choice in card.choices
+        for delta in choice.day_changes.values()
+    )
+    assert all(any(not choice.day_changes for choice in card.choices) for card in final_cards)
+    assert all(
+        "keeps the current date" not in choice.label and "adds 1 day" not in choice.label
+        for card in final_cards
+        for choice in card.choices
+    )
+    assert all(
+        not choice.follow_ups
+        for card in final_cards
+        for choice in card.choices
+    )
+    assert final_state.pending_follow_ups == []
+
+    final_choice = final_cards[0].choices[0]
+    apply_choice(final_state, final_cards[0], final_choice, actor="player")
+    assert final_state.decision_history[-1].aligned_with_echo is None
+    assert final_state.decision_history[-1].echo_choice_label is None
+
 
 def test_due_follow_up_is_prioritized_and_stale_follow_ups_are_discarded() -> None:
     config = small_config()
@@ -188,7 +239,7 @@ def test_due_follow_up_is_prioritized_and_stale_follow_ups_are_discarded() -> No
 
     assert cards[0].definition_id == due_id
     assert cards[0].primary_job_id == "JOB-01"
-    assert "This follow-up remains tied to Job 1." in cards[0].description
+    assert "Job 1" not in cards[0].description
     assert state.pending_follow_ups == []
     assert due_id in state.shown_follow_up_decision_ids
     assert all(sum(choice.day_changes.values()) != -2 for choice in cards[0].choices)

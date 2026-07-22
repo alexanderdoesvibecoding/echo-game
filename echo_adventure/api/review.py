@@ -15,8 +15,13 @@ class ReviewMixin:
         player_records = [
             record for record in self.player_state.decision_history if record.actor == "player"
         ]
+        comparable_records = [
+            record for record in player_records if record.aligned_with_echo is not None
+        ]
         preplanned_records = [
-            record for record in player_records if record.day < self.config.max_campaign_day
+            record
+            for record in comparable_records
+            if record.day < self.config.max_campaign_day
         ]
         overtime_records = [
             record for record in player_records if record.day >= self.config.max_campaign_day
@@ -24,7 +29,7 @@ class ReviewMixin:
         preplanned_aligned = sum(
             1 for record in preplanned_records if record.aligned_with_echo
         )
-        aligned = sum(1 for record in player_records if record.aligned_with_echo)
+        aligned = sum(1 for record in comparable_records if record.aligned_with_echo)
         echo_records = [
             record for record in self.automated_state.decision_history if record.actor == "ECHO"
         ]
@@ -78,6 +83,7 @@ class ReviewMixin:
 
         reasons = self._outcome_driver_reasons(
             player_records,
+            comparable_record_count=len(comparable_records),
             identical_optimal_path=identical_optimal_path,
             player_day=player_day,
             echo_day=echo_day,
@@ -93,6 +99,7 @@ class ReviewMixin:
         self,
         player_records: list[DecisionRecord],
         *,
+        comparable_record_count: int,
         identical_optimal_path: bool,
         player_day: int,
         echo_day: int,
@@ -112,7 +119,7 @@ class ReviewMixin:
         for sequence, record in enumerate(player_records):
             question_number = question_number_by_day.get(record.day, 0) + 1
             question_number_by_day[record.day] = question_number
-            if record.aligned_with_echo:
+            if record.aligned_with_echo is not False:
                 continue
             card = self.player_state.decision_cards.get(record.card_id)
             if card is None:
@@ -151,7 +158,7 @@ class ReviewMixin:
                 f"Your route required {len(overtime_records)} overtime question(s), beginning on day {first_overtime_day}, after ECHO finished on day {echo_day}."
             ]
         return [
-            f"You matched ECHO on {aligned} of {len(player_records)} questions but finished on day {player_day}, after ECHO's day {echo_day} finish."
+            f"You matched ECHO on {aligned} of {comparable_record_count} shared questions but finished on day {player_day}, after ECHO's day {echo_day} finish."
         ]
 
     def _decision_driver_sentence(

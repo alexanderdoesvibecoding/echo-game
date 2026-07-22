@@ -12,7 +12,7 @@ from ..decision_web import (
     generate_decision_web,
 )
 from ..decisions import apply_choice as apply_decision_choice
-from ..decisions import generate_daily_decision_cards
+from ..decisions import generate_daily_decision_cards, generate_final_assembly_cards
 from ..decisions import select_echo_choice_for_state
 from ..echo import advance_omniscient_day, apply_omniscient_choice
 from ..models import DecisionCard
@@ -58,6 +58,10 @@ class GameSession(PayloadMixin, ReviewMixin):
         self.overtime_cards: list[DecisionCard] = []
         self.overtime_card_index = 0
         self.overtime_ready_to_advance = False
+        self.player_final_assembly_started = False
+        self.player_final_assembly_locked = False
+        self.final_assembly_cards: list[DecisionCard] = []
+        self.final_assembly_card_index = 0
         self.questions_answered_today = 0
         self.decision_total_today = self.decision_web.question_count(1)
         self.current_cards: list[DecisionCard] = []
@@ -78,7 +82,8 @@ class GameSession(PayloadMixin, ReviewMixin):
             choice = next((item for item in card.choices if item.id == choice_id), None)
             if not choice:
                 raise ValueError("Choice is not valid for that decision.")
-            if self.player_in_overtime:
+            in_final_assembly = self.player_final_assembly_started
+            if self.player_in_overtime and not in_final_assembly:
                 card.echo_choice_id = select_echo_choice_for_state(
                     self.player_state,
                     card.choices,
@@ -88,13 +93,23 @@ class GameSession(PayloadMixin, ReviewMixin):
                 card,
                 choice,
                 actor="player",
-                schedule_follow_ups=self.player_in_overtime,
+                schedule_follow_ups=self.player_in_overtime and not in_final_assembly,
             )
             self.questions_answered_today += 1
-            self._apply_echo_choice(self.questions_answered_today)
+            if not in_final_assembly:
+                self._apply_echo_choice(self.questions_answered_today)
             self.current_cards = []
             if self._game_over():
                 self._finish_automated()
+                return
+            if in_final_assembly:
+                self.final_assembly_card_index += 1
+                if self.final_assembly_card_index < len(self.final_assembly_cards):
+                    self.current_cards = [
+                        self.final_assembly_cards[self.final_assembly_card_index]
+                    ]
+                else:
+                    self.player_final_assembly_locked = True
                 return
             if self.player_in_overtime:
                 self.overtime_card_index += 1
@@ -120,12 +135,23 @@ class GameSession(PayloadMixin, ReviewMixin):
                 return
             if not self.ready_to_advance():
                 raise ValueError("Select a response for all decisions before advancing the day.")
+            if self.player_final_assembly_started:
+                self._record_player_day()
+                self._reset_daily_choices()
+                if self._game_over():
+                    self._finish_automated()
+                else:
+                    self.questions_answered_today = 0
+                    self.decision_total_today = 0
+                return
             if self.player_in_overtime:
                 self._record_player_day()
                 self._advance_echo_day()
                 self._reset_daily_choices()
                 if self._game_over():
                     self._finish_automated()
+                elif self._should_start_final_assembly():
+                    self._start_final_assembly()
                 else:
                     self._start_overtime_day()
                 return
@@ -137,14 +163,18 @@ class GameSession(PayloadMixin, ReviewMixin):
             self._advance_echo_day()
             self._reset_daily_choices()
             self.pending_player_transition = None
-            if transition.next_node_id is not None:
+            if self._game_over():
+                self._finish_automated()
+            elif self._should_start_final_assembly():
+                self._start_final_assembly()
+            elif transition.next_node_id is not None:
                 self.player_node_id = transition.next_node_id
                 self.decision_web.assert_runtime_matches(self.player_state, self.player_node_id)
             elif transition.enters_overtime and not self._game_over():
                 self.player_in_overtime = True
-            if self._game_over():
-                self._finish_automated()
-            elif self.player_in_overtime:
+            if self._game_over() or self.player_final_assembly_started:
+                return
+            if self.player_in_overtime:
                 self._start_overtime_day()
             else:
                 self.questions_answered_today = 0
@@ -154,6 +184,11 @@ class GameSession(PayloadMixin, ReviewMixin):
                 self._ensure_cards()
 
     def ready_to_advance(self) -> bool:
+        if self.player_final_assembly_started:
+            return (
+                self.player_final_assembly_locked
+                and self.questions_answered_today == self.decision_total_today
+            )
         if self.player_in_overtime:
             return (
                 self.questions_answered_today == self.decision_total_today
@@ -167,6 +202,15 @@ class GameSession(PayloadMixin, ReviewMixin):
     def _ensure_cards(self) -> None:
         if self._game_over():
             self.current_cards = []
+        elif self.player_final_assembly_started:
+            if (
+                not self.player_final_assembly_locked
+                and self.final_assembly_cards
+                and not self.current_cards
+            ):
+                self.current_cards = [
+                    self.final_assembly_cards[self.final_assembly_card_index]
+                ]
         elif self.player_in_overtime:
             if self.overtime_cards and not self.overtime_ready_to_advance:
                 self.current_cards = [self.overtime_cards[self.overtime_card_index]]
@@ -241,6 +285,52 @@ class GameSession(PayloadMixin, ReviewMixin):
         self.questions_answered_today = 0
         self.decision_total_today = len(self.overtime_cards)
         self.current_cards = [self.overtime_cards[0]]
+
+    def _should_start_final_assembly(self) -> bool:
+        if (
+            self.player_final_assembly_started
+            or self.player_state.final_item_completed
+            or not self.automated_state.final_item_completed
+        ):
+            return False
+        incomplete = self.player_state.incomplete_jobs()
+        if len(incomplete) != 1 or self.automated_state.completion_day is None:
+            return False
+        projected_completion_day = (
+            self.player_state.current_day + max(0, incomplete[0].remaining_days - 1)
+        )
+        return projected_completion_day > self.automated_state.completion_day
+
+    def _start_final_assembly(self) -> None:
+        """Leave the solved web for one player-only batch after ECHO has finished."""
+        incomplete = self.player_state.incomplete_jobs()
+        echo_completion_day = self.automated_state.completion_day
+        if len(incomplete) != 1 or echo_completion_day is None:
+            raise RuntimeError("Final assembly started outside its player endgame state.")
+        projected_completion_day = (
+            self.player_state.current_day + max(0, incomplete[0].remaining_days - 1)
+        )
+        self.final_assembly_cards = generate_final_assembly_cards(
+            self.player_state,
+            self.config,
+            maximum_total_days_removed=max(
+                0,
+                projected_completion_day - echo_completion_day - 1,
+            ),
+        )
+        if not self.final_assembly_cards:
+            raise RuntimeError("Final assembly produced no player decisions.")
+        self.player_final_assembly_started = True
+        self.player_final_assembly_locked = False
+        self.final_assembly_card_index = 0
+        self.player_in_overtime = False
+        self.overtime_cards = []
+        self.overtime_card_index = 0
+        self.overtime_ready_to_advance = False
+        self.pending_player_transition = None
+        self.questions_answered_today = 0
+        self.decision_total_today = len(self.final_assembly_cards)
+        self.current_cards = [self.final_assembly_cards[0]]
 
     def _game_over(self) -> bool:
         return self.player_state.final_item_completed

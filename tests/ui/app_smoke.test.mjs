@@ -32,6 +32,7 @@ const initialState = {
 };
 const calls = [];
 let nextError = null;
+let nextPayload = null;
 globalThis.fetch = async (path, options = {}) => {
   calls.push({ path, options });
   if (nextError) {
@@ -42,13 +43,16 @@ globalThis.fetch = async (path, options = {}) => {
   return {
     ok: true,
     async json() {
-      return { ...initialState, seed: path === "/api/new" ? 701 : 700 };
+      const payload = nextPayload;
+      nextPayload = null;
+      return payload || { ...initialState, seed: path === "/api/new" ? 701 : 700 };
     },
   };
 };
 
 await import("../../echo_adventure/ui/app.js");
 const { uiState } = await import("../../echo_adventure/ui/state.js");
+const { syncDayCycleForState } = await import("../../echo_adventure/ui/dayClock.js");
 await new Promise(resolve => globalThis.setTimeout(resolve, 0));
 
 test("app bootstrap loads state, renders the shell, and exposes working global actions", async () => {
@@ -88,6 +92,38 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   await window.submitDecision();
   assert.equal(dom.element("error").textContent, "choice failed");
   assert.equal(dom.element("error").classList.contains("hidden"), false);
+
+  uiState.welcomeModalVisible = false;
+  uiState.newRunModalVisible = false;
+  uiState.pendingChoice = null;
+  uiState.state = {
+    ...initialState,
+    dayCycleDurationMs: 1,
+    finalAssembly: { active: true, status: "locked", jobName: "Final job" },
+  };
+  uiState.dayCycleKey = null;
+  uiState.dayCycleProgress = 0;
+  uiState.dayCycleLastTick = null;
+  uiState.dayCycleAdvancing = false;
+  uiState.pendingAdvanceState = null;
+  uiState.modalVisible = false;
+  nextPayload = {
+    ...uiState.state,
+    day: 2,
+    currentDate: "July 2",
+  };
+  syncDayCycleForState();
+  dom.setNow(2);
+  dom.runInterval(uiState.dayCycleTimer);
+  await new Promise(resolve => globalThis.setTimeout(resolve, 0));
+  assert.equal(calls.at(-1).path, "/api/advance");
+  assert.equal(uiState.state.day, 1);
+  assert.equal(uiState.pendingAdvanceState.day, 2);
+  assert.equal(uiState.modalVisible, true);
+  window.commitAdvanceDay();
+  assert.equal(uiState.state.day, 2);
+  assert.equal(uiState.pendingAdvanceState, null);
+  assert.equal(uiState.modalVisible, false);
 
   uiState.pendingAdvanceState = {
     ...initialState,

@@ -272,6 +272,16 @@ test("decision queue reveals due choices, tracks selection, and submits the sele
   renderDecisionQueue();
   assert.equal(queueProgress.style.getPropertyValue("--day-cycle-progress"), "10%");
   assert.match(body.innerHTML, /No decision currently requires your attention/);
+
+  uiState.state = statePayload({
+    decisionProgress: { completed: 0, total: 0 },
+    decisions: [],
+    finalAssembly: { active: true, status: "locked", jobName: "Pressure Hull <Final>" },
+  });
+  renderDecisionQueue();
+  assert.match(body.innerHTML, /Final assembly is locked/);
+  assert.match(body.innerHTML, /Pressure Hull &lt;Final&gt;/);
+  assert.match(body.innerHTML, /remains a normal job/);
 });
 
 test("inline decision area contains the shared player and ECHO clock", () => {

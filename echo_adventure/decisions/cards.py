@@ -24,6 +24,39 @@ from .definitions import (
 
 
 _NEUTRAL_THRESHOLD = 0.15
+_FINAL_ASSEMBLY_BASE_DEFINITION_IDS = (
+    "weather",
+    "worker-off-day",
+    "calibration-drift",
+    "traveler-mismatch",
+    "old-setup-sheet",
+    "cleanliness-breach",
+    "network-folder-offline",
+    "gauge-dispute",
+    "burr-cleanup",
+    "vacuum-leak-chase",
+    "label-printer-outage",
+    "expired-stickers",
+    "vendor-rep-on-site",
+    "access-badge-failure",
+    "reference-sample-missing",
+)
+_FINAL_ASSEMBLY_FOLLOW_UP_IDS = frozenset(
+    {
+        "narrow-drift-found",
+        "finish-window-restored",
+        "clean-room-cleared",
+        "wrong-revision-loaded",
+        "fit-check-failed",
+        "cure-failure-found",
+        "vacuum-trace-failed",
+        "sticker-audit-hit",
+        "weather-cleared-early",
+        "setup-mismatch-found",
+        "replacement-handoff-check",
+        "returning-worker-shortcut",
+    }
+)
 
 
 def generate_daily_decision_cards(
@@ -81,6 +114,103 @@ def generate_daily_decision_cards(
         state.decision_cards[card.id] = card
         if definition.is_follow_up:
             state.shown_follow_up_decision_ids.add(definition.id)
+    return cards
+
+
+def generate_final_assembly_cards(
+    state: SimulationState,
+    config: GameConfig,
+    *,
+    maximum_total_days_removed: int = 0,
+) -> list[DecisionCard]:
+    """Create one bounded, player-only decision batch for the final normal job."""
+    incomplete = state.incomplete_jobs()
+    if len(incomplete) != 1:
+        raise ValueError("Final assembly requires exactly one unfinished job.")
+
+    final_job = incomplete[0]
+    rng = random.Random(_stable_seed(state.seed, state.current_day, "final-assembly"))
+    count = rng.randint(config.min_decisions_per_day, config.max_decisions_per_day)
+    accelerating_card_count = min(count, max(0, maximum_total_days_removed))
+    selected: list[tuple[DecisionDefinition, PendingFollowUp | None]] = []
+    used: set[str] = set()
+
+    pending = sorted(
+        (
+            item
+            for item in state.pending_follow_ups
+            if item.job_id == final_job.id
+            and item.definition_id in _FINAL_ASSEMBLY_FOLLOW_UP_IDS
+        ),
+        key=lambda item: (item.available_day, item.definition_id),
+    )
+    for item in pending:
+        definition = DEFINITIONS_BY_ID.get(item.definition_id)
+        if not definition or not definition.is_follow_up or definition.id in used:
+            continue
+        selected.append((definition, item))
+        used.add(definition.id)
+        if len(selected) == count:
+            break
+
+    state.pending_follow_ups.clear()
+    base_pool = [
+        DEFINITIONS_BY_ID[definition_id]
+        for definition_id in _FINAL_ASSEMBLY_BASE_DEFINITION_IDS
+        if definition_id not in used
+    ]
+    rng.shuffle(base_pool)
+    selected.extend(
+        (definition, None)
+        for definition in base_pool[: max(0, count - len(selected))]
+    )
+
+    cards: list[DecisionCard] = []
+    for ordinal, (original_definition, pending_item) in enumerate(selected, start=1):
+        trigger_delta = pending_item.trigger_delta if pending_item else 0
+        definition = _select_preplanned_follow_up_result(
+            state,
+            original_definition,
+            final_job,
+            ordinal,
+            trigger_delta,
+        )
+        best_catalog_score = max(choice.score_delta for choice in definition.choices)
+        worst_catalog_score = min(choice.score_delta for choice in definition.choices)
+        choices = [
+            _build_final_assembly_choice(
+                catalog_choice,
+                final_job,
+                index,
+                best_catalog_score,
+                worst_catalog_score,
+                allow_acceleration=ordinal <= accelerating_card_count,
+            )
+            for index, catalog_choice in enumerate(definition.choices, start=1)
+        ]
+        preferred_choice = max(choices, key=lambda choice: (choice.score_delta, choice.id))
+        description = (
+            f"{_simplify_language(definition.description)} Only {final_job.name} remains "
+            "before final assembly, so this response applies to that job's locked production plan."
+        )
+        card = DecisionCard(
+            id=f"FINAL-D{state.current_day:03d}-Q{ordinal:02d}-{definition.id}",
+            title=f"Final Assembly: {_simplify_language(definition.title)}",
+            description=description,
+            choices=choices,
+            # Player-only cards are never presented to ECHO. Keeping a stable
+            # preferred ID satisfies the shared card shape without recording an
+            # ECHO comparison.
+            echo_choice_id=preferred_choice.id,
+            context_label=final_job.name,
+            definition_id=definition.id,
+            primary_job_id=final_job.id,
+            player_only=True,
+        )
+        cards.append(card)
+        state.decision_cards[card.id] = card
+        if original_definition.is_follow_up:
+            state.shown_follow_up_decision_ids.add(original_definition.id)
     return cards
 
 
@@ -155,8 +285,6 @@ def _build_card(
     echo_choice = select_echo_choice_from_choices(choices)
     context = _format_job_list([job.name for job in targets])
     description = _simplify_language(definition.description)
-    if pending:
-        description = f"{description} This follow-up remains tied to {primary.name}."
     return DecisionCard(
         id=f"DEC-D{state.current_day:03d}-{ordinal:02d}-{definition.id}",
         title=_simplify_language(definition.title),
@@ -203,10 +331,7 @@ def build_preplanned_decision_card(
     ]
     echo_choice = select_echo_choice_from_choices(choices)
     context = _format_job_list([job.name for job in targets])
-    is_follow_up = definition.is_follow_up
     description = _simplify_language(definition.description)
-    if is_follow_up:
-        description = f"{description} This follow-up remains tied to {primary.name}."
     return DecisionCard(
         id=f"DEC-D{state.current_day:03d}-Q{question_number:02d}-{node_token}-{definition.id}",
         title=_simplify_language(definition.title),
@@ -278,6 +403,36 @@ def _build_preplanned_choice(
         score_delta=float(-sum(changes.values())),
         icon_key=catalog_choice.icon_key,
         follow_ups=_choice_follow_ups(definition, catalog_choice),
+    )
+
+
+def _build_final_assembly_choice(
+    catalog_choice: CatalogChoice,
+    final_job: Job,
+    index: int,
+    best_catalog_score: float,
+    worst_catalog_score: float,
+    *,
+    allow_acceleration: bool,
+) -> DecisionChoice:
+    """Apply a hidden, bounded final adjustment without allowing an ECHO tie."""
+    scores_differ = best_catalog_score != worst_catalog_score
+    if not scores_differ:
+        delta = 0
+    elif allow_acceleration and catalog_choice.score_delta == best_catalog_score:
+        delta = -1
+    elif catalog_choice.score_delta == worst_catalog_score:
+        delta = 1
+    else:
+        delta = 0
+    changes = {final_job.id: delta} if delta else {}
+    return DecisionChoice(
+        id=f"choice-{index}",
+        label=_simplify_language(catalog_choice.label),
+        day_changes=changes,
+        score_delta=float(-delta),
+        icon_key=catalog_choice.icon_key,
+        follow_ups=(),
     )
 
 

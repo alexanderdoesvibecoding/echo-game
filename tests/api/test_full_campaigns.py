@@ -12,13 +12,16 @@ def finish_campaign(session: GameSession, first_choice_id: str | None = None) ->
     while not session.player_state.final_item_completed:
         guard += 1
         assert guard < 250
-        assert len(session.current_cards) == 1
-        card = session.current_cards[0]
-        choice_id = first_choice_id if first and first_choice_id else card.echo_choice_id
-        session.apply_choice(card.id, choice_id)
-        first = False
-        if session.ready_to_advance():
+        if session.current_cards:
+            assert len(session.current_cards) == 1
+            card = session.current_cards[0]
+            choice_id = first_choice_id if first and first_choice_id else card.echo_choice_id
+            session.apply_choice(card.id, choice_id)
+            first = False
+        elif session.ready_to_advance():
             session.advance_day()
+        else:
+            raise AssertionError("Unfinished campaign has no decision or ready workday.")
     return session.state_payload()["finalReveal"]
 
 

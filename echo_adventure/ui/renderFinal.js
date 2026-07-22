@@ -270,31 +270,48 @@ function renderFinalMetricBar(player, automated) {
       echoValue: automated.completion || "-",
       echoLabel: "ECHO:",
       tone: completionTone,
+      guidance: "Earlier is better.",
+      tooltipId: "finalCompletionDateTooltip",
     },
     {
       label: "Decision Score",
       playerValue: Number(player.finalScore || 0).toFixed(2),
       echoValue: Number(automated.finalScore || 0).toFixed(2),
       tone: Number(player.finalScore || 0) >= Number(automated.finalScore || 0) ? "good" : "warn",
+      guidance: "Higher is better.",
+      tooltipId: "finalDecisionScoreTooltip",
     },
     {
       label: "Cumulative Unfinished Work",
       playerValue: `${Number(player.unfinishedJobDays || 0)} job-days`,
       echoValue: `${Number(automated.unfinishedJobDays || 0)} job-days`,
       tone: Number(player.unfinishedJobDays || 0) <= Number(automated.unfinishedJobDays || 0) ? "good" : "warn",
+      guidance: "Lower is better.",
+      tooltipId: "finalUnfinishedWorkTooltip",
     },
   ];
 
   return metricCards.map(metric => `
-    <div class="metric final-metric final-metric-${metric.tone}">
+    <div
+      class="metric final-metric final-metric-${metric.tone} final-metric-hoverable"
+      tabindex="0"
+      aria-label="${escapeHtml(metric.label)}: ${escapeHtml(metric.playerValue)}. ${escapeHtml(metric.echoLabel || "ECHO")} ${escapeHtml(metric.echoValue)}."
+      aria-describedby="${escapeHtml(metric.tooltipId)}"
+    >
       <div class="metric-title-row">
-        <span class="subtle metric-label">${escapeHtml(metric.label)}</span>
+        <span class="subtle metric-label final-metric-hoverable-label">
+          ${escapeHtml(metric.label)}
+          <span class="final-metric-info" aria-hidden="true">i</span>
+        </span>
       </div>
       <div class="metric-value-row final-metric-value-row">
         <strong>${escapeHtml(metric.playerValue)}</strong>
       </div>
       <div class="final-metric-benchmark">
         ${escapeHtml(metric.echoLabel || "ECHO")} ${escapeHtml(metric.echoValue)}
+      </div>
+      <div class="final-metric-tooltip" id="${escapeHtml(metric.tooltipId)}" role="tooltip">
+        ${escapeHtml(metric.guidance)}
       </div>
     </div>
   `).join("");

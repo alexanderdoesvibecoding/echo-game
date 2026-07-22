@@ -48,10 +48,7 @@ def test_every_catalog_definition_builds_a_truthful_preplanned_card(definition) 
     assert card.primary_job_id == "JOB-01"
     assert card.echo_choice_id == select_echo_choice_from_choices(card.choices).id
     assert "subjob" not in f"{card.title} {card.description}".lower()
-    if definition.is_follow_up:
-        assert "This follow-up remains tied to Job 1." in card.description
-    else:
-        assert "Today's affected job is" not in card.description
+    assert "Job 1" not in card.description
     for choice in card.choices:
         assert set(choice.day_changes) <= {"JOB-01"}
         assert choice.score_delta == float(-sum(choice.day_changes.values()))

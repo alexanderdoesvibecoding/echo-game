@@ -41,7 +41,8 @@ export function syncDayCycleForState() {
     stopTimer();
     return;
   }
-  const key = `${uiState.runCycleId}:${uiState.state.seed}:${uiState.state.day}`;
+  const finalAssemblyStatus = uiState.state.finalAssembly?.status || "normal";
+  const key = `${uiState.runCycleId}:${uiState.state.seed}:${uiState.state.day}:${finalAssemblyStatus}`;
   if (uiState.dayCycleKey !== key) {
     uiState.dayCycleKey = key;
     uiState.dayCycleProgress = 0;
