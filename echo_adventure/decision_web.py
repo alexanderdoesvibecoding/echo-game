@@ -4,14 +4,23 @@ from __future__ import annotations
 
 import hashlib
 import random
+import time
 from dataclasses import dataclass, field
 
 from .config import GameConfig
 from .decisions.cards import build_preplanned_decision_card
 from .decisions.definitions import BASE_DEFINITIONS, DEFINITIONS_BY_ID, DecisionDefinition
 from .enums import JobStatus
-from .metrics import daily_progress_days
 from .models import DecisionCard, DecisionChoice, Job, Scenario, SimulationState
+
+
+_JOB_TARGET_SCHEDULE_LENGTH = 200
+_JOB_TARGET_WINDOW_PATTERN = (2, 1)
+_DEADLINE_CHECK_INTERVAL = 256
+
+
+class DecisionWebGenerationTimeout(TimeoutError):
+    """Raised before a partially generated decision web can be used."""
 
 
 @dataclass(frozen=True)
@@ -56,6 +65,7 @@ class DecisionWeb:
     question_counts: dict[int, int]
     optimal_completion_day: int
     optimal_unfinished_job_days: int
+    generation_attempt: int
 
     def node(self, node_id: str) -> DecisionWebNode:
         return self.nodes[node_id]
@@ -80,12 +90,20 @@ class DecisionWeb:
 
 
 class _DecisionWebBuilder:
-    def __init__(self, scenario: Scenario, config: GameConfig, generation_attempt: int) -> None:
+    def __init__(
+        self,
+        scenario: Scenario,
+        config: GameConfig,
+        generation_attempt: int,
+        deadline: float | None = None,
+    ) -> None:
         self.scenario = scenario
         self.config = config
         self.generation_attempt = generation_attempt
+        self.deadline = deadline
         self.job_ids = tuple(sorted(scenario.jobs))
         self.job_index = {job_id: index for index, job_id in enumerate(self.job_ids)}
+        self.job_target_schedule = self._build_job_target_schedule()
         self.nodes: dict[str, DecisionWebNode] = {}
         self.nodes_by_state: dict[DecisionWebState, str] = {}
         self.nodes_by_step: dict[int, list[str]] = {}
@@ -110,6 +128,7 @@ class _DecisionWebBuilder:
         self.base_schedule = self._build_base_schedule()
 
     def build(self) -> DecisionWeb:
+        self._check_deadline(force=True)
         root_state = DecisionWebState(
             day=1,
             question_index=0,
@@ -118,6 +137,7 @@ class _DecisionWebBuilder:
         )
         root_node_id = self._ensure_node(root_state)
         self._solve()
+        self._check_deadline(force=True)
         root = self.nodes[root_node_id]
         return DecisionWeb(
             root_node_id=root_node_id,
@@ -125,7 +145,30 @@ class _DecisionWebBuilder:
             question_counts=self.question_counts,
             optimal_completion_day=root.optimal_completion_day,
             optimal_unfinished_job_days=root.optimal_future_unfinished_job_days,
+            generation_attempt=self.generation_attempt,
         )
+
+    def _build_job_target_schedule(self) -> tuple[str, ...]:
+        rng = random.Random(
+            _stable_seed(self.scenario.seed, 0, "web-job-target-schedule")
+        )
+        schedule: list[str] = []
+        while len(schedule) < _JOB_TARGET_SCHEDULE_LENGTH:
+            block = list(self.job_ids)
+            rng.shuffle(block)
+            schedule.extend(block)
+        return tuple(schedule[:_JOB_TARGET_SCHEDULE_LENGTH])
+
+    def _select_scheduled_job(self, day: int, incomplete: list[Job]) -> Job:
+        incomplete_by_id = {job.id: job for job in incomplete}
+        schedule_index = _target_window_index(day)
+        for offset in range(_JOB_TARGET_SCHEDULE_LENGTH):
+            job_id = self.job_target_schedule[
+                (schedule_index + offset) % _JOB_TARGET_SCHEDULE_LENGTH
+            ]
+            if job_id in incomplete_by_id:
+                return incomplete_by_id[job_id]
+        raise RuntimeError("The target schedule contains no unfinished job.")
 
     def _build_base_schedule(self) -> dict[tuple[int, int], DecisionDefinition]:
         safe_definitions = [definition for definition in BASE_DEFINITIONS if not _has_follow_up(definition)]
@@ -163,6 +206,8 @@ class _DecisionWebBuilder:
         if existing:
             return existing
 
+        self._check_deadline()
+
         node_id = f"NODE-{len(self.nodes) + 1:07d}"
         step = self.step_offsets[state.day] + state.question_index
         card = self._build_card(state, node_id)
@@ -186,7 +231,7 @@ class _DecisionWebBuilder:
             raise RuntimeError("A completed planning state cannot contain another question node.")
 
         definition = self.base_schedule[(state.day, state.question_index)]
-        primary = incomplete[0]
+        primary = self._select_scheduled_job(state.day, incomplete)
         if state.pending_definition_id:
             definition = DEFINITIONS_BY_ID[state.pending_definition_id]
             pending_job_id = self.job_ids[state.pending_job_index]
@@ -300,9 +345,8 @@ class _DecisionWebBuilder:
             if not completed_mask & (1 << index)
         ]
         unfinished_job_days = sum(remaining[index] for index in incomplete_indexes)
-        progress = daily_progress_days([remaining[index] for index in incomplete_indexes])
-        for index, progress_days in zip(incomplete_indexes, progress, strict=True):
-            remaining[index] = max(0, remaining[index] - progress_days)
+        for index in incomplete_indexes:
+            remaining[index] = max(0, remaining[index] - 1)
             if remaining[index] == 0:
                 completed_mask |= 1 << index
 
@@ -335,8 +379,12 @@ class _DecisionWebBuilder:
 
     def _solve(self) -> None:
         """Solve backward by finish, score, unfinished work, then stable choice ID."""
+        solved_nodes = 0
         for step in sorted(self.nodes_by_step, reverse=True):
             for node_id in self.nodes_by_step[step]:
+                if solved_nodes % _DEADLINE_CHECK_INTERVAL == 0:
+                    self._check_deadline(force=True)
+                solved_nodes += 1
                 node = self.nodes[node_id]
                 candidates: list[tuple[int, float, int, str]] = []
                 choices = {choice.id: choice for choice in node.card.choices}
@@ -385,11 +433,38 @@ class _DecisionWebBuilder:
                 node.optimal_future_unfinished_job_days = unfinished_job_days
                 node.card.echo_choice_id = choice_id
 
+    def _check_deadline(self, *, force: bool = False) -> None:
+        if self.deadline is None:
+            return
+        if not force and len(self.nodes) % _DEADLINE_CHECK_INTERVAL:
+            return
+        if time.monotonic() >= self.deadline:
+            raise DecisionWebGenerationTimeout(
+                f"Decision web generation timed out for seed {self.scenario.seed}."
+            )
 
-def generate_decision_web(scenario: Scenario, config: GameConfig) -> DecisionWeb:
+
+def generate_decision_web(
+    scenario: Scenario,
+    config: GameConfig,
+    *,
+    max_generation_seconds: float | None = None,
+) -> DecisionWeb:
     """Materialize a web whose globally optimal route finishes before overtime."""
+    if max_generation_seconds is not None and max_generation_seconds <= 0:
+        raise ValueError("max_generation_seconds must be greater than zero.")
+    deadline = (
+        None
+        if max_generation_seconds is None
+        else time.monotonic() + max_generation_seconds
+    )
     for generation_attempt in range(32):
-        web = _DecisionWebBuilder(scenario, config, generation_attempt).build()
+        web = _DecisionWebBuilder(
+            scenario,
+            config,
+            generation_attempt,
+            deadline=deadline,
+        ).build()
         if web.optimal_completion_day < config.max_campaign_day:
             return web
     raise RuntimeError("Could not generate an ECHO-winning decision web in 32 attempts.")
@@ -400,6 +475,17 @@ def _has_follow_up(definition: DecisionDefinition) -> bool:
         definition.unavoidable_follow_up_edges
         or any(choice.follow_up_edges for choice in definition.choices)
     )
+
+
+def _target_window_index(day: int) -> int:
+    zero_based_day = day - 1
+    cycle, position = divmod(zero_based_day, sum(_JOB_TARGET_WINDOW_PATTERN))
+    window_in_cycle = next(
+        index
+        for index in range(len(_JOB_TARGET_WINDOW_PATTERN))
+        if position < sum(_JOB_TARGET_WINDOW_PATTERN[: index + 1])
+    )
+    return cycle * len(_JOB_TARGET_WINDOW_PATTERN) + window_in_cycle
 
 
 def _preplanned_follow_up_occurs(

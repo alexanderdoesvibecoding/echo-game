@@ -59,7 +59,6 @@ pnpm-debug.log*
 *.local
 
 # Runtime output
-*.log
 *.pid
 *.pid.lock
 

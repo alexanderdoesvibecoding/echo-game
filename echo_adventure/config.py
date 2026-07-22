@@ -22,7 +22,7 @@ class GameConfig:
     min_job_duration_days: int = 5
     max_job_duration_days: int = 15
     min_decisions_per_day: int = 2
-    max_decisions_per_day: int = 4
+    max_decisions_per_day: int = 3
     max_campaign_day: int = 25
     day_cycle_duration_ms: int = 8000
     daily_summary_counter_duration_ms: int = 2000

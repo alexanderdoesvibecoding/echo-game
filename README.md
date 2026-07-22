@@ -17,11 +17,15 @@ python3 -m echo_adventure
 
 When initialization finishes, visit [http://127.0.0.1:8765](http://127.0.0.1:8765). Press `Ctrl+C` in the terminal to stop the server.
 
+For an unseeded run, startup gives each randomly selected scenario seed 15 seconds to fully materialize and solve its exact decision web. If it exceeds that budget, the partial web is discarded and a fresh random seed is tried. The game never starts from an incomplete solution.
+
 To replay a deterministic scenario, supply a seed:
 
 ```bash
 python3 -m echo_adventure --seed 12345
 ```
+
+Explicit replay seeds are never substituted or time-limited, so the same requested seed continues to produce the same complete scenario and decision web.
 
 The installed console entry point accepts the same options:
 
@@ -31,9 +35,9 @@ echo-adventure --seed 12345 --host 127.0.0.1 --port 8765
 
 ## The challenge
 
-Your mission is to finish all 20 jobs and assemble the complete submarine. Each job begins with its own remaining duration, and every game day advances all unfinished work by one day. A unique longest outlier receives three days of focused progress per workday, and a smooth two-day pace continues once only one job remains. Before the day can end, you must answer a queue of operational questions.
+Your mission is to finish all 20 jobs and assemble the complete submarine. Each job begins with its own remaining duration, and every game day advances every unfinished job by exactly one day. Before the day can end, you must answer a queue of operational questions.
 
-Each answer changes the remaining duration of one or more jobs. If a job is already more than two days behind the next-longest job, its choices cannot add further delay. Some choices also unlock preplanned follow-ups, so a decision may continue to shape the run several days later. The interface reveals the stated schedule effect of every choice; scenario copy adds context, never hidden simulation rules.
+Each answer changes the remaining duration of one or more jobs. Ordinary preplanned questions use a deterministic seed-derived job schedule with alternating two-day and one-day target windows. Some choices also unlock preplanned follow-ups tied to their originating job, so a decision may continue to shape the run several days later. The interface reveals the stated schedule effect of every choice; scenario copy adds context, never hidden simulation rules.
 
 Meanwhile, ECHO independently follows the globally optimal route it calculated before play began.
 
@@ -50,8 +54,8 @@ The question is not whether ECHO made a mistake. It is whether you can avoid mak
 ## How a run works
 
 1. **Generate the scenario.** A seed creates 20 jobs, their starting durations, and a complete decision web shared by the player and ECHO.
-2. **Answer the day's questions.** Each day presents two to four decisions. Answers explicitly add or remove days from affected jobs.
-3. **Advance the workday.** After every question is answered, all unfinished jobs lose one remaining day. A single longest job more than two days behind the next-longest receives three days of progress instead; the final remaining job receives two.
+2. **Answer the day's questions.** Each day presents two to three decisions. Answers explicitly add or remove days from affected jobs.
+3. **Advance the workday.** After every question is answered, every unfinished job loses exactly one remaining day.
 4. **Assemble the submarine.** Each completed job reveals another piece of the final submarine.
 5. **Compare against ECHO.** When all work is complete, the game reveals completion timing, score history, choice alignment, and the reason ECHO won—or why the exact-path run tied.
 
@@ -83,9 +87,10 @@ ECHO still optimizes completion day first. Among routes that finish on the same 
 |-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Jobs              | Every run contains exactly 20 independent jobs, each paired with one submarine piece.                                                                                                                     |
 | Starting duration | Jobs begin at 5–15 days, weighted toward shorter durations while keeping every configured duration possible.                                                                                              |
-| Daily decisions   | Each day presents a configurable two to four questions.                                                                                                                                                   |
+| Daily decisions   | Each day presents a configurable two to three questions.                                                                                                                                                  |
+| Question targets  | Ordinary preplanned questions follow a seed-derived 200-entry schedule in alternating two-day/one-day windows. Follow-ups stay with their originating job; extended-play targets remain independently randomized. |
 | Choice effects    | A choice only adds or removes stated job-days; narrative context creates no hidden state.                                                                                                                 |
-| Daily progress    | Every unfinished job loses one remaining day when the day advances. A unique longest job more than two days behind the next-longest loses three days instead; the final job loses two.                  |
+| Daily progress    | Every unfinished job loses exactly one remaining day when the day advances.                                                                                                                               |
 | Follow-ups        | Eligible follow-ups are rolled during web generation and stored as preplanned successor questions. Follow-ups with multiple possible results select one result during startup, before either route begins. They may amplify, reverse, or preserve an earlier effect, but never exactly cancel its job-day change. |
 | Decision web      | Equivalent future states reconverge, forming a directed acyclic graph instead of a duplicated history tree.                                                                                               |
 | Solved horizon    | The complete web covers days 1–24. If ECHO's route would reach day 25, the web is regenerated around the same job scenario so ECHO always finishes inside the solved region.                              |
@@ -105,7 +110,7 @@ The game is configured through `GameConfig` in `echo_adventure/config.py`.
 | `min_job_duration_days`             |          `5` | Shortest generated starting duration.                         |
 | `max_job_duration_days`             |         `15` | Longest generated starting duration.                          |
 | `min_decisions_per_day`             |          `2` | Minimum daily question count.                                 |
-| `max_decisions_per_day`             |          `4` | Maximum daily question count.                                 |
+| `max_decisions_per_day`             |          `3` | Maximum daily question count.                                 |
 | `max_campaign_day`                  |         `25` | Boundary between the preplanned web and runtime continuation. |
 | `day_cycle_duration_ms`             |       `8000` | Workday animation duration.                                   |
 | `daily_summary_counter_duration_ms` |       `2000` | Daily-summary counter animation duration.                     |
@@ -139,6 +144,8 @@ Use a shorter seed list, repeat each seed, or emit JSON for automated comparison
 python3 scripts/benchmark_decision_web.py --seeds 1 2 3 --runs 3
 python3 scripts/benchmark_decision_web.py --json
 ```
+
+Every benchmark also writes the same output to `log/<timestamp>.log`. Pass `--no-console-output` (or its shorter aliases `--no-console` and `--quiet`) to write only to that log file.
 
 Optional `--max-median-web-seconds` and `--max-peak-rss-mib` thresholds make the command exit unsuccessfully when an explicitly configured performance limit is exceeded. Without thresholds, performance results are informational and only generation failures produce an unsuccessful exit.
 

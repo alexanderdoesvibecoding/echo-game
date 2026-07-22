@@ -58,6 +58,40 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
     assert set(payload["timelines"]) == {"player", "echo"}
     assert payload["lastSummary"] is None
 
+    real_generate_decision_web = session_module.generate_decision_web
+    generation_calls: list[tuple[int, float | None]] = []
+
+    def controlled_generation(scenario, config, *, max_generation_seconds=None):
+        generation_calls.append((scenario.seed, max_generation_seconds))
+        if scenario.seed == 111:
+            raise session_module.DecisionWebGenerationTimeout("timed out")
+        return real_generate_decision_web(
+            scenario,
+            config,
+            max_generation_seconds=max_generation_seconds,
+        )
+
+    random_seeds = iter((111, 222))
+    monkeypatch.setattr(
+        session_module,
+        "resolve_seed",
+        lambda requested: requested if requested is not None else next(random_seeds),
+    )
+    monkeypatch.setattr(
+        session_module,
+        "generate_decision_web",
+        controlled_generation,
+    )
+
+    explicit = session_module.GameSession(seed=505)
+    assert explicit.seed == 505
+    assert generation_calls == [(505, None)]
+
+    generation_calls.clear()
+    random_session = session_module.GameSession()
+    assert random_session.seed == random_session.scenario.seed == 222
+    assert generation_calls == [(111, 15.0), (222, 15.0)]
+
 
 def test_session_rejects_invalid_or_out_of_sequence_actions(monkeypatch: pytest.MonkeyPatch) -> None:
     install_fast_session_config(monkeypatch)

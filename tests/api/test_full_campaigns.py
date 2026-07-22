@@ -28,7 +28,7 @@ def run_full_campaign_case(seed: int, diverge: bool) -> dict[str, object]:
     assert len(session.scenario.jobs) == 20
     assert all(5 <= job.initial_duration_days <= 15 for job in session.scenario.jobs.values())
     assert session.decision_web.optimal_completion_day < session.config.max_campaign_day
-    assert all(2 <= count <= 4 for count in session.decision_web.question_counts.values())
+    assert all(2 <= count <= 3 for count in session.decision_web.question_counts.values())
 
     divergent_choice: str | None = None
     if diverge:

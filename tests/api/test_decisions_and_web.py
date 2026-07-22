@@ -1,10 +1,19 @@
 from __future__ import annotations
 
 import copy
+from unittest.mock import patch
 
 import pytest
 
-from echo_adventure.decision_web import generate_decision_web
+from echo_adventure.decision_web import (
+    _JOB_TARGET_SCHEDULE_LENGTH,
+    _JOB_TARGET_WINDOW_PATTERN,
+    _DecisionWebBuilder,
+    _target_window_index,
+    DecisionWebGenerationTimeout,
+    DecisionWebState,
+    generate_decision_web,
+)
 from echo_adventure.decisions.cards import (
     _avoid_exact_cancellation,
     _day_changes,
@@ -154,11 +163,11 @@ def test_daily_card_generation_is_deterministic_varied_and_free_of_subjob_copy()
         for delta in choice.day_changes.values()
     )
 
-    outlier_state = initialize_state(scenario_from_durations(10, 3, 2))
+    outlier_state = initialize_state(scenario_from_durations(10, 3, 2, seed=1))
     outlier_cards = generate_daily_decision_cards(outlier_state, config)
     outlier_card = next(card for card in outlier_cards if card.primary_job_id == "JOB-01")
-    assert all(
-        delta <= 0
+    assert any(
+        delta > 0
         for choice in outlier_card.choices
         for delta in choice.day_changes.values()
     )
@@ -193,9 +202,111 @@ def solved_web_bundle():
 def test_decision_web_is_deterministic_and_every_node_is_fully_solved(solved_web_bundle) -> None:
     config, scenario, web = solved_web_bundle
     duplicate = generate_decision_web(scenario, config)
+    builder = _DecisionWebBuilder(scenario, config, generation_attempt=0)
+    retry_builder = _DecisionWebBuilder(scenario, config, generation_attempt=1)
 
     assert web == duplicate
+    assert web.generation_attempt == duplicate.generation_attempt
     assert web.optimal_completion_day < config.max_campaign_day
+    with pytest.raises(ValueError, match="greater than zero"):
+        generate_decision_web(scenario, config, max_generation_seconds=0)
+    with patch(
+        "echo_adventure.decision_web.time.monotonic",
+        side_effect=(100.0, 116.0),
+    ):
+        with pytest.raises(DecisionWebGenerationTimeout, match="seed 818"):
+            generate_decision_web(
+                scenario,
+                config,
+                max_generation_seconds=15,
+            )
+    assert _JOB_TARGET_WINDOW_PATTERN == (2, 1)
+    assert len(builder.job_target_schedule) == _JOB_TARGET_SCHEDULE_LENGTH
+    assert builder.job_target_schedule == retry_builder.job_target_schedule
+    assert all(
+        set(builder.job_target_schedule[start : start + len(builder.job_ids)])
+        == set(builder.job_ids)
+        for start in range(0, _JOB_TARGET_SCHEDULE_LENGTH, len(builder.job_ids))
+    )
+    expected_window_indexes = (0, 0, 1, 2, 2, 3, 4, 4, 5, 6, 6, 7)
+    assert tuple(_target_window_index(day) for day in range(1, 13)) == expected_window_indexes
+    incomplete = list(initialize_state(scenario).incomplete_jobs())
+    assert tuple(
+        builder._select_scheduled_job(day, incomplete).id
+        for day in range(1, 13)
+    ) == tuple(builder.job_target_schedule[index] for index in expected_window_indexes)
+    assert builder._select_scheduled_job(301, incomplete).id == builder.job_target_schedule[0]
+
+    day_one_target = builder.job_target_schedule[0]
+    incomplete_after_target = [job for job in incomplete if job.id != day_one_target]
+    expected_advanced_target = next(
+        job_id
+        for job_id in builder.job_target_schedule[1:]
+        if job_id in {job.id for job in incomplete_after_target}
+    )
+    assert builder._select_scheduled_job(1, incomplete_after_target).id == expected_advanced_target
+
+    multi_question_config = small_config(
+        job_count=2,
+        min_job_duration_days=2,
+        max_job_duration_days=3,
+        min_decisions_per_day=2,
+        max_decisions_per_day=2,
+        max_campaign_day=6,
+        seed=818,
+    )
+    multi_question_builder = _DecisionWebBuilder(
+        scenario,
+        multi_question_config,
+        generation_attempt=0,
+    )
+    remaining = tuple(scenario.jobs[job_id].remaining_days for job_id in builder.job_ids)
+    first_card = multi_question_builder._build_card(
+        DecisionWebState(1, 0, remaining, 0),
+        "NODE-UNIT-1",
+    )
+    second_card = multi_question_builder._build_card(
+        DecisionWebState(1, 1, remaining, 0),
+        "NODE-UNIT-2",
+    )
+    assert first_card.primary_job_id == second_card.primary_job_id == day_one_target
+
+    pending_job_index = 1 - builder.job_index[day_one_target]
+    pending_card = multi_question_builder._build_card(
+        DecisionWebState(
+            1,
+            1,
+            remaining,
+            0,
+            pending_definition_id=FOLLOW_UP_DEFINITIONS[0].id,
+            pending_job_index=pending_job_index,
+            pending_trigger_delta=1,
+        ),
+        "NODE-UNIT-FOLLOW-UP",
+    )
+    assert pending_card.primary_job_id == builder.job_ids[pending_job_index]
+
+    non_longest_scenario = scenario_from_durations(10, 3, 2, seed=1)
+    non_longest_config = small_config(
+        job_count=3,
+        min_job_duration_days=2,
+        max_job_duration_days=10,
+        max_campaign_day=11,
+        seed=1,
+    )
+    non_longest_builder = _DecisionWebBuilder(
+        non_longest_scenario,
+        non_longest_config,
+        generation_attempt=0,
+    )
+    non_longest_target = non_longest_builder._select_scheduled_job(
+        1,
+        list(non_longest_scenario.jobs.values()),
+    )
+    assert non_longest_target.id == "JOB-02"
+    assert non_longest_target.remaining_days < max(
+        job.remaining_days for job in non_longest_scenario.jobs.values()
+    )
     assert any(
         transition.completion_day is not None
         for node in web.nodes.values()
@@ -208,6 +319,23 @@ def test_decision_web_is_deterministic_and_every_node_is_fully_solved(solved_web
         expected = []
         choices = {choice.id: choice for choice in node.card.choices}
         for choice_id, transition in node.transitions.items():
+            choice_remaining = list(node.state.remaining_days)
+            choice_completed_mask = node.state.completed_mask
+            for job_id, delta in choices[choice_id].day_changes.items():
+                index = builder.job_index[job_id]
+                if not choice_completed_mask & (1 << index):
+                    choice_remaining[index] += delta
+                    if choice_remaining[index] <= 0:
+                        choice_remaining[index] = 0
+                        choice_completed_mask |= 1 << index
+            if transition.advances_day and transition.next_node_id is not None:
+                successor_state = web.node(transition.next_node_id).state
+                assert successor_state.remaining_days == tuple(
+                    remaining_days
+                    if choice_completed_mask & (1 << index)
+                    else max(0, remaining_days - 1)
+                    for index, remaining_days in enumerate(choice_remaining)
+                )
             if transition.completion_day is not None:
                 completion_day, future_score, future_unfinished_job_days = (
                     transition.completion_day,

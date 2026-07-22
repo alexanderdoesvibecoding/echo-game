@@ -30,7 +30,7 @@ def generate_daily_decision_cards(
     state: SimulationState,
     config: GameConfig,
 ) -> list[DecisionCard]:
-    """Create two-to-four varied questions, including eligible follow-ups."""
+    """Create two-to-three varied questions, including eligible follow-ups."""
     incomplete = sorted(state.incomplete_jobs(), key=lambda job: (-job.remaining_days, job.id))
     if not incomplete:
         return []
@@ -65,6 +65,7 @@ def generate_daily_decision_cards(
         assigned_jobs.add(primary.id)
 
     cards: list[DecisionCard] = []
+    prevent_delays = len(incomplete) == 1
     for ordinal, (definition, primary, pending) in enumerate(selected, start=1):
         card = _build_card(
             state,
@@ -74,7 +75,7 @@ def generate_daily_decision_cards(
             definition,
             primary,
             pending,
-            prevent_delays=_should_prevent_delays(primary, incomplete),
+            prevent_delays=prevent_delays,
         )
         cards.append(card)
         state.decision_cards[card.id] = card
@@ -186,7 +187,7 @@ def build_preplanned_decision_card(
         trigger_delta,
     )
     deltas = _preplanned_deltas(definition, targets, trigger_delta)
-    if _should_prevent_delays(primary, ordered_targets):
+    if len(targets) == 1:
         deltas = [min(0, delta) for delta in deltas]
     choices = [
         _build_preplanned_choice(
@@ -302,16 +303,8 @@ def _build_choice(
 
 
 def _remove_delays(changes: dict[str, int]) -> dict[str, int]:
-    """Keep a final job or schedule outlier from being extended further."""
+    """Keep the last unfinished job from being extended forever."""
     return {job_id: delta for job_id, delta in changes.items() if delta < 0}
-
-
-def _should_prevent_delays(primary: Job, incomplete: list[Job]) -> bool:
-    """Stop choices from worsening a final job or a unique schedule outlier."""
-    if len(incomplete) == 1:
-        return True
-    ordered = sorted((job.remaining_days for job in incomplete), reverse=True)
-    return primary.remaining_days == ordered[0] and ordered[0] > ordered[1] + 2
 
 
 def _preplanned_deltas(

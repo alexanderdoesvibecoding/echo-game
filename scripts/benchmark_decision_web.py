@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stdout
+from datetime import datetime
 import json
 import math
 import platform
@@ -12,7 +14,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Sequence, TextIO
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -20,12 +22,27 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from echo_adventure.config import GameConfig  # noqa: E402
-from echo_adventure.decision_web import generate_decision_web  # noqa: E402
+from echo_adventure.decision_web import DecisionWeb, generate_decision_web  # noqa: E402
 from echo_adventure.scenario_generator import generate_scenario  # noqa: E402
 
 
 DEFAULT_SEEDS = tuple(range(1, 11))
 MIB = 1024 * 1024
+LOG_DIRECTORY = PROJECT_ROOT / "log"
+
+
+class _Tee:
+    def __init__(self, *streams: TextIO) -> None:
+        self._streams = streams
+
+    def write(self, value: str) -> int:
+        for stream in self._streams:
+            stream.write(value)
+        return len(value)
+
+    def flush(self) -> None:
+        for stream in self._streams:
+            stream.flush()
 
 
 def _positive_int(value: str) -> int:
@@ -69,6 +86,13 @@ def _parser() -> argparse.ArgumentParser:
         help="emit one machine-readable JSON document",
     )
     parser.add_argument(
+        "--no-console-output",
+        "--no-console",
+        "--quiet",
+        action="store_true",
+        help="write benchmark output only to the timestamped log file",
+    )
+    parser.add_argument(
         "--max-median-web-seconds",
         type=_nonnegative_float,
         help="fail if median web-generation time exceeds this threshold",
@@ -95,6 +119,26 @@ def _peak_rss_bytes() -> int | None:
     return peak
 
 
+def _optimal_route_metrics(web: DecisionWeb) -> dict[str, int | bool]:
+    ordinary_targets: set[str] = set()
+    all_targets: set[str] = set()
+    enters_overtime = False
+    node_id: str | None = web.root_node_id
+    while node_id is not None:
+        node = web.node(node_id)
+        all_targets.add(node.card.primary_job_id)
+        if not node.state.pending_definition_id:
+            ordinary_targets.add(node.card.primary_job_id)
+        transition = node.transitions[node.optimal_choice_id]
+        enters_overtime = enters_overtime or transition.enters_overtime
+        node_id = transition.next_node_id
+    return {
+        "ordinary_target_count": len(ordinary_targets),
+        "all_target_count": len(all_targets),
+        "optimal_route_enters_overtime": enters_overtime,
+    }
+
+
 def _worker_result(seed: int, run: int) -> dict[str, Any]:
     config = GameConfig(seed=seed)
 
@@ -108,17 +152,21 @@ def _worker_result(seed: int, run: int) -> dict[str, Any]:
 
     nodes = len(web.nodes)
     edges = sum(len(node.transitions) for node in web.nodes.values())
-    return {
+    result = {
         "seed": seed,
         "run": run,
         "scenario_seconds": scenario_seconds,
         "web_seconds": web_seconds,
         "nodes": nodes,
         "edges": edges,
+        "generation_attempt": web.generation_attempt,
         "optimal_completion_day": web.optimal_completion_day,
+        "optimal_unfinished_job_days": web.optimal_unfinished_job_days,
         "nodes_per_second": nodes / web_seconds if web_seconds else None,
         "peak_rss_bytes": _peak_rss_bytes(),
     }
+    result.update(_optimal_route_metrics(web))
+    return result
 
 
 def _run_isolated(seed: int, run: int) -> tuple[dict[str, Any] | None, str | None]:
@@ -202,6 +250,12 @@ def _environment() -> dict[str, str]:
     }
 
 
+def _new_log_path() -> Path:
+    LOG_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().astimezone().strftime("%Y-%m-%d_%H-%M-%S_%f%z")
+    return LOG_DIRECTORY / f"{timestamp}.log"
+
+
 def _format_memory(value: int | float | None) -> str:
     if value is None:
         return "n/a"
@@ -218,18 +272,23 @@ def _print_header(environment: dict[str, str], seeds: Sequence[int], runs: int) 
     print()
     print(
         f"{'Seed':>10} {'Run':>4} {'Scenario':>10} {'Web':>10} "
-        f"{'Nodes':>9} {'Edges':>9} {'Day':>4} {'Nodes/s':>10} {'Peak RSS':>11}"
+        f"{'Nodes':>9} {'Edges':>9} {'Try':>3} {'Day':>4} {'UJD':>7} "
+        f"{'Ord':>3} {'All':>3} {'OT':>2} {'Nodes/s':>10} {'Peak RSS':>11}"
     )
 
 
 def _print_result(result: dict[str, Any]) -> None:
     throughput = result["nodes_per_second"]
     throughput_text = f"{throughput:,.0f}" if throughput is not None else "n/a"
+    overtime_text = "Y" if result["optimal_route_enters_overtime"] else "N"
     print(
         f"{result['seed']:>10} {result['run']:>4} "
         f"{result['scenario_seconds']:>9.4f}s {result['web_seconds']:>9.3f}s "
         f"{result['nodes']:>9,} {result['edges']:>9,} "
-        f"{result['optimal_completion_day']:>4} {throughput_text:>10} "
+        f"{result['generation_attempt']:>3} {result['optimal_completion_day']:>4} "
+        f"{result['optimal_unfinished_job_days']:>7,} "
+        f"{result['ordinary_target_count']:>3} {result['all_target_count']:>3} "
+        f"{overtime_text:>2} {throughput_text:>10} "
         f"{_format_memory(result['peak_rss_bytes']):>11}",
         flush=True,
     )
@@ -286,13 +345,7 @@ def _threshold_failures(
     return failures
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
-    if args._worker_seed is not None:
-        run = args._worker_run if args._worker_run is not None else 1
-        print(json.dumps(_worker_result(args._worker_seed, run)))
-        return 0
-
+def _run_benchmark(args: argparse.Namespace) -> int:
     environment = _environment()
     results: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
@@ -340,6 +393,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     if threshold_failures:
         return 2
     return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    if args._worker_seed is not None:
+        run = args._worker_run if args._worker_run is not None else 1
+        print(json.dumps(_worker_result(args._worker_seed, run)))
+        return 0
+
+    log_path = _new_log_path()
+    with log_path.open("x", encoding="utf-8", buffering=1) as log_file:
+        output = (
+            log_file
+            if args.no_console_output
+            else _Tee(log_file, sys.stdout)
+        )
+        with redirect_stdout(output):
+            return _run_benchmark(args)
 
 
 if __name__ == "__main__":

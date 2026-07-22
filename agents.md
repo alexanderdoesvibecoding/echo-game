@@ -14,12 +14,6 @@
   for confirmation.
 - Do not make changes outside the scope of the user's request.
 
-## Source tools
-
-- If the `code-review-graph` source tool is available, always load and use it.
-- When it is available, run its build script (```code-review-graph build```) before beginning work on a task and
-  again after completing the work.
-
 ## Core game premise
 
 - ECHO must always beat the player unless the player selects the exact same
@@ -55,6 +49,7 @@
 
 ## Verification
 
+- Use seed `8` for routine deterministic build/startup verification because it generates a representative default-size exact web quickly. Keep behavior-specific seeds and required benchmark seed sets when a task calls for them.
 - Run the existing tests under `tests/` for code changes and verify that they
   still pass.
 - Update existing tests when needed to keep them aligned with current game

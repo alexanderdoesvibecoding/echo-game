@@ -85,11 +85,13 @@ def test_every_catalog_definition_builds_a_truthful_preplanned_card(definition) 
         node_token="OUTLIER",
         trigger_delta=trigger_delta,
     )
-    assert all(
-        delta <= 0
-        for choice in outlier_card.choices
-        for delta in choice.day_changes.values()
-    )
+    assert all(set(choice.day_changes) <= {"JOB-01"} for choice in outlier_card.choices)
+    if definition.id == "weather":
+        assert any(
+            delta > 0
+            for choice in outlier_card.choices
+            for delta in choice.day_changes.values()
+        )
 
     if definition.alternate_results:
         expected_titles = {

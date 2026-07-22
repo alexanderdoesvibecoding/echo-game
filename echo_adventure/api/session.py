@@ -6,7 +6,11 @@ import threading
 from typing import Any
 
 from ..config import GameConfig, resolve_seed
-from ..decision_web import DecisionWebTransition, generate_decision_web
+from ..decision_web import (
+    DecisionWebGenerationTimeout,
+    DecisionWebTransition,
+    generate_decision_web,
+)
 from ..decisions import apply_choice as apply_decision_choice
 from ..decisions import generate_daily_decision_cards
 from ..decisions import select_echo_choice_for_state
@@ -18,13 +22,31 @@ from .payloads import PayloadMixin
 from .review import ReviewMixin
 
 
+_RANDOM_SEED_WEB_TIMEOUT_SECONDS = 15.0
+
+
 class GameSession(PayloadMixin, ReviewMixin):
     def __init__(self, seed: int | None = None) -> None:
         self.lock = threading.RLock()
-        self.seed = resolve_seed(seed)
-        self.config = GameConfig(seed=self.seed)
-        self.scenario = generate_scenario(self.config)
-        self.decision_web = generate_decision_web(self.scenario, self.config)
+        while True:
+            self.seed = resolve_seed(seed)
+            self.config = GameConfig(seed=self.seed)
+            self.scenario = generate_scenario(self.config)
+            try:
+                self.decision_web = generate_decision_web(
+                    self.scenario,
+                    self.config,
+                    max_generation_seconds=(
+                        _RANDOM_SEED_WEB_TIMEOUT_SECONDS
+                        if seed is None
+                        else None
+                    ),
+                )
+            except DecisionWebGenerationTimeout:
+                if seed is not None:
+                    raise
+                continue
+            break
         self.player_state = initialize_state(self.scenario)
         self.automated_state = initialize_state(self.scenario)
         self.player_node_id = self.decision_web.root_node_id
