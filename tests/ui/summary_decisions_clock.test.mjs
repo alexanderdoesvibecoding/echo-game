@@ -228,6 +228,11 @@ test("decision queue reveals due choices, tracks selection, and submits the sele
   const queueProgress = dom.createElement("queue-progress");
   section.setQuery("[data-queue-day-progress]", queueProgress);
   uiState.state = statePayload();
+  uiState.state.decisions[0].followUpSource = {
+    day: 1,
+    title: "Earlier <decision>",
+    choice: "Pause <work>",
+  };
   uiState.dayDecisionThresholds = [20];
   uiState.dayCycleProgress = 20;
   const calls = [];
@@ -235,6 +240,7 @@ test("decision queue reveals due choices, tracks selection, and submits the sele
 
   renderDecisionQueue();
   assert.match(body.innerHTML, /Recover &lt;time&gt;/);
+  assert.match(body.innerHTML, /Follow-up to Day 1: Earlier &lt;decision&gt; · Pause &lt;work&gt;/);
   assert.match(body.innerHTML, /choice-icon/);
   assert.match(body.innerHTML, /Confirm response/);
   assert.match(body.innerHTML, /disabled/);

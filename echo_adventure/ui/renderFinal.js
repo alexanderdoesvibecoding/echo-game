@@ -42,9 +42,13 @@ function routeDecisionFromPoint(decisionPoint, actor, index) {
     scoreDelta: formatScore(nested.scoreDelta),
     cumulativeScore: formatScore(nested.cumulativeScore, { signed: false }),
     affectedLabel: nested.affectedLabel || "-",
+    eventScope: nested.eventScope || "route-specific",
+    followUpSource: nested.followUpSource || null,
     echoPreferredChoice: nested.echoPreferredChoice || "",
     alignedWithEcho: Boolean(nested.alignedWithEcho),
     echoSituationMatches: Boolean(nested.echoSituationMatches),
+    echoEventMatches: Boolean(nested.echoEventMatches),
+    echoComparisonState: nested.echoComparisonState || "",
     echoPreferenceState: nested.echoPreferenceState || "",
     echoPreferenceBasis: nested.echoPreferenceBasis || "",
   };
@@ -328,28 +332,46 @@ function parseDecisionList(value) {
 
 function preferencePresentation(decision) {
   const state = decision.echoPreferenceState || [
-    decision.echoSituationMatches ? "same-situation" : "different-situation",
+    decision.echoSituationMatches
+      ? "same-context"
+      : decision.echoEventMatches
+        ? "same-event-different-context"
+        : "different-events",
     decision.alignedWithEcho ? "same-choice" : "different-choice",
   ].join("-");
   const presentations = {
-    "same-situation-same-choice": {
-      label: "Same situation · preference matched",
-      detail: "You and ECHO faced the same situation, and your response matched ECHO's preference.",
+    "same-context-same-choice": {
+      badge: "Same context",
+      label: "Same context · preference matched",
+      detail: "You and ECHO faced the same event for the same job, and your response matched ECHO's preference.",
     },
-    "same-situation-different-choice": {
-      label: "Same situation · different response",
-      detail: "You and ECHO faced the same situation, and your response differed from ECHO's preference.",
+    "same-context-different-choice": {
+      badge: "Same context",
+      label: "Same context · different response",
+      detail: "You and ECHO faced the same event for the same job, and your response differed from ECHO's preference.",
     },
-    "different-situation-same-choice": {
-      label: "Different situations · preference matched",
-      detail: "ECHO faced a different situation on its route. In your situation, it would have preferred the response you chose.",
+    "same-event-different-context-same-choice": {
+      badge: "Shared event",
+      label: "Shared event · preference matched",
+      detail: "You and ECHO faced the same day-level incident in different route contexts. In your context, ECHO would have preferred your response.",
     },
-    "different-situation-different-choice": {
-      label: "Different situations · different response",
-      detail: "ECHO faced a different situation on its route. In your situation, it would have preferred a different response.",
+    "same-event-different-context-different-choice": {
+      badge: "Shared event",
+      label: "Shared event · different response",
+      detail: "You and ECHO faced the same day-level incident in different route contexts. In your context, ECHO would have preferred a different response.",
+    },
+    "different-events-same-choice": {
+      badge: "Different events",
+      label: "Different events · preference matched",
+      detail: "ECHO faced a different event on its route. In your event, it would have preferred the response you chose.",
+    },
+    "different-events-different-choice": {
+      badge: "Different events",
+      label: "Different events · different response",
+      detail: "ECHO faced a different event on its route. In your event, it would have preferred a different response.",
     },
   };
-  return { state, ...(presentations[state] || presentations["different-situation-different-choice"]) };
+  return { state, ...(presentations[state] || presentations["different-events-different-choice"]) };
 }
 
 function renderRouteDecision(decision, actor) {
@@ -357,10 +379,13 @@ function renderRouteDecision(decision, actor) {
   const detail = decision.questionText && decision.questionText !== title
     ? `<p class="chart-decision-context">${escapeHtml(decision.questionText)}</p>`
     : "";
-  const sharedBadge = actor === "player" && decision.echoPreferredChoice
-    ? `<span class="chart-shared-badge">${decision.echoSituationMatches ? "Same situation" : "Different situations"}</span>`
-    : "";
   const presentation = preferencePresentation(decision);
+  const comparisonBadge = actor === "player" && decision.echoPreferredChoice
+    ? `<span class="chart-shared-badge">${escapeHtml(presentation.badge)}</span>`
+    : "";
+  const followUpContext = decision.followUpSource
+    ? `<p class="chart-follow-up-source">Follow-up to Day ${escapeHtml(decision.followUpSource.day)}: ${escapeHtml(decision.followUpSource.title || "earlier decision")}${decision.followUpSource.choice ? ` · ${escapeHtml(decision.followUpSource.choice)}` : ""}</p>`
+    : "";
   const preference = actor === "player" && decision.echoPreferredChoice
     ? `
       <div class="chart-echo-preference ${decision.alignedWithEcho ? "is-aligned" : ""}" data-preference-state="${escapeHtml(presentation.state)}">
@@ -374,8 +399,9 @@ function renderRouteDecision(decision, actor) {
     <article class="chart-route-decision">
       <div class="chart-route-decision-title">
         <strong>Decision ${escapeHtml(decision.position || "-")}: ${escapeHtml(title)}</strong>
-        ${sharedBadge}
+        ${comparisonBadge}
       </div>
+      ${followUpContext}
       ${detail}
       <dl class="chart-tooltip-fields">
         <div class="chart-tooltip-field">

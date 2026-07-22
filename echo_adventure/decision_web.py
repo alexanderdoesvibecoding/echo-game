@@ -33,7 +33,11 @@ class DecisionWebState:
     completed_mask: int
     pending_definition_id: str = ""
     pending_job_index: int = -1
+    pending_available_day: int = 0
     pending_trigger_delta: int = 0
+    pending_source_day: int = 0
+    pending_source_definition_id: str = ""
+    pending_source_choice_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -177,9 +181,8 @@ class _DecisionWebBuilder:
         for day, count in self.question_counts.items():
             used: set[str] = set()
             for question_index in range(count):
-                # A follow-up is always the immediate successor. Keeping the
-                # final base question branch-free guarantees it cannot be lost
-                # across the daily tick or the day-25 horizon.
+                # Keep the final question branch-free to bound pending-state
+                # fanout while delayed follow-ups cross daily boundaries.
                 pool = safe_definitions if question_index == count - 1 else list(BASE_DEFINITIONS)
                 available = [definition for definition in pool if definition.id not in used] or pool
                 least_uses = min(scheduled_counts[definition.id] for definition in available)
@@ -232,7 +235,12 @@ class _DecisionWebBuilder:
 
         definition = self.base_schedule[(state.day, state.question_index)]
         primary = self._select_scheduled_job(state.day, incomplete)
-        if state.pending_definition_id:
+        showing_pending = bool(
+            state.pending_definition_id
+            and state.pending_available_day <= state.day
+            and not definition.shared_across_routes
+        )
+        if showing_pending:
             definition = DEFINITIONS_BY_ID[state.pending_definition_id]
             pending_job_id = self.job_ids[state.pending_job_index]
             pending_job = runtime_state.jobs[pending_job_id]
@@ -246,7 +254,16 @@ class _DecisionWebBuilder:
             incomplete,
             question_number=state.question_index + 1,
             node_token=node_id.rsplit("-", 1)[-1],
-            trigger_delta=state.pending_trigger_delta,
+            trigger_delta=state.pending_trigger_delta if showing_pending else 0,
+            follow_up_source_day=(
+                state.pending_source_day if showing_pending else None
+            ),
+            follow_up_source_definition_id=(
+                state.pending_source_definition_id if showing_pending else ""
+            ),
+            follow_up_source_choice_id=(
+                state.pending_source_choice_id if showing_pending else ""
+            ),
         )
 
     def _runtime_state(self, state: DecisionWebState) -> SimulationState:
@@ -296,28 +313,51 @@ class _DecisionWebBuilder:
                 completion_day=state.day,
             )
 
-        pending_definition_id = ""
-        pending_job_index = -1
-        pending_trigger_delta = 0
+        pending_definition_id = state.pending_definition_id
+        pending_job_index = state.pending_job_index
+        pending_available_day = state.pending_available_day
+        pending_trigger_delta = state.pending_trigger_delta
+        pending_source_day = state.pending_source_day
+        pending_source_definition_id = state.pending_source_definition_id
+        pending_source_choice_id = state.pending_source_choice_id
+
+        showing_pending = bool(
+            pending_definition_id
+            and card.definition_id == pending_definition_id
+            and card.event_scope == "follow-up"
+        )
+        pending_job_completed = bool(
+            pending_definition_id
+            and completed_mask & (1 << pending_job_index)
+        )
+        if showing_pending or pending_job_completed:
+            pending_definition_id = ""
+            pending_job_index = -1
+            pending_available_day = 0
+            pending_trigger_delta = 0
+            pending_source_day = 0
+            pending_source_definition_id = ""
+            pending_source_choice_id = ""
+
         primary_index = self.job_index[card.primary_job_id]
-        for follow_up in (
-            choice.follow_ups
-            if not completed_mask & (1 << primary_index)
-            else ()
-        ):
-            if _preplanned_follow_up_occurs(
-                self.scenario.seed,
-                node_id,
-                card,
-                choice,
-                follow_up.definition_id,
-                follow_up.probability,
-                self.generation_attempt,
-            ):
-                pending_definition_id = follow_up.definition_id
-                pending_job_index = self.job_index[card.primary_job_id]
-                pending_trigger_delta = sum(choice.day_changes.values())
-                break
+        if not pending_definition_id and not completed_mask & (1 << primary_index):
+            for follow_up in choice.follow_ups:
+                if _preplanned_follow_up_occurs(
+                    self.scenario.seed,
+                    card,
+                    choice,
+                    follow_up.definition_id,
+                    follow_up.probability,
+                    self.generation_attempt,
+                ):
+                    pending_definition_id = follow_up.definition_id
+                    pending_job_index = primary_index
+                    pending_available_day = state.day + follow_up.delay_days
+                    pending_trigger_delta = sum(choice.day_changes.values())
+                    pending_source_day = state.day
+                    pending_source_definition_id = card.definition_id
+                    pending_source_choice_id = choice.id
+                    break
 
         question_count = self.question_counts[state.day]
         is_last_question = state.question_index + 1 == question_count
@@ -329,15 +369,16 @@ class _DecisionWebBuilder:
                 completed_mask=completed_mask,
                 pending_definition_id=pending_definition_id,
                 pending_job_index=pending_job_index,
+                pending_available_day=pending_available_day,
                 pending_trigger_delta=pending_trigger_delta,
+                pending_source_day=pending_source_day,
+                pending_source_definition_id=pending_source_definition_id,
+                pending_source_choice_id=pending_source_choice_id,
             )
             return DecisionWebTransition(
                 next_node_id=self._ensure_node(next_state),
                 advances_day=False,
             )
-
-        if pending_definition_id:
-            raise RuntimeError("A generated follow-up cannot cross a daily boundary.")
 
         incomplete_indexes = [
             index
@@ -349,6 +390,18 @@ class _DecisionWebBuilder:
             remaining[index] = max(0, remaining[index] - 1)
             if remaining[index] == 0:
                 completed_mask |= 1 << index
+
+        if (
+            pending_definition_id
+            and completed_mask & (1 << pending_job_index)
+        ):
+            pending_definition_id = ""
+            pending_job_index = -1
+            pending_available_day = 0
+            pending_trigger_delta = 0
+            pending_source_day = 0
+            pending_source_definition_id = ""
+            pending_source_choice_id = ""
 
         if completed_mask == all_completed_mask:
             return DecisionWebTransition(
@@ -370,6 +423,13 @@ class _DecisionWebBuilder:
             question_index=0,
             remaining_days=tuple(remaining),
             completed_mask=completed_mask,
+            pending_definition_id=pending_definition_id,
+            pending_job_index=pending_job_index,
+            pending_available_day=pending_available_day,
+            pending_trigger_delta=pending_trigger_delta,
+            pending_source_day=pending_source_day,
+            pending_source_definition_id=pending_source_definition_id,
+            pending_source_choice_id=pending_source_choice_id,
         )
         return DecisionWebTransition(
             next_node_id=self._ensure_node(next_state),
@@ -490,7 +550,6 @@ def _target_window_index(day: int) -> int:
 
 def _preplanned_follow_up_occurs(
     seed: int,
-    node_id: str,
     card: DecisionCard,
     choice: DecisionChoice,
     definition_id: str,
@@ -501,9 +560,7 @@ def _preplanned_follow_up_occurs(
         (
             str(seed),
             str(generation_attempt),
-            node_id,
-            card.definition_id,
-            card.primary_job_id,
+            card.event_id or card.id,
             choice.id,
             definition_id,
         )

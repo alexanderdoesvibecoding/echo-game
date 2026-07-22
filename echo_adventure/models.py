@@ -57,6 +57,13 @@ class DecisionCard:
     definition_id: str = ""
     primary_job_id: str = ""
     player_only: bool = False
+    event_id: str = ""
+    event_scope: str = "route-specific"
+    follow_up_source_day: int | None = None
+    follow_up_source_definition_id: str = ""
+    follow_up_source_title: str = ""
+    follow_up_source_choice_id: str = ""
+    follow_up_source_choice_label: str = ""
 
 
 @dataclass(frozen=True)
@@ -67,6 +74,9 @@ class PendingFollowUp:
     job_id: str
     available_day: int
     trigger_delta: int = 0
+    source_day: int | None = None
+    source_definition_id: str = ""
+    source_choice_id: str = ""
 
 
 @dataclass

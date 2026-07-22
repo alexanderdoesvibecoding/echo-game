@@ -38,6 +38,7 @@ class DecisionDefinition:
     description: str
     choices: tuple[CatalogChoice, ...]
     is_follow_up: bool = False
+    shared_across_routes: bool = False
     unavoidable_follow_up_edges: tuple[FollowUpEdge, ...] = ()
     alternate_results: tuple[FollowUpResult, ...] = ()
 
@@ -73,6 +74,7 @@ def D(
     description: str,
     *choices: CatalogChoice,
     is_follow_up: bool = False,
+    shared: bool = False,
     card_follow: tuple[FollowUpEdge, ...] = (),
     alternate_results: tuple[FollowUpResult, ...] = (),
 ) -> DecisionDefinition:
@@ -107,6 +109,7 @@ def D(
         description=description,
         choices=choices_with_icons(choices),
         is_follow_up=is_follow_up,
+        shared_across_routes=shared,
         unavoidable_follow_up_edges=card_follow,
         alternate_results=results_with_icons,
     )
@@ -206,6 +209,7 @@ BASE_DEFINITIONS = (
         "weather", "Exposed work areas are closed by weather", "Severe weather has closed exposed work areas, pausing affected jobs.",
         C("Reroute exposed work", score=-2.39),
         C("Wait it out", follow=(F("weather-cleared-early", 0.62),), score=-2.33),
+        shared=True,
     ),
     D(
         "workstation-breakdown", "A workstation has stopped working", "An unexpected workstation fault has stopped the job currently running there.",
@@ -275,6 +279,7 @@ BASE_DEFINITIONS = (
         C("Throttle noncritical work", score=-0.6),
         C("Move hand-tool work forward", score=0.22),
         C("Run through it", follow=(F("clamp-marks-found", 0.49),), score=-1.22),
+        shared=True,
     ),
     D(
         "coolant-change-due", "A machine needs coolant service", "A cutting or machining station is approaching its finish-quality limit.",
@@ -322,6 +327,7 @@ BASE_DEFINITIONS = (
         C("Full reset", follow=(F("clean-room-cleared", 0.69),), score=-0.89),
         C("Isolate the zone", score=-1.15),
         C("Continue under covers", follow=(F("covered-work-reopened", 0.52),), score=-0.64),
+        shared=True,
     ),
     D(
         "software-seat-conflict", "Programming seats are full", "Programming-dependent work cannot release while all software seats are occupied.",
@@ -334,6 +340,7 @@ BASE_DEFINITIONS = (
         C("Use cached copies", follow=(F("wrong-revision-loaded", 0.51),), score=-0.17),
         C("Start independent work", score=0.29),
         C("Wait for IT", score=-0.64),
+        shared=True,
     ),
     D(
         "gauge-dispute", "Two gauges disagree", "Two gauges disagree and the affected feature cannot be accepted yet.",
@@ -382,12 +389,14 @@ BASE_DEFINITIONS = (
         C("Use it for a handoff", score=0.33),
         C("Use it for short jobs", score=0.64),
         C("Use it for setup prep", score=0.33),
+        shared=True,
     ),
     D(
         "waste-container-full", "Waste containers are full", "Affected stations cannot continue producing until waste flow is restored.",
         C("Empty containers now", score=-0.25),
         C("Use small interim carts", follow=(F("waste-lane-blocked", 0.5),), score=-1.15),
         C("Divert to another area", score=-0.16),
+        shared=True,
     ),
     D(
         "preapproved-package", "Approved paperwork can close similar work", "One work family already has an accepted closeout package.",
@@ -406,6 +415,7 @@ BASE_DEFINITIONS = (
         C("Use them on setup", score=0.44),
         C("Use them on troubleshooting", score=0.67),
         C("Let them go", score=0.0),
+        shared=True,
     ),
     D(
         "training-run", "A newer operator can train on live work", "A newer operator can qualify on live work, slowing the current station but adding flexibility.",
@@ -418,6 +428,7 @@ BASE_DEFINITIONS = (
         C("Run critical work off-peak", score=0.1),
         C("Run batch work off-peak", score=0.57),
         C("Skip the slot", score=0.0),
+        shared=True,
     ),
     D(
         "floor-walk-insight", "A floor walk found a faster method", "A small method improvement can remove wasted motion from matching work.",
@@ -440,12 +451,14 @@ BASE_DEFINITIONS = (
     D(
         "safety-drill", "A required safety drill interrupts work", "A required emergency drill interrupts production across the site.",
         C("Acknowledge", score=-0.83),
+        shared=True,
     ),
     D(
         "access-badge-failure", "Secure-area access is blocked", "A secure-area badge reader is preventing normal shift-start access.",
         C("Wait for security", score=-0.48),
         C("Pull open-area work", score=0.22),
         C("Escort critical staff", score=-0.14),
+        shared=True,
     ),
     D(
         "reference-sample-missing", "A reference sample is missing", "Work needing visual or fit comparison cannot be accepted without its reference artifact.",

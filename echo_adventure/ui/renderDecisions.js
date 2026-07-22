@@ -128,9 +128,15 @@ export function renderDecisionQueue() {
     return;
   }
 
+  const followUpSource = card.followUpSource;
+  const followUpContext = followUpSource
+    ? `<p class="decision-follow-up-source">Follow-up to Day ${escapeHtml(followUpSource.day)}: ${escapeHtml(followUpSource.title || "earlier decision")}${followUpSource.choice ? ` · ${escapeHtml(followUpSource.choice)}` : ""}</p>`
+    : "";
+
   body.innerHTML = `
     <article class="decision-queue-card">
       <div>
+        ${followUpContext}
         <h3>${escapeHtml(card.title)}</h3>
         <p class="decision-question-copy">${escapeHtml(card.description)}</p>
       </div>

@@ -127,7 +127,7 @@ def _optimal_route_metrics(web: DecisionWeb) -> dict[str, int | bool]:
     while node_id is not None:
         node = web.node(node_id)
         all_targets.add(node.card.primary_job_id)
-        if not node.state.pending_definition_id:
+        if node.card.event_scope != "follow-up":
             ordinary_targets.add(node.card.primary_job_id)
         transition = node.transitions[node.optimal_choice_id]
         enters_overtime = enters_overtime or transition.enters_overtime

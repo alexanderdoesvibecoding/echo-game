@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from http import HTTPStatus
 from http.server import ThreadingHTTPServer
 from io import BytesIO
@@ -11,6 +12,7 @@ from urllib.request import Request, urlopen
 import pytest
 
 from echo_adventure.api import session as session_module
+from echo_adventure.api.payloads import _echo_comparison_state
 from echo_adventure.api.server import GameRequestHandler, STATIC_ASSETS, _parse_optional_seed
 
 from .helpers import small_config
@@ -57,6 +59,12 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
     assert payload["decisionProgress"] == {
         "completed": 0,
         "total": 1,
+    }
+    assert payload["decisions"][0]["eventId"]
+    assert payload["decisions"][0]["eventScope"] in {
+        "shared-day",
+        "route-specific",
+        "follow-up",
     }
     assert len(payload["livePuzzle"]["tiles"]) == 3
     assert set(payload["timelines"]) == {"player", "echo"}
@@ -188,8 +196,8 @@ def test_multi_question_days_traverse_web_and_end_on_an_early_final_choice(
     assert session.player_state.current_day == 2
     assert session.automated_state.current_day == 2
 
-    early_finish = session_module.GameSession(seed=1)
-    for choice_id in ("choice-1", "choice-1", "choice-2", "choice-1"):
+    early_finish = session_module.GameSession(seed=11)
+    for choice_id in ("choice-1", "choice-1", "choice-1", "choice-1"):
         card = early_finish.current_cards[0]
         early_finish.apply_choice(card.id, choice_id)
         if early_finish.ready_to_advance():
@@ -204,7 +212,7 @@ def test_multi_question_days_traverse_web_and_end_on_an_early_final_choice(
     assert in_progress_payload["timelines"]["player"]["displayCompletion"] == "July 3"
     assert in_progress_payload["timelines"]["player"]["progressPercent"] == 66.6667
 
-    early_finish.apply_choice(final_card.id, "choice-1")
+    early_finish.apply_choice(final_card.id, "choice-2")
 
     payload = early_finish.state_payload()
     assert payload["gameOver"] is True
@@ -410,10 +418,27 @@ def test_final_payload_aligns_real_player_and_echo_histories(monkeypatch: pytest
     assert first_point["echoDecision"]["choice"] == session.automated_state.decision_history[0].choice_label
     assert first_point["playerDecision"]["affectedLabel"].startswith("Job")
     assert first_point["playerDecision"]["echoSituationMatches"] is True
-    assert first_point["playerDecision"]["echoPreferenceState"] == "same-situation-different-choice"
+    assert first_point["playerDecision"]["echoEventMatches"] is True
+    assert first_point["playerDecision"]["echoComparisonState"] == "same-context"
+    assert first_point["playerDecision"]["echoPreferenceState"] == "same-context-different-choice"
     assert first_point["playerDecision"]["echoPreferenceBasis"] == (
         "completion-day-then-score-then-unfinished-work"
     )
+    player_card = session.player_state.decision_cards[
+        session.player_state.decision_history[0].card_id
+    ]
+    echo_card = session.automated_state.decision_cards[
+        session.automated_state.decision_history[0].card_id
+    ]
+    assert _echo_comparison_state(player_card, echo_card) == "same-context"
+    assert _echo_comparison_state(
+        replace(player_card, event_id="shared-event", primary_job_id="JOB-01"),
+        replace(echo_card, event_id="shared-event", primary_job_id="JOB-02"),
+    ) == "same-event-different-context"
+    assert _echo_comparison_state(
+        replace(player_card, event_id="player-event"),
+        replace(echo_card, event_id="echo-event"),
+    ) == "different-events"
 
 
 def test_timeline_stops_rescaling_after_echo_finishes(monkeypatch: pytest.MonkeyPatch) -> None:

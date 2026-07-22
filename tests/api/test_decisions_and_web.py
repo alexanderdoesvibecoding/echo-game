@@ -41,6 +41,22 @@ def test_catalog_is_large_unique_and_has_valid_choice_icons() -> None:
     assert len(DEFINITIONS_BY_ID) == len(BASE_DEFINITIONS) + len(FOLLOW_UP_DEFINITIONS)
     assert all(not definition.is_follow_up for definition in BASE_DEFINITIONS)
     assert all(definition.is_follow_up for definition in FOLLOW_UP_DEFINITIONS)
+    assert {
+        definition.id
+        for definition in BASE_DEFINITIONS
+        if definition.shared_across_routes
+    } == {
+        "weather",
+        "safety-drill",
+        "access-badge-failure",
+        "network-folder-offline",
+        "cleanliness-breach",
+        "shop-air-pressure-dip",
+        "waste-container-full",
+        "vendor-rep-on-site",
+        "shift-overlap-bonus",
+        "off-peak-utility-slot",
+    }
 
     for definition in DEFINITIONS_BY_ID.values():
         assert len(definition.choices) >= 1
@@ -129,7 +145,15 @@ def test_apply_choice_schedules_each_valid_follow_up_at_most_once() -> None:
     apply_choice(state, card, choice, actor="player")
 
     assert state.pending_follow_ups == [
-        PendingFollowUp(follow_up_id, "JOB-01", available_day=3, trigger_delta=1)
+        PendingFollowUp(
+            follow_up_id,
+            "JOB-01",
+            available_day=3,
+            trigger_delta=1,
+            source_day=1,
+            source_definition_id="trigger",
+            source_choice_id="choice-1",
+        )
     ]
 
 
@@ -176,7 +200,15 @@ def test_daily_card_generation_is_deterministic_varied_and_free_of_subjob_copy()
 
     final_state = initialize_state(scenario_from_durations(4))
     final_state.pending_follow_ups = [
-        PendingFollowUp("narrow-drift-found", "JOB-01", available_day=99, trigger_delta=1)
+        PendingFollowUp(
+            "narrow-drift-found",
+            "JOB-01",
+            available_day=1,
+            trigger_delta=1,
+            source_day=1,
+            source_definition_id="calibration-drift",
+            source_choice_id="choice-1",
+        )
     ]
     final_cards = generate_final_assembly_cards(
         final_state,
@@ -185,6 +217,8 @@ def test_daily_card_generation_is_deterministic_varied_and_free_of_subjob_copy()
     )
     assert len(final_cards) == 3
     assert final_cards[0].definition_id == "narrow-drift-found"
+    assert final_cards[0].follow_up_source_title == "Measurements may be unreliable"
+    assert final_cards[0].follow_up_source_choice_label == "Recalibrate now"
     assert all(card.player_only for card in final_cards)
     assert all(card.primary_job_id == "JOB-01" for card in final_cards)
     assert all("Only Job 1 remains" in card.description for card in final_cards)
@@ -230,7 +264,15 @@ def test_due_follow_up_is_prioritized_and_stale_follow_ups_are_discarded() -> No
     state = initialize_state(generate_scenario(config))
     due_id = FOLLOW_UP_DEFINITIONS[0].id
     state.pending_follow_ups = [
-        PendingFollowUp(due_id, "JOB-01", available_day=1, trigger_delta=2),
+        PendingFollowUp(
+            due_id,
+            "JOB-01",
+            available_day=1,
+            trigger_delta=2,
+            source_day=1,
+            source_definition_id="calibration-drift",
+            source_choice_id="choice-1",
+        ),
         PendingFollowUp("missing", "JOB-02", available_day=1),
         PendingFollowUp(due_id, "MISSING", available_day=1),
     ]
@@ -239,6 +281,9 @@ def test_due_follow_up_is_prioritized_and_stale_follow_ups_are_discarded() -> No
 
     assert cards[0].definition_id == due_id
     assert cards[0].primary_job_id == "JOB-01"
+    assert cards[0].event_scope == "follow-up"
+    assert cards[0].follow_up_source_title == "Measurements may be unreliable"
+    assert cards[0].follow_up_source_choice_label == "Recalibrate now"
     assert "Job 1" not in cards[0].description
     assert state.pending_follow_ups == []
     assert due_id in state.shown_follow_up_decision_ids
@@ -325,6 +370,9 @@ def test_decision_web_is_deterministic_and_every_node_is_fully_solved(solved_web
     assert first_card.primary_job_id == second_card.primary_job_id == day_one_target
 
     pending_job_index = 1 - builder.job_index[day_one_target]
+    multi_question_builder.base_schedule[(1, 1)] = DEFINITIONS_BY_ID[
+        "handoff-window-missed"
+    ]
     pending_card = multi_question_builder._build_card(
         DecisionWebState(
             1,
@@ -333,11 +381,65 @@ def test_decision_web_is_deterministic_and_every_node_is_fully_solved(solved_web
             0,
             pending_definition_id=FOLLOW_UP_DEFINITIONS[0].id,
             pending_job_index=pending_job_index,
+            pending_available_day=1,
             pending_trigger_delta=1,
+            pending_source_day=1,
+            pending_source_definition_id="calibration-drift",
+            pending_source_choice_id="choice-1",
         ),
         "NODE-UNIT-FOLLOW-UP",
     )
     assert pending_card.primary_job_id == builder.job_ids[pending_job_index]
+    assert pending_card.event_scope == "follow-up"
+    assert pending_card.follow_up_source_day == 1
+    assert pending_card.follow_up_source_title == "Measurements may be unreliable"
+    assert pending_card.follow_up_source_choice_label == "Recalibrate now"
+
+    shared_pending_state = DecisionWebState(
+        1,
+        1,
+        remaining,
+        0,
+        pending_definition_id=FOLLOW_UP_DEFINITIONS[0].id,
+        pending_job_index=pending_job_index,
+        pending_available_day=1,
+        pending_trigger_delta=1,
+        pending_source_day=1,
+        pending_source_definition_id="calibration-drift",
+        pending_source_choice_id="choice-1",
+    )
+    multi_question_builder.base_schedule[(1, 1)] = DEFINITIONS_BY_ID[
+        "access-badge-failure"
+    ]
+    shared_card = multi_question_builder._build_card(
+        shared_pending_state,
+        "NODE-UNIT-SHARED",
+    )
+    assert shared_card.definition_id == "access-badge-failure"
+    assert shared_card.event_scope == "shared-day"
+
+    delayed_choice = make_choice(
+        "choice-1",
+        follow_ups=(DecisionFollowUp(FOLLOW_UP_DEFINITIONS[0].id, 1.0, 3),),
+    )
+    delayed_card = make_card(
+        delayed_choice,
+        primary_job_id=builder.job_ids[pending_job_index],
+        definition_id="calibration-drift",
+    )
+    delayed_transition = multi_question_builder._build_transition(
+        DecisionWebState(1, 0, remaining, 0),
+        "NODE-UNIT-DELAYED",
+        delayed_card,
+        delayed_choice,
+    )
+    delayed_state = multi_question_builder.nodes[
+        delayed_transition.next_node_id
+    ].state
+    assert delayed_state.pending_available_day == 4
+    assert delayed_state.pending_source_day == 1
+    assert delayed_state.pending_source_definition_id == "calibration-drift"
+    assert delayed_state.pending_source_choice_id == "choice-1"
 
     non_longest_scenario = scenario_from_durations(10, 3, 2, seed=1)
     non_longest_config = small_config(

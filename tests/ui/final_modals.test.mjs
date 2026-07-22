@@ -91,7 +91,7 @@ test("decision chart tooltip safely renders, locks, and closes", () => {
   marker.dataset = {
     dateLabel: "July <1>",
     dayKey: "1",
-    playerDecisionCount: "4",
+    playerDecisionCount: "6",
     echoDecisionCount: "0",
     playerChange: "+1.00",
     playerCumulative: "+1.00",
@@ -100,23 +100,34 @@ test("decision chart tooltip safely renders, locks, and closes", () => {
     playerDecisions: JSON.stringify([
       {
         position: 1, questionTitle: "Route", choice: "Route <now>", scoreDelta: "+1.00", affectedLabel: "Job 1",
-        echoPreferredChoice: "Route <now>", alignedWithEcho: true, echoSituationMatches: true,
-        echoPreferenceState: "same-situation-same-choice",
+        echoPreferredChoice: "Route <now>", alignedWithEcho: true, echoSituationMatches: true, echoEventMatches: true,
+        echoPreferenceState: "same-context-same-choice",
       },
       {
         position: 2, questionTitle: "Materials", choice: "Hold", scoreDelta: "+0.00", affectedLabel: "Job 2",
-        echoPreferredChoice: "Release", alignedWithEcho: false, echoSituationMatches: true,
-        echoPreferenceState: "same-situation-different-choice",
+        echoPreferredChoice: "Release", alignedWithEcho: false, echoSituationMatches: true, echoEventMatches: true,
+        echoPreferenceState: "same-context-different-choice",
       },
       {
         position: 3, questionTitle: "Staffing", choice: "Reassign", scoreDelta: "+0.50", affectedLabel: "Job 3",
-        echoPreferredChoice: "Reassign", alignedWithEcho: true, echoSituationMatches: false,
-        echoPreferenceState: "different-situation-same-choice",
+        echoPreferredChoice: "Reassign", alignedWithEcho: true, echoSituationMatches: false, echoEventMatches: true,
+        echoPreferenceState: "same-event-different-context-same-choice",
       },
       {
         position: 4, questionTitle: "Inspection", choice: "Continue", scoreDelta: "-0.50", affectedLabel: "Job 4",
-        echoPreferredChoice: "Pause", alignedWithEcho: false, echoSituationMatches: false,
-        echoPreferenceState: "different-situation-different-choice",
+        echoPreferredChoice: "Pause", alignedWithEcho: false, echoSituationMatches: false, echoEventMatches: true,
+        echoPreferenceState: "same-event-different-context-different-choice",
+        followUpSource: { day: 1, title: "Earlier inspection", choice: "Pause work" },
+      },
+      {
+        position: 5, questionTitle: "Routing", choice: "Reassign", scoreDelta: "+0.50", affectedLabel: "Job 3",
+        echoPreferredChoice: "Reassign", alignedWithEcho: true, echoSituationMatches: false, echoEventMatches: false,
+        echoPreferenceState: "different-events-same-choice",
+      },
+      {
+        position: 6, questionTitle: "Quality", choice: "Continue", scoreDelta: "-0.50", affectedLabel: "Job 4",
+        echoPreferredChoice: "Pause", alignedWithEcho: false, echoSituationMatches: false, echoEventMatches: false,
+        echoPreferenceState: "different-events-different-choice",
       },
     ]),
     echoDecisions: "[]",
@@ -128,12 +139,15 @@ test("decision chart tooltip safely renders, locks, and closes", () => {
   assert.match(tooltip.innerHTML, /July &lt;1&gt;/);
   assert.match(tooltip.innerHTML, /Route &lt;now&gt;/);
   assert.doesNotMatch(tooltip.innerHTML, /Route <now>/);
-  assert.match(tooltip.innerHTML, /Same situation · preference matched/);
-  assert.match(tooltip.innerHTML, /Same situation · different response/);
-  assert.match(tooltip.innerHTML, /Different situations · preference matched/);
-  assert.match(tooltip.innerHTML, /Different situations · different response/);
-  assert.match(tooltip.innerHTML, /data-preference-state="same-situation-different-choice"/);
-  assert.match(tooltip.innerHTML, /data-preference-state="different-situation-different-choice"/);
+  assert.match(tooltip.innerHTML, /Same context · preference matched/);
+  assert.match(tooltip.innerHTML, /Same context · different response/);
+  assert.match(tooltip.innerHTML, /Shared event · preference matched/);
+  assert.match(tooltip.innerHTML, /Shared event · different response/);
+  assert.match(tooltip.innerHTML, /Different events · preference matched/);
+  assert.match(tooltip.innerHTML, /Different events · different response/);
+  assert.match(tooltip.innerHTML, /Follow-up to Day 1: Earlier inspection · Pause work/);
+  assert.match(tooltip.innerHTML, /data-preference-state="same-context-different-choice"/);
+  assert.match(tooltip.innerHTML, /data-preference-state="different-events-different-choice"/);
   assert.doesNotMatch(tooltip.innerHTML, /resulting completion date first, then the overall route score/);
   assert.doesNotMatch(tooltip.innerHTML, /correct|incorrect/i);
   hideDecisionChartTooltip();

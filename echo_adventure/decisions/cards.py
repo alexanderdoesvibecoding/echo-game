@@ -140,6 +140,7 @@ def generate_final_assembly_cards(
             item
             for item in state.pending_follow_ups
             if item.job_id == final_job.id
+            and item.available_day <= state.current_day
             and item.definition_id in _FINAL_ASSEMBLY_FOLLOW_UP_IDS
         ),
         key=lambda item: (item.available_day, item.definition_id),
@@ -193,8 +194,19 @@ def generate_final_assembly_cards(
             f"{_simplify_language(definition.description)} Only {final_job.name} remains "
             "before final assembly, so this response applies to that job's locked production plan."
         )
+        card_id = f"FINAL-D{state.current_day:03d}-Q{ordinal:02d}-{definition.id}"
+        event_scope, event_id = _event_identity(
+            state.current_day,
+            ordinal,
+            definition,
+            final_job,
+            source_day=pending_item.source_day if pending_item else None,
+            source_definition_id=(
+                pending_item.source_definition_id if pending_item else ""
+            ),
+        )
         card = DecisionCard(
-            id=f"FINAL-D{state.current_day:03d}-Q{ordinal:02d}-{definition.id}",
+            id=card_id,
             title=f"Final Assembly: {_simplify_language(definition.title)}",
             description=description,
             choices=choices,
@@ -206,6 +218,22 @@ def generate_final_assembly_cards(
             definition_id=definition.id,
             primary_job_id=final_job.id,
             player_only=True,
+            event_id=event_id,
+            event_scope=event_scope,
+            follow_up_source_day=pending_item.source_day if pending_item else None,
+            follow_up_source_definition_id=(
+                pending_item.source_definition_id if pending_item else ""
+            ),
+            follow_up_source_title=_source_title(
+                pending_item.source_definition_id if pending_item else ""
+            ),
+            follow_up_source_choice_id=(
+                pending_item.source_choice_id if pending_item else ""
+            ),
+            follow_up_source_choice_label=_source_choice_label(
+                pending_item.source_definition_id if pending_item else "",
+                pending_item.source_choice_id if pending_item else "",
+            ),
         )
         cards.append(card)
         state.decision_cards[card.id] = card
@@ -285,8 +313,18 @@ def _build_card(
     echo_choice = select_echo_choice_from_choices(choices)
     context = _format_job_list([job.name for job in targets])
     description = _simplify_language(definition.description)
+    card_id = f"DEC-D{state.current_day:03d}-{ordinal:02d}-{definition.id}"
+    event_scope, event_id = _event_identity(
+        state.current_day,
+        ordinal,
+        definition,
+        primary,
+        source_day=pending.source_day if pending else None,
+        source_definition_id=pending.source_definition_id if pending else "",
+    )
+    source_title = _source_title(pending.source_definition_id if pending else "")
     return DecisionCard(
-        id=f"DEC-D{state.current_day:03d}-{ordinal:02d}-{definition.id}",
+        id=card_id,
         title=_simplify_language(definition.title),
         description=description,
         choices=choices,
@@ -294,6 +332,18 @@ def _build_card(
         context_label=context,
         definition_id=definition.id,
         primary_job_id=primary.id,
+        event_id=event_id,
+        event_scope=event_scope,
+        follow_up_source_day=pending.source_day if pending else None,
+        follow_up_source_definition_id=(
+            pending.source_definition_id if pending else ""
+        ),
+        follow_up_source_title=source_title,
+        follow_up_source_choice_id=pending.source_choice_id if pending else "",
+        follow_up_source_choice_label=_source_choice_label(
+            pending.source_definition_id if pending else "",
+            pending.source_choice_id if pending else "",
+        ),
     )
 
 
@@ -305,6 +355,9 @@ def build_preplanned_decision_card(
     question_number: int,
     node_token: str,
     trigger_delta: int = 0,
+    follow_up_source_day: int | None = None,
+    follow_up_source_definition_id: str = "",
+    follow_up_source_choice_id: str = "",
 ) -> DecisionCard:
     """Build one immutable-web question for an exact precomputed state."""
     targets = [primary, *(job for job in ordered_targets if job.id != primary.id)][:5]
@@ -332,8 +385,17 @@ def build_preplanned_decision_card(
     echo_choice = select_echo_choice_from_choices(choices)
     context = _format_job_list([job.name for job in targets])
     description = _simplify_language(definition.description)
+    card_id = f"DEC-D{state.current_day:03d}-Q{question_number:02d}-{node_token}-{definition.id}"
+    event_scope, event_id = _event_identity(
+        state.current_day,
+        question_number,
+        definition,
+        primary,
+        source_day=follow_up_source_day,
+        source_definition_id=follow_up_source_definition_id,
+    )
     return DecisionCard(
-        id=f"DEC-D{state.current_day:03d}-Q{question_number:02d}-{node_token}-{definition.id}",
+        id=card_id,
         title=_simplify_language(definition.title),
         description=description,
         choices=choices,
@@ -341,6 +403,16 @@ def build_preplanned_decision_card(
         context_label=context,
         definition_id=definition.id,
         primary_job_id=primary.id,
+        event_id=event_id,
+        event_scope=event_scope,
+        follow_up_source_day=follow_up_source_day,
+        follow_up_source_definition_id=follow_up_source_definition_id,
+        follow_up_source_title=_source_title(follow_up_source_definition_id),
+        follow_up_source_choice_id=follow_up_source_choice_id,
+        follow_up_source_choice_label=_source_choice_label(
+            follow_up_source_definition_id,
+            follow_up_source_choice_id,
+        ),
     )
 
 
@@ -553,6 +625,51 @@ def _choice_follow_ups(
             delay_days=max(1, edge.delay_days),
         )
     return tuple(unique.values())
+
+
+def _event_identity(
+    day: int,
+    question_number: int,
+    definition: DecisionDefinition,
+    primary: Job,
+    *,
+    source_day: int | None = None,
+    source_definition_id: str = "",
+) -> tuple[str, str]:
+    """Return a semantic event identity independent of a DAG node ID."""
+    if definition.is_follow_up:
+        source = source_definition_id or "unknown-source"
+        source_day_key = source_day if source_day is not None else day
+        return (
+            "follow-up",
+            f"FOLLOW-D{source_day_key:03d}-{source}-{primary.id}-{definition.id}",
+        )
+    if definition.shared_across_routes:
+        return (
+            "shared-day",
+            f"SHARED-D{day:03d}-Q{question_number:02d}-{definition.id}",
+        )
+    return (
+        "route-specific",
+        f"ROUTE-D{day:03d}-Q{question_number:02d}-{definition.id}-{primary.id}",
+    )
+
+
+def _source_title(definition_id: str) -> str:
+    definition = DEFINITIONS_BY_ID.get(definition_id)
+    return _simplify_language(definition.title) if definition else ""
+
+
+def _source_choice_label(definition_id: str, choice_id: str) -> str:
+    definition = DEFINITIONS_BY_ID.get(definition_id)
+    if not definition or not choice_id.startswith("choice-"):
+        return ""
+    try:
+        index = int(choice_id.rsplit("-", 1)[-1]) - 1
+        choice = definition.choices[index]
+    except (ValueError, IndexError):
+        return ""
+    return _simplify_language(choice.label)
 
 
 def _simplify_language(value: str) -> str:

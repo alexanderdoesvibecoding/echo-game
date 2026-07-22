@@ -168,9 +168,9 @@ class PayloadMixin:
                         include_echo_preference=(
                             player_record.aligned_with_echo is not None
                         ),
-                        echo_situation_matches=(
-                            echo_record is not None
-                            and player_record.card_id == echo_record.card_id
+                        echo_comparison_state=_echo_comparison_state(
+                            player_card,
+                            echo_card,
                         ),
                     )
                     if player_record
@@ -182,7 +182,7 @@ class PayloadMixin:
                         echo_card,
                         position=slot + 1,
                         include_echo_preference=False,
-                        echo_situation_matches=False,
+                        echo_comparison_state="different-events",
                     )
                     if echo_record
                     else None
@@ -249,12 +249,24 @@ class PayloadMixin:
 
     @staticmethod
     def _card_payload(card: DecisionCard) -> dict[str, Any]:
-        return {
+        payload = {
             "id": card.id,
             "title": card.title,
             "description": card.description,
             "choices": [_choice_payload(choice) for choice in card.choices],
+            "eventId": card.event_id or card.id,
+            "eventScope": card.event_scope,
         }
+        if card.follow_up_source_day is not None:
+            payload["followUpSource"] = {
+                "day": card.follow_up_source_day,
+                "definitionId": card.follow_up_source_definition_id,
+                "title": card.follow_up_source_title,
+                "choiceId": card.follow_up_source_choice_id,
+                "choice": card.follow_up_source_choice_label,
+                "jobId": card.primary_job_id,
+            }
+        return payload
 
 
 def _choice_payload(choice: DecisionChoice) -> dict[str, Any]:
@@ -271,7 +283,7 @@ def _chart_decision_payload(
     *,
     position: int,
     include_echo_preference: bool,
-    echo_situation_matches: bool,
+    echo_comparison_state: str,
 ) -> dict[str, Any]:
     """Keep one actor's question context attached to that actor's answer."""
     payload = {
@@ -286,7 +298,18 @@ def _chart_decision_payload(
         ),
         "cumulativeScore": public_score(record.cumulative_score),
         "affectedLabel": card.context_label if card else "-",
+        "eventId": (card.event_id or card.id) if card else record.card_id,
+        "eventScope": card.event_scope if card else "route-specific",
     }
+    if card and card.follow_up_source_day is not None:
+        payload["followUpSource"] = {
+            "day": card.follow_up_source_day,
+            "definitionId": card.follow_up_source_definition_id,
+            "title": card.follow_up_source_title,
+            "choiceId": card.follow_up_source_choice_id,
+            "choice": card.follow_up_source_choice_label,
+            "jobId": card.primary_job_id,
+        }
     if include_echo_preference:
         preferred_choice = (
             next(
@@ -301,18 +324,34 @@ def _chart_decision_payload(
             else record.echo_choice_label
         )
         aligned_with_preference = record.choice_label == preferred_choice
-        situation_state = "same-situation" if echo_situation_matches else "different-situation"
         choice_state = "same-choice" if aligned_with_preference else "different-choice"
         payload.update(
             {
                 "echoPreferredChoice": preferred_choice,
                 "alignedWithEcho": aligned_with_preference,
-                "echoSituationMatches": echo_situation_matches,
-                "echoPreferenceState": f"{situation_state}-{choice_state}",
+                "echoSituationMatches": echo_comparison_state == "same-context",
+                "echoEventMatches": echo_comparison_state != "different-events",
+                "echoComparisonState": echo_comparison_state,
+                "echoPreferenceState": f"{echo_comparison_state}-{choice_state}",
                 "echoPreferenceBasis": "completion-day-then-score-then-unfinished-work",
             }
         )
     return payload
+
+
+def _echo_comparison_state(
+    player_card: DecisionCard | None,
+    echo_card: DecisionCard | None,
+) -> str:
+    if not player_card or not echo_card:
+        return "different-events"
+    player_event_id = player_card.event_id or player_card.id
+    echo_event_id = echo_card.event_id or echo_card.id
+    if player_event_id != echo_event_id:
+        return "different-events"
+    if player_card.primary_job_id == echo_card.primary_job_id:
+        return "same-context"
+    return "same-event-different-context"
 
 
 def _job_label(job_id: str) -> str:
