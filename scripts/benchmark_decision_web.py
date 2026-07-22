@@ -25,8 +25,8 @@ from echo_adventure.config import GameConfig  # noqa: E402
 from echo_adventure.decision_web import DecisionWeb, generate_decision_web  # noqa: E402
 from echo_adventure.scenario_generator import generate_scenario  # noqa: E402
 
-
-DEFAULT_SEEDS = tuple(range(1, 11))
+"""First ten possible seeds in the app's range of possible randomly-selected seeds (100,000 - 999,999,999)"""
+DEFAULT_SEEDS = tuple(range(100001, 100011))
 MIB = 1024 * 1024
 LOG_DIRECTORY = PROJECT_ROOT / "log"
 
