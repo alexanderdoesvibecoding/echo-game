@@ -6,7 +6,7 @@ import hashlib
 import random
 from dataclasses import dataclass
 
-from ..decision_web import DecisionWeb
+from ..decision_web import DecisionWeb, DecisionWebTransition
 from ..decisions import (
     projected_completion_day_after_choice,
     select_echo_choice_for_state,
@@ -14,7 +14,8 @@ from ..decisions import (
 from ..models import DecisionCard, DecisionChoice, SimulationState
 
 
-AUTOMATION_STRATEGIES = frozenset({"echo", "random", "first", "last", "worst"})
+AUTOMATION_STRATEGY_ORDER = ("echo", "random", "first", "last", "worst")
+AUTOMATION_STRATEGIES = frozenset(AUTOMATION_STRATEGY_ORDER)
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,51 @@ def select_runtime_choice(
             ),
         )
     raise ValueError(f"Unsupported automated strategy: {strategy}.")
+
+
+def reachable_preplanned_days(
+    web: DecisionWeb,
+    node_id: str,
+    strategy: str,
+    context: AutomationContext,
+    *,
+    current_day: int,
+    max_campaign_day: int,
+    pending_transition: DecisionWebTransition | None = None,
+) -> list[int]:
+    """Dry-walk one immutable route and return the future days it enters."""
+    reachable_days: list[int] = []
+    seen_days: set[int] = set()
+    seen_nodes: set[str] = set()
+    transition = pending_transition
+
+    while True:
+        if transition is None:
+            if node_id in seen_nodes:
+                raise RuntimeError(
+                    f"Automated reachability encountered a cycle at {node_id}."
+                )
+            seen_nodes.add(node_id)
+            choice = select_preplanned_choice(
+                web,
+                node_id,
+                strategy,
+                context,
+                max_campaign_day=max_campaign_day,
+            )
+            transition = web.transition(node_id, choice.id)
+
+        if transition.enters_overtime or transition.next_node_id is None:
+            break
+
+        node_id = transition.next_node_id
+        successor_day = web.node(node_id).state.day
+        if successor_day > current_day and successor_day not in seen_days:
+            reachable_days.append(successor_day)
+            seen_days.add(successor_day)
+        transition = None
+
+    return reachable_days
 
 
 def _preplanned_worst_key(

@@ -19,7 +19,9 @@ from ..models import DecisionCard, DecisionChoice
 from ..scenario_generator import generate_scenario
 from ..simulation import DayResult, advance_day as simulate_day, initialize_state
 from .automation import (
+    AUTOMATION_STRATEGY_ORDER,
     AutomationContext,
+    reachable_preplanned_days,
     select_preplanned_choice,
     select_runtime_choice,
     validate_automation_strategy,
@@ -220,7 +222,7 @@ class GameSession(PayloadMixin, ReviewMixin):
             if not self.dev_mode:
                 raise ValueError("Developer mode is not enabled.")
             strategy_name = validate_automation_strategy(strategy)
-            self._validate_skip_target(target_day)
+            target = self._validate_skip_target(target_day)
             if self._game_over():
                 raise ValueError("The run has already ended.")
 
@@ -228,6 +230,19 @@ class GameSession(PayloadMixin, ReviewMixin):
                 seed=self.seed,
                 start_token=self._automation_start_token(),
             )
+            if target is not None:
+                if self.player_in_overtime or self.player_final_assembly_started:
+                    raise ValueError(
+                        "Specific-day skipping is only available in the "
+                        "preplanned decision web."
+                    )
+                reachable_days = self._reachable_days(strategy_name, context)
+                if target not in reachable_days:
+                    raise ValueError(
+                        f"Day {target} is not reachable with the "
+                        f"{strategy_name!r} strategy from the current state."
+                    )
+
             start_day = self.player_state.current_day
             actions = 0
             stagnant_days = 0
@@ -238,6 +253,8 @@ class GameSession(PayloadMixin, ReviewMixin):
             )
 
             while not self._game_over():
+                if target is not None and self.player_state.current_day == target:
+                    return
                 if actions >= _MAX_AUTOMATED_ACTIONS:
                     raise RuntimeError(
                         "Automated skip exceeded its maximum action count."
@@ -317,15 +334,47 @@ class GameSession(PayloadMixin, ReviewMixin):
             context,
         )
 
-    def _validate_skip_target(self, target_day: object) -> None:
+    def _validate_skip_target(self, target_day: object) -> int | None:
         if target_day is None:
-            return
+            return None
         if isinstance(target_day, bool) or not isinstance(target_day, int):
             raise ValueError("Target day must be an integer or null.")
         if target_day <= self.player_state.current_day:
             raise ValueError("Target day must be later than the current day.")
-        raise ValueError(
-            "Target day is unavailable until strategy reachability is calculated."
+        return target_day
+
+    def reachable_days_by_strategy(self) -> dict[str, list[int]]:
+        """Return dry preplanned routes for every developer automation strategy."""
+        with self.lock:
+            if (
+                not self.dev_mode
+                or self._game_over()
+                or self.player_in_overtime
+                or self.player_final_assembly_started
+            ):
+                return {}
+            context = AutomationContext(
+                seed=self.seed,
+                start_token=self._automation_start_token(),
+            )
+            return {
+                strategy: self._reachable_days(strategy, context)
+                for strategy in AUTOMATION_STRATEGY_ORDER
+            }
+
+    def _reachable_days(
+        self,
+        strategy: str,
+        context: AutomationContext,
+    ) -> list[int]:
+        return reachable_preplanned_days(
+            self.decision_web,
+            self.player_node_id,
+            strategy,
+            context,
+            current_day=self.player_state.current_day,
+            max_campaign_day=self.config.max_campaign_day,
+            pending_transition=self.pending_player_transition,
         )
 
     def _automation_start_token(self) -> str:

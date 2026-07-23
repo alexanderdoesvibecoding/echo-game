@@ -99,8 +99,9 @@ export function renderDevTools() {
   setChecked("devShowDiagnostics", uiState.devShowDiagnostics);
   if ($("devStrategy")) $("devStrategy").value = uiState.devStrategy;
 
-  const reachableDays = Array.isArray(runState.reachableDays)
-    ? runState.reachableDays.filter(day => Number.isInteger(day) && day > uiState.state.day)
+  const strategyDays = runState.reachableDaysByStrategy?.[uiState.devStrategy];
+  const reachableDays = Array.isArray(strategyDays)
+    ? strategyDays.filter(day => Number.isInteger(day) && day > uiState.state.day)
     : [];
   renderTargetDays(reachableDays);
 

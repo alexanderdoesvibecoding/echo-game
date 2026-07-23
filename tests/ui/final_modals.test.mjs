@@ -562,7 +562,10 @@ test("developer skip controls filter days and serialize asynchronous requests", 
         inDecisionWeb: true,
         canSkipToDay: true,
         canSkipToEnd: true,
-        reachableDays: [1, 3, "4", 5],
+        reachableDaysByStrategy: {
+          echo: [1, 3, "4", 5],
+          worst: [4, 6],
+        },
       },
     },
   };
@@ -577,12 +580,20 @@ test("developer skip controls filter days and serialize asynchronous requests", 
   assert.equal(dom.element("devSkipToDayBtn").disabled, false);
   assert.equal(dom.element("devSkipToEndBtn").disabled, false);
 
-  dom.element("devTargetDay").value = "5";
+  dom.element("devStrategy").listeners.get("change")[0]({
+    target: { value: "worst" },
+  });
+  assert.equal(uiState.devStrategy, "worst");
+  assert.match(dom.element("devTargetDay").innerHTML, /Day 4/);
+  assert.match(dom.element("devTargetDay").innerHTML, /Day 6/);
+  assert.doesNotMatch(dom.element("devTargetDay").innerHTML, /Day 3/);
+
+  dom.element("devTargetDay").value = "6";
   dom.element("devSkipToDayBtn").listeners.get("click")[0]();
   dom.element("devSkipToEndBtn").listeners.get("click")[0]();
   assert.equal(uiState.devRequestInFlight, true);
   assert.equal(dom.element("devSkipToDayBtn").disabled, true);
-  assert.deepEqual(requests, [["day", { strategy: "echo", targetDay: 5 }]]);
+  assert.deepEqual(requests, [["day", { strategy: "worst", targetDay: 6 }]]);
 
   releaseRequest();
   await pendingRequest;
@@ -593,7 +604,7 @@ test("developer skip controls filter days and serialize asynchronous requests", 
   await new Promise(resolve => globalThis.setTimeout(resolve, 0));
   assert.deepEqual(requests.at(-1), [
     "end",
-    { strategy: "echo", targetDay: null },
+    { strategy: "worst", targetDay: null },
   ]);
 });
 

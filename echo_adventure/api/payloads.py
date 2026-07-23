@@ -71,6 +71,11 @@ class PayloadMixin:
                         "inDecisionWeb": in_decision_web,
                         "canSkipToEnd": not self._game_over(),
                         "canSkipToDay": in_decision_web,
+                        "reachableDaysByStrategy": (
+                            self.reachable_days_by_strategy()
+                            if in_decision_web
+                            else {}
+                        ),
                     },
                 }
             return payload

@@ -76,14 +76,28 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
 
     dev_session = session_module.GameSession(seed=404, dev_mode=True)
     dev_payload = dev_session.state_payload()
-    assert dev_payload["developer"] == {
-        "generation": {},
-        "runState": {
-            "inDecisionWeb": True,
-            "canSkipToEnd": True,
-            "canSkipToDay": True,
-        },
+    assert dev_payload["developer"]["generation"] == {}
+    dev_run_state = dev_payload["developer"]["runState"]
+    assert {
+        key: dev_run_state[key]
+        for key in ("inDecisionWeb", "canSkipToEnd", "canSkipToDay")
+    } == {
+        "inDecisionWeb": True,
+        "canSkipToEnd": True,
+        "canSkipToDay": True,
     }
+    reachable_by_strategy = dev_run_state["reachableDaysByStrategy"]
+    assert set(reachable_by_strategy) == {
+        "echo",
+        "random",
+        "first",
+        "last",
+        "worst",
+    }
+    assert all(
+        days == sorted(set(days)) and all(day > dev_payload["day"] for day in days)
+        for days in reachable_by_strategy.values()
+    )
     dev_card = dev_payload["decisions"][0]
     node = dev_session.decision_web.node(dev_session.player_node_id)
     assert dev_card["developer"]["preference"] == {
@@ -244,8 +258,14 @@ def test_session_rejects_invalid_or_out_of_sequence_actions(monkeypatch: pytest.
         overtime.skip("echo", True)
     with pytest.raises(ValueError, match="later than"):
         overtime.skip("echo", overtime.player_state.current_day)
-    with pytest.raises(ValueError, match="reachability"):
+    with pytest.raises(ValueError, match="preplanned decision web"):
         overtime.skip("echo", overtime.player_state.current_day + 1)
+
+    preflight = session_module.GameSession(seed=405, dev_mode=True)
+    before_unreachable_skip = preflight.state_payload()
+    with pytest.raises(ValueError, match="not reachable"):
+        preflight.skip("echo", preflight.config.max_campaign_day)
+    assert preflight.state_payload() == before_unreachable_skip
 
 
 def test_choice_and_advance_update_player_and_echo_once_per_slot(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -493,6 +513,7 @@ def test_slow_route_uses_one_player_only_final_assembly_batch_then_normal_workda
         "inDecisionWeb": False,
         "canSkipToEnd": True,
         "canSkipToDay": False,
+        "reachableDaysByStrategy": {},
     }
     final_card_payload = final_assembly_payload["decisions"][0]
     assert final_card_payload["developer"]["preference"]["kind"] == (
@@ -542,6 +563,7 @@ def test_slow_route_uses_one_player_only_final_assembly_batch_then_normal_workda
         "inDecisionWeb": False,
         "canSkipToEnd": False,
         "canSkipToDay": False,
+        "reachableDaysByStrategy": {},
     }
     final = final_payload["finalReveal"]
     assert final["review"]["outcome"] == "behind"
@@ -637,6 +659,40 @@ def test_final_payload_aligns_real_player_and_echo_histories(monkeypatch: pytest
         record.choice_label
         for record in repeated_random.player_state.decision_history
     ] == completed_paths["random"]
+
+    targeted = session_module.GameSession(seed=413, dev_mode=True)
+    initial_context = session_module.AutomationContext(
+        seed=targeted.seed,
+        start_token=targeted._automation_start_token(),
+    )
+    expected_random_choice = session_module.select_preplanned_choice(
+        targeted.decision_web,
+        targeted.player_node_id,
+        "random",
+        initial_context,
+        max_campaign_day=targeted.config.max_campaign_day,
+    )
+    random_target = targeted.reachable_days_by_strategy()["random"][0]
+    targeted.skip("random", random_target)
+    assert targeted.player_state.current_day == random_target
+    assert targeted.questions_answered_today == 0
+    assert len(targeted.current_cards) == 1
+    assert targeted.decision_web.node(targeted.player_node_id).state.day == random_target
+    assert targeted.player_state.decision_history[0].choice_label == (
+        expected_random_choice.label
+    )
+
+    pending = session_module.GameSession(seed=413, dev_mode=True)
+    pending_card = pending.current_cards[0]
+    pending.apply_choice(pending_card.id, pending_card.choices[-1].id)
+    assert pending.pending_player_transition is not None
+    pending_history_count = len(pending.player_state.decision_history)
+    pending_target = pending.reachable_days_by_strategy()["first"][0]
+    pending.skip("first", pending_target)
+    assert pending.player_state.current_day == pending_target
+    assert pending.questions_answered_today == 0
+    assert len(pending.current_cards) == 1
+    assert len(pending.player_state.decision_history) == pending_history_count
 
     crafted = session_module.GameSession(seed=414, dev_mode=True)
     crafted.player_state = session_module.initialize_state(
