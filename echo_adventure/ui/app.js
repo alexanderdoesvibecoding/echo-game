@@ -153,6 +153,28 @@ async function prepareAdvanceDay() {
   }
 }
 
+async function runDeveloperSkip({ strategy, targetDay }) {
+  try {
+    const nextState = await api("/api/dev/skip", {
+      method: "POST",
+      body: JSON.stringify({ strategy, targetDay }),
+    });
+    uiState.state = nextState;
+    uiState.pendingChoice = null;
+    uiState.pendingAdvanceState = null;
+    uiState.modalVisible = false;
+    uiState.summaryAnimationKey = null;
+    uiState.dayCycleAdvancing = false;
+    uiState.choiceRequestInFlight = false;
+    uiState.advanceRequestInFlight = false;
+    resetDayCycle();
+    showError("");
+    render();
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
 function commitAdvanceDay() {
   if (!uiState.pendingAdvanceState) {
     return;
@@ -202,6 +224,8 @@ configureDevTools({
   diagnosticsChanged: renderDecisionQueue,
   instantProgressionChanged: handleInstantProgressionChanged,
   openNewRunModal,
+  skipToDay: runDeveloperSkip,
+  skipToEnd: runDeveloperSkip,
 });
 initDevTools();
 

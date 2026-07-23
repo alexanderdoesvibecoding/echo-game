@@ -15,14 +15,23 @@ from ..decisions import apply_choice as apply_decision_choice
 from ..decisions import generate_daily_decision_cards, generate_final_assembly_cards
 from ..decisions import select_echo_choice_for_state
 from ..echo import advance_omniscient_day, apply_omniscient_choice
-from ..models import DecisionCard
+from ..models import DecisionCard, DecisionChoice
 from ..scenario_generator import generate_scenario
 from ..simulation import DayResult, advance_day as simulate_day, initialize_state
+from .automation import (
+    AutomationContext,
+    select_preplanned_choice,
+    select_runtime_choice,
+    validate_automation_strategy,
+)
 from .payloads import PayloadMixin
 from .review import ReviewMixin
 
 
 _RANDOM_SEED_WEB_TIMEOUT_SECONDS = 15.0
+_MAX_AUTOMATED_ACTIONS = 10_000
+_MAX_AUTOMATED_DAYS = 1_000
+_MAX_WORST_STAGNANT_DAYS = 20
 
 
 class GameSession(PayloadMixin, ReviewMixin):
@@ -199,6 +208,159 @@ class GameSession(PayloadMixin, ReviewMixin):
         return (
             self.questions_answered_today == self.decision_total_today
             and self.pending_player_transition is not None
+        )
+
+    def skip(
+        self,
+        strategy: object,
+        target_day: object = None,
+    ) -> None:
+        """Automate normal choices/day advances for a developer request."""
+        with self.lock:
+            if not self.dev_mode:
+                raise ValueError("Developer mode is not enabled.")
+            strategy_name = validate_automation_strategy(strategy)
+            self._validate_skip_target(target_day)
+            if self._game_over():
+                raise ValueError("The run has already ended.")
+
+            context = AutomationContext(
+                seed=self.seed,
+                start_token=self._automation_start_token(),
+            )
+            start_day = self.player_state.current_day
+            actions = 0
+            stagnant_days = 0
+            previous_runtime_max: int | None = (
+                self._maximum_remaining_duration()
+                if self.player_in_overtime or self.player_final_assembly_started
+                else None
+            )
+
+            while not self._game_over():
+                if actions >= _MAX_AUTOMATED_ACTIONS:
+                    raise RuntimeError(
+                        "Automated skip exceeded its maximum action count."
+                    )
+                if self.player_state.current_day - start_day >= _MAX_AUTOMATED_DAYS:
+                    raise RuntimeError(
+                        "Automated skip exceeded its maximum day count."
+                    )
+
+                self._ensure_cards()
+                if self.current_cards:
+                    card = self.current_cards[0]
+                    choice = self._automated_choice(
+                        card,
+                        strategy_name,
+                        context,
+                    )
+                    self.apply_choice(card.id, choice.id)
+                    actions += 1
+                    continue
+
+                if not self.ready_to_advance():
+                    raise RuntimeError(
+                        "Automated skip reached an unfinished state with no "
+                        "decision and no available day advance."
+                    )
+
+                was_runtime = (
+                    self.player_in_overtime
+                    or self.player_final_assembly_started
+                )
+                self.advance_day()
+                actions += 1
+                is_runtime = (
+                    self.player_in_overtime
+                    or self.player_final_assembly_started
+                )
+                if strategy_name != "worst" or self._game_over() or not is_runtime:
+                    if not is_runtime:
+                        previous_runtime_max = None
+                    continue
+
+                current_runtime_max = self._maximum_remaining_duration()
+                if (
+                    was_runtime
+                    and previous_runtime_max is not None
+                    and current_runtime_max >= previous_runtime_max
+                ):
+                    stagnant_days += 1
+                else:
+                    stagnant_days = 0
+                previous_runtime_max = current_runtime_max
+                if stagnant_days >= _MAX_WORST_STAGNANT_DAYS:
+                    raise RuntimeError(
+                        "Worst-strategy skip stopped after repeated overtime "
+                        "days without schedule progress."
+                    )
+
+    def _automated_choice(
+        self,
+        card: DecisionCard,
+        strategy: str,
+        context: AutomationContext,
+    ) -> DecisionChoice:
+        if not self.player_in_overtime and not self.player_final_assembly_started:
+            return select_preplanned_choice(
+                self.decision_web,
+                self.player_node_id,
+                strategy,
+                context,
+                max_campaign_day=self.config.max_campaign_day,
+            )
+        return select_runtime_choice(
+            self.player_state,
+            card,
+            strategy,
+            context,
+        )
+
+    def _validate_skip_target(self, target_day: object) -> None:
+        if target_day is None:
+            return
+        if isinstance(target_day, bool) or not isinstance(target_day, int):
+            raise ValueError("Target day must be an integer or null.")
+        if target_day <= self.player_state.current_day:
+            raise ValueError("Target day must be later than the current day.")
+        raise ValueError(
+            "Target day is unavailable until strategy reachability is calculated."
+        )
+
+    def _automation_start_token(self) -> str:
+        remaining = ",".join(
+            f"{job.id}:{job.remaining_days}"
+            for job in sorted(self.player_state.jobs.values(), key=lambda item: item.id)
+        )
+        pending_transition = self.pending_player_transition
+        transition_token = (
+            f"{pending_transition.next_node_id}:"
+            f"{pending_transition.advances_day}:"
+            f"{pending_transition.enters_overtime}"
+            if pending_transition
+            else ""
+        )
+        return "|".join(
+            (
+                str(self.player_state.current_day),
+                self.player_node_id,
+                transition_token,
+                str(len(self.player_state.decision_history)),
+                str(self.overtime_card_index),
+                str(self.final_assembly_card_index),
+                str(self.player_state.decision_score),
+                remaining,
+            )
+        )
+
+    def _maximum_remaining_duration(self) -> int:
+        return max(
+            (
+                max(0, job.remaining_days)
+                for job in self.player_state.incomplete_jobs()
+            ),
+            default=0,
         )
 
     def _ensure_cards(self) -> None:
@@ -389,4 +551,15 @@ class SessionStore:
     def advance_payload(self) -> dict[str, Any]:
         with self.lock:
             self.session.advance_day()
+            return self.session.state_payload()
+
+    def skip_payload(
+        self,
+        strategy: object,
+        target_day: object = None,
+    ) -> dict[str, Any]:
+        with self.lock:
+            if not self.dev_mode:
+                raise ValueError("Developer mode is not enabled.")
+            self.session.skip(strategy, target_day)
             return self.session.state_payload()

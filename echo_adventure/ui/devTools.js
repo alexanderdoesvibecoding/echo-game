@@ -37,11 +37,11 @@ export function initDevTools() {
   $("devSkipToDayBtn")?.addEventListener("click", () => {
     const targetDay = Number($("devTargetDay")?.value);
     if (Number.isInteger(targetDay) && targetDay > 0) {
-      runDeveloperRequest(callbacks.skipToDay, targetDay);
+      return runDeveloperRequest(callbacks.skipToDay, targetDay);
     }
   });
   $("devSkipToEndBtn")?.addEventListener("click", () => {
-    runDeveloperRequest(callbacks.skipToEnd, null);
+    return runDeveloperRequest(callbacks.skipToEnd, null);
   });
 }
 

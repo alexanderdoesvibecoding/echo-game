@@ -17,7 +17,7 @@ from echo_adventure.api.payloads import _echo_comparison_state
 from echo_adventure.api.server import GameRequestHandler, STATIC_ASSETS, _parse_optional_seed
 from echo_adventure.scoring import public_score, public_score_delta
 
-from .helpers import small_config
+from .helpers import make_card, make_choice, scenario_from_durations, small_config
 
 
 def install_fast_session_config(monkeypatch: pytest.MonkeyPatch, **overrides: object) -> None:
@@ -229,6 +229,18 @@ def test_session_rejects_invalid_or_out_of_sequence_actions(monkeypatch: pytest.
         choice["developer"]["followUp"]["mode"] == "runtime"
         for choice in overtime_payload["choices"]
     )
+
+    standard = session_module.GameSession(seed=405)
+    with pytest.raises(ValueError, match="Developer mode"):
+        standard.skip("echo")
+    with pytest.raises(ValueError, match="Unknown automated strategy"):
+        overtime.skip("missing")
+    with pytest.raises(ValueError, match="integer or null"):
+        overtime.skip("echo", True)
+    with pytest.raises(ValueError, match="later than"):
+        overtime.skip("echo", overtime.player_state.current_day)
+    with pytest.raises(ValueError, match="reachability"):
+        overtime.skip("echo", overtime.player_state.current_day + 1)
 
 
 def test_choice_and_advance_update_player_and_echo_once_per_slot(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -571,6 +583,80 @@ def test_final_payload_aligns_real_player_and_echo_histories(monkeypatch: pytest
         replace(echo_card, event_id="echo-event"),
     ) == "different-events"
 
+    exact = session_module.GameSession(seed=412, dev_mode=True)
+    exact.skip("echo")
+    assert exact.state_payload()["finalReveal"]["review"]["outcome"] == "tied"
+    with pytest.raises(ValueError, match="already ended"):
+        exact.skip("echo")
+
+    divergent = session_module.GameSession(seed=412, dev_mode=True)
+    first_card = divergent.current_cards[0]
+    wrong_choice = next(
+        choice
+        for choice in first_card.choices
+        if choice.id != divergent.decision_web.node(
+            divergent.player_node_id
+        ).optimal_choice_id
+    )
+    divergent.apply_choice(first_card.id, wrong_choice.id)
+    divergent.skip("echo")
+    assert divergent.state_payload()["finalReveal"]["review"]["outcome"] == "behind"
+
+    completed_paths = {}
+    for strategy in ("random", "first", "last", "worst"):
+        automated = session_module.GameSession(seed=413, dev_mode=True)
+        automated.skip(strategy)
+        automated_payload = automated.state_payload()
+        assert automated_payload["gameOver"] is True
+        assert automated_payload["finalReveal"]["review"]["outcome"] in {
+            "tied",
+            "behind",
+        }
+        completed_paths[strategy] = [
+            record.choice_label
+            for record in automated.player_state.decision_history
+        ]
+
+    repeated_random = session_module.GameSession(seed=413, dev_mode=True)
+    repeated_random.skip("random")
+    assert [
+        record.choice_label
+        for record in repeated_random.player_state.decision_history
+    ] == completed_paths["random"]
+
+    crafted = session_module.GameSession(seed=414, dev_mode=True)
+    crafted.player_state = session_module.initialize_state(
+        scenario_from_durations(3, seed=414)
+    )
+    crafted.day_completed_before = set()
+    crafted.automated_state.final_item_completed = True
+    crafted.automated_state.completion_day = 100
+    delay = make_choice(
+        "choice-1",
+        changes={"JOB-01": 1},
+        score=-10,
+    )
+    safe = make_choice("choice-2", changes={}, score=10)
+    crafted_card = make_card(delay, safe, echo_choice_id=safe.id)
+    monkeypatch.setattr(
+        session_module,
+        "generate_daily_decision_cards",
+        lambda state, config: [crafted_card],
+    )
+    crafted.player_in_overtime = True
+    crafted.overtime_cards = [crafted_card]
+    crafted.overtime_card_index = 0
+    crafted.overtime_ready_to_advance = False
+    crafted.questions_answered_today = 0
+    crafted.decision_total_today = 1
+    crafted.current_cards = [crafted_card]
+    crafted.skip("worst")
+    assert crafted.player_state.final_item_completed is True
+    assert {
+        record.choice_label
+        for record in crafted.player_state.decision_history
+    } == {safe.label}
+
 
 def test_timeline_stops_rescaling_after_echo_finishes(monkeypatch: pytest.MonkeyPatch) -> None:
     install_fast_session_config(monkeypatch)
@@ -667,6 +753,8 @@ def test_request_handler_routes_state_actions_html_and_not_found(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FakeStore:
+        dev_mode = False
+
         def state_payload(self):
             return {"route": "state"}
 
@@ -692,6 +780,30 @@ def test_request_handler_routes_state_actions_html_and_not_found(
         dispatch(handler)
         assert handler.response_status == status
         assert handler.body_json() == payload
+
+    class DevStore(FakeStore):
+        dev_mode = True
+
+        def skip_payload(self, strategy, target_day=None):
+            return {
+                "route": "skip",
+                "strategy": strategy,
+                "targetDay": target_day,
+            }
+
+    DevHandler = handler_type(DevStore())
+    dev_skip = DevHandler(
+        "POST",
+        "/api/dev/skip",
+        {"strategy": "last", "targetDay": None},
+    )
+    dispatch(dev_skip)
+    assert dev_skip.response_status == 200
+    assert dev_skip.body_json() == {
+        "route": "skip",
+        "strategy": "last",
+        "targetDay": None,
+    }
 
     root = Handler("GET", "/")
     dispatch(root)
@@ -720,6 +832,8 @@ def test_request_handler_routes_state_actions_html_and_not_found(
 
 def test_request_handler_reports_bad_input_and_serves_declared_static_assets() -> None:
     class FakeStore:
+        dev_mode = False
+
         def new_session_payload(self, seed=None):
             return {"seed": seed}
 
@@ -733,6 +847,24 @@ def test_request_handler_reports_bad_input_and_serves_declared_static_assets() -
     dispatch(bad_seed)
     assert bad_seed.response_status == 400
     assert bad_seed.body_json() == {"error": "Seed must be an integer."}
+
+    class BadSkipStore(FakeStore):
+        dev_mode = True
+
+        def skip_payload(self, strategy, target_day=None):
+            raise ValueError(f"Unknown automated strategy: {strategy}.")
+
+    BadSkipHandler = handler_type(BadSkipStore())
+    bad_skip = BadSkipHandler(
+        "POST",
+        "/api/dev/skip",
+        {"strategy": "missing", "targetDay": None},
+    )
+    dispatch(bad_skip)
+    assert bad_skip.response_status == 400
+    assert bad_skip.body_json() == {
+        "error": "Unknown automated strategy: missing."
+    }
 
     for path, (content_type, asset_path) in STATIC_ASSETS.items():
         handler = Handler("GET", path)

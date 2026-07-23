@@ -98,6 +98,43 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(uiState.devShowDiagnostics, true);
   assert.equal(calls.length, callsBeforeDiagnosticsToggle);
 
+  uiState.welcomeModalVisible = false;
+  uiState.pendingChoice = { cardId: "STALE", choiceId: "choice-1" };
+  uiState.pendingAdvanceState = { ...uiState.state, day: 2 };
+  uiState.modalVisible = true;
+  uiState.summaryAnimationKey = "stale-summary";
+  uiState.dayCycleProgress = 75;
+  nextPayload = {
+    ...uiState.state,
+    day: 5,
+    currentDate: "July 5",
+    gameOver: true,
+    decisions: [],
+    developer: {
+      generation: {},
+      runState: { inDecisionWeb: false, canSkipToEnd: false, canSkipToDay: false },
+    },
+    finalReveal: {
+      player: { completion: "July 5", completionDay: 5, finalScore: 50, unfinishedJobDays: 20 },
+      automated: { completion: "July 4", completionDay: 4, finalScore: 60, unfinishedJobDays: 18 },
+      completionHistory: { decisionPoints: [] },
+      review: { outcome: "behind", reasons: ["ECHO finished first."] },
+    },
+  };
+  await dom.element("devSkipToEndBtn").listeners.get("click")[0]();
+  assert.equal(calls.at(-1).path, "/api/dev/skip");
+  assert.deepEqual(JSON.parse(calls.at(-1).options.body), {
+    strategy: "echo",
+    targetDay: null,
+  });
+  assert.equal(uiState.state.day, 5);
+  assert.equal(uiState.pendingChoice, null);
+  assert.equal(uiState.pendingAdvanceState, null);
+  assert.equal(uiState.modalVisible, false);
+  assert.equal(uiState.summaryAnimationKey, null);
+  assert.equal(uiState.dayCycleProgress, 0);
+  assert.equal(uiState.devRequestInFlight, false);
+
   uiState.newRunModalVisible = true;
   nextError = "new run failed";
   await window.startNewRun();

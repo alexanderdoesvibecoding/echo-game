@@ -111,6 +111,20 @@ class GameRequestHandler(BaseHTTPRequestHandler):
                 )
             elif parsed.path == "/api/advance":
                 self._send_json(self.session_store.advance_payload())
+            elif parsed.path == "/api/dev/skip":
+                if not self.session_store.dev_mode:
+                    self._send_json(
+                        {"error": "Not found"},
+                        HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                data = self._read_json()
+                self._send_json(
+                    self.session_store.skip_payload(
+                        strategy=data.get("strategy"),
+                        target_day=data.get("targetDay"),
+                    )
+                )
             else:
                 self._send_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
         except ValueError as exc:

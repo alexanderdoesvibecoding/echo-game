@@ -5,6 +5,11 @@ from unittest.mock import patch
 
 import pytest
 
+from echo_adventure.api.automation import (
+    AutomationContext,
+    select_preplanned_choice,
+    select_runtime_choice,
+)
 from echo_adventure.decision_web import (
     _JOB_TARGET_SCHEDULE_LENGTH,
     _JOB_TARGET_WINDOW_PATTERN,
@@ -14,6 +19,7 @@ from echo_adventure.decision_web import (
     DecisionWebGenerationTimeout,
     DecisionWebNode,
     DecisionWebState,
+    DecisionWebTransition,
     generate_decision_web,
 )
 from echo_adventure.api.developer import (
@@ -111,6 +117,82 @@ def test_echo_choice_has_a_stable_tiebreak() -> None:
         make_choice("choice-2", changes={}, score=5),
     ]
     assert select_echo_choice_for_state(state, outcome_choices).id == "choice-1"
+
+    context = AutomationContext(seed=123, start_token="same-start")
+    variable_card = make_card(*choices, echo_choice_id="choice-2")
+    assert select_runtime_choice(state, variable_card, "first", context).id == "choice-1"
+    assert select_runtime_choice(state, variable_card, "last", context).id == "choice-3"
+    assert (
+        select_runtime_choice(state, variable_card, "random", context).id
+        == select_runtime_choice(state, variable_card, "random", context).id
+    )
+
+    one_job_state = initialize_state(scenario_from_durations(3))
+    unsafe_delay = make_choice(
+        "choice-1",
+        changes={"JOB-01": 1},
+        score=-10,
+    )
+    safe_hold = make_choice("choice-2", changes={}, score=10)
+    safety_card = make_card(unsafe_delay, safe_hold)
+    assert (
+        select_runtime_choice(
+            one_job_state,
+            safety_card,
+            "worst",
+            context,
+        ).id
+        == "choice-2"
+    )
+
+    late_high_score = make_choice("choice-1", score=5)
+    early_low_score = make_choice("choice-2", score=-5)
+    late_low_score = make_choice("choice-3", score=-1)
+    root_card = make_card(late_high_score, early_low_score, late_low_score)
+    terminal_card = make_card(make_choice("choice-1"))
+    root = DecisionWebNode(
+        state=DecisionWebState(1, 0, (5,), 0),
+        card=root_card,
+        transitions={
+            "choice-1": DecisionWebTransition("NODE-LATE", False),
+            "choice-2": DecisionWebTransition("NODE-EARLY", False),
+            "choice-3": DecisionWebTransition("NODE-LATE", False),
+        },
+    )
+    late = DecisionWebNode(
+        state=DecisionWebState(2, 0, (4,), 0),
+        card=terminal_card,
+        optimal_completion_day=5,
+        optimal_future_score=0,
+    )
+    early = DecisionWebNode(
+        state=DecisionWebState(2, 0, (3,), 0),
+        card=terminal_card,
+        optimal_completion_day=3,
+        optimal_future_score=-20,
+    )
+    selection_web = DecisionWeb(
+        root_node_id="NODE-ROOT",
+        nodes={
+            "NODE-ROOT": root,
+            "NODE-LATE": late,
+            "NODE-EARLY": early,
+        },
+        question_counts={1: 1},
+        optimal_completion_day=3,
+        optimal_unfinished_job_days=0,
+        generation_attempt=0,
+    )
+    assert (
+        select_preplanned_choice(
+            selection_web,
+            "NODE-ROOT",
+            "worst",
+            context,
+            max_campaign_day=8,
+        ).id
+        == "choice-3"
+    )
 
 
 def test_apply_choice_changes_only_unfinished_known_jobs_and_records_score() -> None:
