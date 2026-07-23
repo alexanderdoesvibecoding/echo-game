@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 
 import pytest
 
+from echo_adventure.api import server as server_module
 from echo_adventure.api import session as session_module
 from echo_adventure.api.payloads import _echo_comparison_state
 from echo_adventure.api.server import GameRequestHandler, STATIC_ASSETS, _parse_optional_seed
@@ -69,6 +70,17 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
     assert len(payload["livePuzzle"]["tiles"]) == 3
     assert set(payload["timelines"]) == {"player", "echo"}
     assert payload["lastSummary"] is None
+    assert "developer" not in payload
+
+    dev_session = session_module.GameSession(seed=404, dev_mode=True)
+    assert dev_session.state_payload()["developer"] == {
+        "generation": {},
+        "runState": {
+            "inDecisionWeb": True,
+            "canSkipToEnd": True,
+            "canSkipToDay": True,
+        },
+    }
 
     real_generate_decision_web = session_module.generate_decision_web
     generation_calls: list[tuple[int, float | None]] = []
@@ -454,7 +466,9 @@ def test_timeline_stops_rescaling_after_echo_finishes(monkeypatch: pytest.Monkey
 
 def test_session_store_serializes_duplicate_concurrent_choices(monkeypatch: pytest.MonkeyPatch) -> None:
     install_fast_session_config(monkeypatch)
-    store = session_module.SessionStore(seed=414)
+    store = session_module.SessionStore(seed=414, dev_mode=True)
+    assert store.dev_mode is True
+    assert store.session.dev_mode is True
     card = store.session.current_cards[0]
     choice = card.choices[0]
     barrier = threading.Barrier(2)
@@ -477,6 +491,11 @@ def test_session_store_serializes_duplicate_concurrent_choices(monkeypatch: pyte
     assert [kind for kind, _ in results].count("ok") == 1
     assert [kind for kind, _ in results].count("error") == 1
     assert len(store.session.player_state.decision_history) == 1
+
+    replacement = store.new_session_payload(seed=415)
+    assert store.session.seed == 415
+    assert store.session.dev_mode is True
+    assert "developer" in replacement
 
 
 @pytest.mark.parametrize("value, expected", [(None, None), ("", None), (" 007 ", 7), (42, 42), (-2, -2)])
@@ -525,7 +544,9 @@ def dispatch(handler: HandlerHarness) -> None:
         handler.do_POST()
 
 
-def test_request_handler_routes_state_actions_html_and_not_found() -> None:
+def test_request_handler_routes_state_actions_html_and_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     class FakeStore:
         def state_payload(self):
             return {"route": "state"}
@@ -545,6 +566,7 @@ def test_request_handler_routes_state_actions_html_and_not_found() -> None:
         (Handler("POST", "/api/new", {"seed": "12"}), 200, {"route": "new", "seed": 12}),
         (Handler("POST", "/api/choice", {"cardId": "C", "choiceId": "A"}), 200, {"route": "choice", "ids": ["C", "A"]}),
         (Handler("POST", "/api/advance", {}), 200, {"route": "advance"}),
+        (Handler("POST", "/api/dev/skip", {}), 404, {"error": "Not found"}),
         (Handler("GET", "/missing"), 404, {"error": "Not found"}),
     ]
     for handler, status, payload in cases:
@@ -557,6 +579,24 @@ def test_request_handler_routes_state_actions_html_and_not_found() -> None:
     assert root.response_status == 200
     assert root.response_headers["content-type"].startswith("text/html")
     assert b"/ui/app.js" in root.wfile.getvalue()
+
+    run_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        server_module,
+        "run_ui_server",
+        lambda **kwargs: run_calls.append(kwargs),
+    )
+    server_module.main(
+        ["--dev", "--seed", "12345", "--host", "localhost", "--port", "9000"]
+    )
+    assert run_calls == [
+        {
+            "seed": 12345,
+            "host": "localhost",
+            "port": 9000,
+            "dev_mode": True,
+        }
+    ]
 
 
 def test_request_handler_reports_bad_input_and_serves_declared_static_assets() -> None:

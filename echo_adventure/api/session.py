@@ -26,8 +26,9 @@ _RANDOM_SEED_WEB_TIMEOUT_SECONDS = 15.0
 
 
 class GameSession(PayloadMixin, ReviewMixin):
-    def __init__(self, seed: int | None = None) -> None:
+    def __init__(self, seed: int | None = None, dev_mode: bool = False) -> None:
         self.lock = threading.RLock()
+        self.dev_mode = dev_mode
         while True:
             self.seed = resolve_seed(seed)
             self.config = GameConfig(seed=self.seed)
@@ -365,9 +366,10 @@ class GameSession(PayloadMixin, ReviewMixin):
 
 
 class SessionStore:
-    def __init__(self, seed: int | None = None) -> None:
+    def __init__(self, seed: int | None = None, dev_mode: bool = False) -> None:
         self.lock = threading.RLock()
-        self.session = GameSession(seed=seed)
+        self.dev_mode = dev_mode
+        self.session = GameSession(seed=seed, dev_mode=self.dev_mode)
 
     def state_payload(self) -> dict[str, Any]:
         with self.lock:
@@ -375,7 +377,7 @@ class SessionStore:
 
     def new_session_payload(self, seed: int | None = None) -> dict[str, Any]:
         with self.lock:
-            self.session = GameSession(seed=seed)
+            self.session = GameSession(seed=seed, dev_mode=self.dev_mode)
             return self.session.state_payload()
 
     def choice_payload(self, card_id: str, choice_id: str) -> dict[str, Any]:

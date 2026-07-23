@@ -54,6 +54,20 @@ class PayloadMixin:
             if self._game_over():
                 self._finish_automated()
                 payload["finalReveal"] = self._final_payload()
+            if self.dev_mode:
+                in_decision_web = (
+                    not self._game_over()
+                    and not self.player_in_overtime
+                    and not self.player_final_assembly_started
+                )
+                payload["developer"] = {
+                    "generation": {},
+                    "runState": {
+                        "inDecisionWeb": in_decision_web,
+                        "canSkipToEnd": not self._game_over(),
+                        "canSkipToDay": in_decision_web,
+                    },
+                }
             return payload
 
     def _final_assembly_payload(self) -> dict[str, Any] | None:

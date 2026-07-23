@@ -27,6 +27,19 @@ python3 -m echo_adventure --seed 12345
 
 Explicit replay seeds are never substituted or time-limited, so the same requested seed continues to produce the same complete scenario and decision web.
 
+To enable the local developer experience, add `--dev`. It can be combined
+with an explicit seed:
+
+```bash
+python3 -m echo_adventure --dev
+python3 -m echo_adventure --dev --seed 12345
+```
+
+Developer mode is fixed for the lifetime of the server, including runs started
+through the new-game action. Developer metadata and controls are omitted from
+ordinary runs, and developer-only API routes return `404 Not Found` unless the
+server was started with `--dev`.
+
 The installed console entry point accepts the same options:
 
 ```bash
@@ -186,7 +199,10 @@ The browser uses a small local JSON API served from the same process.
 | `POST` | `/api/choice`  | Apply the player's `cardId` and `choiceId`, move to the preplanned successor, and advance ECHO through the matching daily slot. |
 | `POST` | `/api/advance` | Advance one workday in each active simulation after all daily questions are answered.                                           |
 
-There is no shift endpoint.
+When developer mode is active, state responses additionally contain a
+top-level `developer` object with generation metadata and state-aware action
+availability. Standard-mode responses omit this object. There is no shift
+endpoint.
 
 ## Use the simulation directly
 

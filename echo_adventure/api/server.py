@@ -159,7 +159,12 @@ class GameRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def run_ui_server(seed: int | None = None, host: str = "127.0.0.1", port: int = 8765) -> None:
+def run_ui_server(
+    seed: int | None = None,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    dev_mode: bool = False,
+) -> None:
     """Start the local browser UI server."""
     # A fresh handler subclass lets us attach a mutable class-level session owner
     # without modifying BaseHTTPRequestHandler itself.
@@ -168,7 +173,7 @@ def run_ui_server(seed: int | None = None, host: str = "127.0.0.1", port: int = 
     interrupted = False
     try:
         with _initialization_status():
-            handler.session_store = SessionStore(seed=seed)
+            handler.session_store = SessionStore(seed=seed, dev_mode=dev_mode)
         server = ThreadingHTTPServer((host, port), handler)
         url = f"http://{host}:{port}"
         print(f"ECHO Adventure UI running at {url}")
@@ -188,10 +193,16 @@ def main(argv: list[str] | None = None) -> None:
     """CLI entry point for running only the browser UI server."""
     parser = argparse.ArgumentParser(description="Run the local ECHO Adventure browser UI.")
     parser.add_argument("--seed", type=int, help="Run a reproducible scenario seed.")
+    parser.add_argument("--dev", action="store_true", help="Enable local developer mode.")
     parser.add_argument("--host", default="127.0.0.1", help="Host for the local UI server.")
     parser.add_argument("--port", type=int, default=8765, help="Port for the local UI server.")
     args = parser.parse_args(argv)
-    run_ui_server(seed=args.seed, host=args.host, port=args.port)
+    run_ui_server(
+        seed=args.seed,
+        host=args.host,
+        port=args.port,
+        dev_mode=args.dev,
+    )
 
 
 def _parse_optional_seed(value: Any) -> int | None:
