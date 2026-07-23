@@ -1847,7 +1847,6 @@ html[data-theme="dark"] #closeWelcomeBtn {
   background: color-mix(in srgb, var(--red) 18%, var(--panel));
   color: var(--red);
 }
-.decision-generated-by,
 .decision-diagnostic-follow-up {
   display: grid;
   gap: 4px;
@@ -1857,10 +1856,14 @@ html[data-theme="dark"] #closeWelcomeBtn {
   background: color-mix(in srgb, var(--panel) 72%, transparent);
   overflow-wrap: anywhere;
 }
-.decision-generated-by {
-  margin-top: 10px;
-  border-left: 4px solid var(--teal);
-  font-size: 12px;
+.decision-follow-up-direction {
+  display: grid;
+  gap: 4px;
+}
+.decision-follow-up-direction + .decision-follow-up-direction {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--teal) 30%, var(--line));
 }
 .decision-follow-up-variant-list,
 .decision-follow-up-variant-list ul {

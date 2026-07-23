@@ -141,7 +141,8 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
         follow_up_source_choice_id="choice-1",
         follow_up_source_choice_label="Recalibrate <now>",
     )
-    generated_by = dev_session._card_payload(source_card)["developer"]["generatedBy"]
+    source_payload = dev_session._card_payload(source_card)
+    generated_by = source_payload["developer"]["generatedBy"]
     assert generated_by == {
         "sourceDay": 1,
         "sourceDefinitionId": "calibration-drift",
@@ -156,6 +157,10 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
             ].name,
         },
     }
+    assert all(
+        "followUp" in choice["developer"]
+        for choice in source_payload["choices"]
+    )
     assert "developer" not in session._card_payload(source_card)
 
     real_generate_decision_web = session_module.generate_decision_web
