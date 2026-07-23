@@ -98,6 +98,16 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(dom.element("newRunError").textContent, "new run failed");
   assert.equal(dom.element("newRunError").classList.contains("hidden"), false);
 
+  uiState.newRunModalVisible = false;
+  nextError = "background new run failed";
+  await window.startNewRun();
+  assert.equal(dom.element("error").textContent, "background new run failed");
+  const callsBeforeLoadingGuard = calls.length;
+  uiState.newRunLoading = true;
+  await window.startNewRun();
+  assert.equal(calls.length, callsBeforeLoadingGuard);
+  uiState.newRunLoading = false;
+
   uiState.state = {
     ...initialState,
     decisionProgress: { completed: 0, total: 1 },
@@ -246,4 +256,46 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(dom.element("game-area").classList.contains("hidden"), true);
   assert.equal(dom.element("finalSection").classList.contains("hidden"), false);
   assert.equal(dom.element("dayBadge").textContent, "July 9");
+
+  const completedState = uiState.state;
+  window.commitAdvanceDay();
+  assert.equal(uiState.state, completedState);
+
+  uiState.state = {
+    ...initialState,
+    dayCycleDurationMs: 1,
+  };
+  uiState.welcomeModalVisible = false;
+  uiState.newRunModalVisible = false;
+  uiState.modalVisible = false;
+  uiState.pendingAdvanceState = null;
+  uiState.advanceRequestInFlight = false;
+  nextError = "advance failed";
+  resetDayCycle();
+  syncDayCycleForState();
+  dom.setNow(20);
+  dom.runInterval(uiState.dayCycleTimer);
+  await new Promise(resolve => globalThis.setTimeout(resolve, 0));
+  assert.equal(dom.element("error").textContent, "advance failed");
+  assert.equal(uiState.dayCycleAdvancing, false);
+});
+
+
+test("document clicks close settings and dismissible overlays", () => {
+  const settingsWrap = dom.element("settingsWrap");
+  settingsWrap.classList.add("settings-wrap");
+  const outside = dom.element("outside");
+  uiState.settingsMenuOpen = true;
+  uiState.welcomeModalVisible = true;
+  uiState.newRunModalVisible = true;
+  uiState.newRunLoading = false;
+
+  dom.dispatchDocument("click", { target: outside });
+  assert.equal(uiState.settingsMenuOpen, false);
+
+  dom.dispatchDocument("click", { target: dom.element("welcomeModalOverlay") });
+  assert.equal(uiState.welcomeModalVisible, false);
+
+  dom.dispatchDocument("click", { target: dom.element("newRunModalOverlay") });
+  assert.equal(uiState.newRunModalVisible, false);
 });

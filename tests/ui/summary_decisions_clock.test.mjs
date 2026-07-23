@@ -112,6 +112,44 @@ test("submarine puzzle renders assembled, waiting, and accessible image slices",
   assert.doesNotMatch(markup, /\stitle=/);
 });
 
+
+test("submarine puzzle handles empty data and assembled-only animation options", () => {
+  assert.equal(renderSubmarinePuzzle(null), "");
+  assert.equal(renderSubmarinePuzzle({ tiles: [] }), "");
+
+  const markup = renderSubmarinePuzzle(puzzle, {
+    showUnplaced: false,
+    showCaption: false,
+    highlightNewlyPlaced: false,
+    animateNewlyPlaced: true,
+  });
+
+  assert.match(markup, /aria-label="Submarine puzzle showing assembled image sections"/);
+  assert.doesNotMatch(markup, /puzzle-caption/);
+  assert.doesNotMatch(markup, /puzzle-loose-row/);
+  assert.doesNotMatch(markup, /newly-placed/);
+  assert.doesNotMatch(markup, /move-into-place/);
+});
+
+
+test("waiting puzzle sections use a deterministic scrambled order", () => {
+  const waitingPuzzle = {
+    tiles: [
+      { label: "Job 1", name: "One", completed: false },
+      { label: "Job 2", name: "Two", completed: false },
+      { label: "Job 3", name: "Three", completed: false },
+      { label: "Job 4", name: "Four", completed: false },
+    ],
+  };
+
+  const first = renderSubmarinePuzzle(waitingPuzzle);
+  const second = renderSubmarinePuzzle(waitingPuzzle);
+
+  assert.equal(first, second);
+  assert.equal((first.match(/puzzle-image-slice unplaced/g) || []).length, 4);
+  assert.match(first, /--slice-count:4/);
+});
+
 test("summary renders the live assembly and current daily metrics", () => {
   dom.element("summarySection");
   dom.element("summaryGrid");
@@ -174,6 +212,65 @@ test("summary counters support integers, ratios, and descending values", () => {
   animateSummaryCounters(container, { duration: 0 });
   assert.equal(integer.textContent, "7");
   assert.equal(ratio.textContent, "3/6");
+});
+
+
+test("summary counters ignore invalid entries and modal resets when hidden", () => {
+  const invalid = {
+    dataset: {
+      summaryCountFrom: "not-a-number",
+      summaryCountTo: "7",
+      summaryCountDecimals: "0",
+      summaryCountSuffix: "",
+    },
+    textContent: "unchanged",
+  };
+  animateSummaryCounters({
+    querySelectorAll() {
+      return [invalid];
+    },
+  }, { duration: 25 });
+  assert.equal(invalid.textContent, "unchanged");
+
+  const overlay = dom.element("summaryModalOverlay");
+  dom.element("summaryModalBody");
+  overlay.classList.add("active");
+  uiState.state = statePayload({ lastSummary: null });
+  uiState.modalVisible = true;
+  uiState.summaryAnimationKey = "old-summary";
+
+  renderSummaryModal();
+
+  assert.equal(overlay.classList.contains("active"), false);
+  assert.equal(uiState.summaryAnimationKey, null);
+});
+
+
+test("summary counters animate through intermediate and final values", () => {
+  const counter = {
+    dataset: {
+      summaryCountFrom: "0",
+      summaryCountTo: "10",
+      summaryCountDecimals: "1",
+      summaryCountSuffix: "/10",
+    },
+    textContent: "",
+  };
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const timestamps = [25, 100];
+  globalThis.requestAnimationFrame = callback => callback(timestamps.shift());
+  try {
+    animateSummaryCounters({
+      querySelectorAll() {
+        return [counter];
+      },
+    }, { duration: 100 });
+  } finally {
+    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+  }
+
+  assert.equal(counter.textContent, "10.0/10");
+  assert.equal(timestamps.length, 0);
 });
 
 test("day clock creates deterministic decision thresholds and blocks at the right states", () => {
@@ -239,6 +336,58 @@ test("day clock markup and timeline updates expose both player and ECHO progress
   assert.equal(playerRow.querySelector(".timeline-submarine").style.left, "25%");
   assert.equal(playerRow.querySelector(".completion-timeline-fill").style.width, "25%");
   assert.match(playerRow.getAttribute("aria-valuetext"), /Projected completion: July 4/);
+});
+
+
+test("timeline clamps invalid progress and updates an existing completion label", () => {
+  uiState.state = statePayload({
+    currentDate: "",
+    timelines: {
+      player: {
+        progressPercent: 140,
+        displayCompletion: "July 4",
+        projectedCompletion: "July 5",
+        completion: "July 4",
+      },
+      echo: {
+        progressPercent: "invalid",
+        displayCompletion: "",
+        projectedCompletion: "",
+        completion: null,
+      },
+    },
+  });
+  const root = dom.createElement("root");
+  const clock = dom.createElement("clock");
+  root.setQuery("[data-day-clock]", clock);
+  for (const actor of ["player", "echo"]) {
+    const row = dom.createElement(actor);
+    row.setQuery(".timeline-submarine", dom.createElement(`${actor}-submarine`));
+    row.setQuery(".completion-timeline-fill", dom.createElement(`${actor}-fill`));
+    row.setQuery("[data-timeline-start]", dom.createElement(`${actor}-start`));
+    row.setQuery("[data-timeline-end]", dom.createElement(`${actor}-end`));
+    clock.setQuery(`[data-timeline-actor="${actor}"]`, row);
+  }
+
+  updateDayClock(root);
+
+  const playerRow = clock.querySelector('[data-timeline-actor="player"]');
+  const echoRow = clock.querySelector('[data-timeline-actor="echo"]');
+  assert.equal(playerRow.getAttribute("aria-valuenow"), "100");
+  assert.match(playerRow.getAttribute("aria-valuetext"), /Actual completion: July 4/);
+  assert.equal(echoRow.getAttribute("aria-valuenow"), "0");
+  assert.match(echoRow.getAttribute("aria-valuetext"), /July 1 to July 1/);
+
+  uiState.state.timelines.player.displayCompletion = "July 6";
+  updateDayClock(root);
+  assert.equal(
+    playerRow.querySelector("[data-timeline-end]").textContent,
+    "July 6",
+  );
+  assert.equal(
+    playerRow.querySelector("[data-timeline-end]").classList.contains("is-updating"),
+    false,
+  );
 });
 
 test("decision queue reveals due choices, tracks selection, and submits the selected pair", async () => {
@@ -307,6 +456,15 @@ test("decision queue reveals due choices, tracks selection, and submits the sele
   assert.match(body.innerHTML, /Final assembly is locked/);
   assert.match(body.innerHTML, /Pressure Hull &lt;Final&gt;/);
   assert.match(body.innerHTML, /remains a normal job/);
+
+  uiState.state = statePayload({
+    decisionProgress: { completed: 0, total: 0 },
+    decisions: [],
+    finalAssembly: { active: true, status: "planning", jobName: "Sonar <Final>" },
+  });
+  renderDecisionQueue();
+  assert.match(body.innerHTML, /Final Assembly Lock-In is ready/);
+  assert.match(body.innerHTML, /Sonar &lt;Final&gt;/);
 });
 
 test("inline decision area contains the shared player and ECHO clock", () => {

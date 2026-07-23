@@ -94,6 +94,42 @@ test("daily score groups begin at neutral score and aggregate all score events b
   assert.equal(groups[2].echoCumulativeScore, 51.5);
 });
 
+
+test("daily score groups derive missing deltas and normalize sparse decisions", () => {
+  const groups = buildDailyDecisionGroups([
+    {
+      day: "not-a-day",
+      playerDecision: {
+        cumulativeScore: 55,
+        questionId: "PLAYER-1",
+        questionText: "Different detail",
+      },
+      echoDecision: null,
+    },
+    {
+      day: 2,
+      dateLabel: "",
+      playerDecision: null,
+      echoDecision: {
+        cumulativeScore: 47.5,
+        questionTitle: "ECHO decision",
+      },
+    },
+  ]);
+
+  assert.equal(groups[1].day, 1);
+  assert.equal(groups[1].dateLabel, "Day 1");
+  assert.equal(groups[1].playerDailyDelta, 5);
+  assert.equal(groups[1].echoDailyDelta, 0);
+  assert.equal(groups[1].playerDecisions[0].questionTitle, "PLAYER-1");
+  assert.equal(groups[1].playerDecisions[0].choice, "-");
+  assert.equal(groups[1].echoDecisionCount, 0);
+  assert.equal(groups[2].dateLabel, "Day 2");
+  assert.equal(groups[2].playerDecisionCount, 0);
+  assert.equal(groups[2].echoDailyDelta, -2.5);
+  assert.equal(groups[2].echoDecisions[0].position, 2);
+});
+
 test("decision chart tooltip safely renders, locks, and closes", () => {
   const tooltip = dom.element("decisionChartTooltip");
   tooltip.offsetWidth = 300;
@@ -166,8 +202,74 @@ test("decision chart tooltip safely renders, locks, and closes", () => {
   assert.equal(tooltip.classList.contains("active"), false);
 });
 
+
+test("decision chart document handlers support mouse, keyboard, escape, and outside close", () => {
+  const tooltip = dom.element("decisionChartTooltip");
+  const marker = dom.element("interactive-marker");
+  marker.classList.add("chart-hover-zone");
+  marker.getBoundingClientRect = () => ({
+    left: 1000,
+    top: 10,
+    bottom: 20,
+    width: 10,
+    height: 10,
+  });
+  marker.dataset = {
+    dayKey: "2",
+    dateLabel: "July 2",
+    playerDecisionCount: "1",
+    echoDecisionCount: "0",
+    playerDecisions: JSON.stringify([{
+      questionTitle: "Fallback preference",
+      choice: "Continue",
+      echoPreferredChoice: "Continue",
+      alignedWithEcho: true,
+      echoSituationMatches: false,
+      echoEventMatches: true,
+    }]),
+    echoDecisions: "[]",
+  };
+  const event = {
+    target: marker,
+    preventDefault() {},
+    stopPropagation() {},
+  };
+
+  dom.dispatchDocument("click", event);
+  assert.equal(tooltip.classList.contains("active"), true);
+  assert.equal(marker.getAttribute("aria-expanded"), "true");
+  assert.match(tooltip.innerHTML, /Shared event · preference matched/);
+  assert.equal(tooltip.style.left, "448px");
+  assert.equal(tooltip.style.top, "38px");
+
+  dom.dispatchDocument("click", {
+    target: dom.element("outside-chart"),
+    preventDefault() {},
+    stopPropagation() {},
+  });
+  assert.equal(tooltip.classList.contains("active"), false);
+
+  dom.dispatchDocument("keydown", { ...event, key: "Enter" });
+  assert.equal(tooltip.classList.contains("active"), true);
+  const closeButton = dom.element("chart-close");
+  closeButton.dataset.chartTooltipClose = "";
+  dom.dispatchDocument("click", {
+    target: closeButton,
+    preventDefault() {},
+    stopPropagation() {},
+  });
+  assert.equal(tooltip.classList.contains("active"), false);
+  assert.equal(marker.focused, true);
+
+  dom.dispatchDocument("keydown", { ...event, key: " " });
+  assert.equal(tooltip.classList.contains("active"), true);
+  dom.dispatchDocument("keydown", { ...event, target: dom.element("key-target"), key: "Escape" });
+  assert.equal(tooltip.classList.contains("active"), false);
+  assert.equal(marker.focused, true);
+});
+
 test("final reveal renders comparison metrics, score chart, and escaped review notes", () => {
-  for (const id of ["finalSection", "finalMetricsBar", "finalCompletionChart", "finalNotes"]) dom.element(id);
+  for (const id of ["finalSection", "finalMetricsBar", "finalCompletionChart", "finalNotesTitle", "finalNotes"]) dom.element(id);
   uiState.state = {
     finalReveal: {
       player: { completion: "July 4", completionDay: 4, finalScore: 2, unfinishedJobDays: 48 },
@@ -182,7 +284,17 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
           },
         ],
       },
-      review: { reasons: ["ECHO finished <first>."] },
+      review: {
+        outcome: "behind",
+        reasons: [
+          "ECHO finished <first>.",
+          "Second driver.",
+          "Third driver.",
+          "Fourth driver.",
+          "Fifth driver.",
+          "Sixth driver should not render.",
+        ],
+      },
     },
   };
 
@@ -205,7 +317,14 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
   assert.doesNotMatch(dom.element("finalMetricsBar").innerHTML, /Day [34]/);
   assert.match(dom.element("finalCompletionChart").innerHTML, /Your score/);
   assert.match(dom.element("finalCompletionChart").innerHTML, /ECHO score/);
-  assert.equal(dom.element("finalNotes").innerHTML, "<li>ECHO finished &lt;first&gt;.</li>");
+  assert.equal(dom.element("finalNotesTitle").textContent, "Where It Went Wrong");
+  assert.equal((dom.element("finalNotes").innerHTML.match(/<li>/g) || []).length, 5);
+  assert.match(dom.element("finalNotes").innerHTML, /ECHO finished &lt;first&gt;\./);
+  assert.doesNotMatch(dom.element("finalNotes").innerHTML, /Sixth driver/);
+
+  uiState.state.finalReveal.review.outcome = "tied";
+  renderFinal();
+  assert.equal(dom.element("finalNotesTitle").textContent, "Why It Was a Tie");
 });
 
 test("welcome, settings, new-run, and developer controls reflect browser-local state", () => {
@@ -364,6 +483,118 @@ test("final view hides without a reveal and tooltip tolerates invalid event data
   showDecisionChartTooltip({ preventDefault() {}, stopPropagation() {} }, marker);
   assert.match(dom.element("decisionChartTooltip").innerHTML, /You had no decisions on this day/);
   assert.equal(dom.element("decisionChartTooltip").classList.contains("active"), true);
+});
+
+
+test("final reveal supplies safe defaults when history and review notes are absent", () => {
+  for (const id of [
+    "finalSection", "finalOutcomeHeadline", "finalMetricsBar", "finalCompletionChart",
+    "finalNotesTitle", "finalNotes",
+  ]) dom.element(id);
+  uiState.state = {
+    finalReveal: {
+      player: {
+        completion: null,
+        completionDay: null,
+        finalScore: 0,
+        unfinishedJobDays: 0,
+      },
+      automated: {
+        completion: null,
+        completionDay: null,
+        finalScore: 0,
+        unfinishedJobDays: 0,
+      },
+      completionHistory: null,
+    },
+  };
+
+  renderFinal();
+
+  assert.equal(
+    dom.element("finalOutcomeHeadline").textContent,
+    "Final player and ECHO results",
+  );
+  assert.match(dom.element("finalOutcomeHeadline").className, /final-outcome-behind/);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /final-metric-warn/);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /final-metric-good/);
+  assert.match(
+    dom.element("finalCompletionChart").innerHTML,
+    /No decision score history recorded/,
+  );
+  assert.equal(
+    dom.element("finalNotes").innerHTML,
+    "<li>No final review notes recorded.</li>",
+  );
+});
+
+
+test("developer skip controls filter days and serialize asynchronous requests", async () => {
+  for (const id of [
+    "devPanel", "devPanelToggle", "devPanelBody", "devRunSeed", "devRunDay",
+    "devRunPhase", "devBusyState", "devModalNotice", "devActiveControls",
+    "devGameOverControls", "devDiagnosticsRow", "devSkipDayRow", "devSkipEndRow",
+    "devInstantProgression", "devShowDiagnostics", "devStrategy", "devTargetDay",
+    "devSkipToDayBtn", "devSkipToEndBtn", "devNewGameBtn",
+  ]) dom.element(id);
+  const requests = [];
+  let releaseRequest;
+  const pendingRequest = new Promise(resolve => {
+    releaseRequest = resolve;
+  });
+  configureDevTools({
+    skipToDay: async payload => {
+      requests.push(["day", payload]);
+      await pendingRequest;
+    },
+    skipToEnd: async payload => {
+      requests.push(["end", payload]);
+    },
+  });
+  initDevTools();
+  uiState.state = {
+    seed: 701,
+    day: 2,
+    gameOver: false,
+    decisions: [],
+    developer: {
+      runState: {
+        inDecisionWeb: true,
+        canSkipToDay: true,
+        canSkipToEnd: true,
+        reachableDays: [1, 3, "4", 5],
+      },
+    },
+  };
+
+  renderDevTools();
+
+  assert.match(dom.element("devTargetDay").innerHTML, /Day 3/);
+  assert.match(dom.element("devTargetDay").innerHTML, /Day 5/);
+  assert.doesNotMatch(dom.element("devTargetDay").innerHTML, /Day 1/);
+  assert.doesNotMatch(dom.element("devTargetDay").innerHTML, /Day 4/);
+  assert.equal(dom.element("devTargetDay").value, "3");
+  assert.equal(dom.element("devSkipToDayBtn").disabled, false);
+  assert.equal(dom.element("devSkipToEndBtn").disabled, false);
+
+  dom.element("devTargetDay").value = "5";
+  dom.element("devSkipToDayBtn").listeners.get("click")[0]();
+  dom.element("devSkipToEndBtn").listeners.get("click")[0]();
+  assert.equal(uiState.devRequestInFlight, true);
+  assert.equal(dom.element("devSkipToDayBtn").disabled, true);
+  assert.deepEqual(requests, [["day", { strategy: "echo", targetDay: 5 }]]);
+
+  releaseRequest();
+  await pendingRequest;
+  await new Promise(resolve => globalThis.setTimeout(resolve, 0));
+  assert.equal(uiState.devRequestInFlight, false);
+
+  dom.element("devSkipToEndBtn").listeners.get("click")[0]();
+  await new Promise(resolve => globalThis.setTimeout(resolve, 0));
+  assert.deepEqual(requests.at(-1), [
+    "end",
+    { strategy: "echo", targetDay: null },
+  ]);
 });
 
 test("new-run loading exposes busy state and disables every modal action", () => {

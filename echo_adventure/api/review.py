@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..models import DecisionRecord
-from ..scoring import public_score
+from ..scoring import public_score, public_score_delta
 
 
 class ReviewMixin:
@@ -105,14 +105,14 @@ class ReviewMixin:
         echo_day: int,
         aligned: int,
     ) -> list[str]:
-        """Describe at most two evidence-backed drivers beneath the headline."""
+        """Combine up to two turning points with broader outcome evidence, capped at five."""
         if identical_optimal_path:
-            score = public_score(self.player_state.decision_score)
-            return [
-                f"You matched ECHO on all {len(player_records)} questions; both routes "
-                f"finished on day {player_day} with a {score:.0f}/100 decision score and "
-                f"{self.player_state.cumulative_unfinished_job_days} cumulative unfinished job-days."
-            ]
+            return self._outcome_context_reasons(
+                player_day=player_day,
+                echo_day=echo_day,
+                aligned=aligned,
+                comparable_record_count=comparable_record_count,
+            )
 
         question_number_by_day: dict[int, int] = {}
         drivers: list[tuple[float, float, int, DecisionRecord, int]] = []
@@ -142,23 +142,42 @@ class ReviewMixin:
             )
 
         drivers.sort(reverse=True, key=lambda item: item[:3])
-        reasons = [
+        turning_points = [
             self._decision_driver_sentence(record, question_number)
             for _, _, _, record, question_number in drivers[:2]
         ]
-        if reasons:
-            return reasons
-
-        overtime_records = [
-            record for record in player_records if record.day >= self.config.max_campaign_day
-        ]
-        if overtime_records:
-            first_overtime_day = overtime_records[0].day
-            return [
-                f"Your route required {len(overtime_records)} overtime question(s), beginning on day {first_overtime_day}, after ECHO finished on day {echo_day}."
+        if not turning_points:
+            overtime_records = [
+                record for record in player_records if record.day >= self.config.max_campaign_day
             ]
+            if overtime_records:
+                first_overtime_day = overtime_records[0].day
+                turning_points = [
+                    f"Your route required {len(overtime_records)} overtime question(s), beginning on day {first_overtime_day}, after ECHO finished on day {echo_day}."
+                ]
+
+        context = self._outcome_context_reasons(
+            player_day=player_day,
+            echo_day=echo_day,
+            aligned=aligned,
+            comparable_record_count=comparable_record_count,
+        )
+        return [*turning_points, *context][:5]
+
+    def _outcome_context_reasons(
+        self,
+        *,
+        player_day: int,
+        echo_day: int,
+        aligned: int,
+        comparable_record_count: int,
+    ) -> list[str]:
+        player_score = public_score(self.player_state.decision_score)
+        echo_score = public_score(self.automated_state.decision_score)
         return [
-            f"You matched ECHO on {aligned} of {comparable_record_count} shared questions but finished on day {player_day}, after ECHO's day {echo_day} finish."
+            f"Completion timing — you finished on day {player_day}; ECHO finished on day {echo_day}.",
+            f"Choice alignment — you matched ECHO's preferred response on {aligned} of {comparable_record_count} shared questions.",
+            f"Final totals — your decision score was {player_score:.2f}/100 versus ECHO's {echo_score:.2f}/100; your cumulative unfinished work was {self.player_state.cumulative_unfinished_job_days} job-days versus ECHO's {self.automated_state.cumulative_unfinished_job_days}.",
         ]
 
     def _decision_driver_sentence(
@@ -187,9 +206,15 @@ class ReviewMixin:
             record.applied_day_changes,
             self.player_state.jobs,
         )
+        score_impact = public_score_delta(
+            record.cumulative_score - record.score_delta,
+            record.cumulative_score,
+        )
         return (
-            f"On day {record.day}, question {question_number}, choosing “{record.choice_label}” "
-            f"instead of “{record.echo_choice_label}” {comparison}; it {effects}."
+            f"Turning point — on day {record.day}, question {question_number}, choosing “{record.choice_label}” "
+            f"instead of “{record.echo_choice_label}” {comparison}. "
+            f"Your choice changed your decision score by {score_impact:+.2f} points; "
+            f"it {effects}."
         )
 
 

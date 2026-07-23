@@ -24,8 +24,13 @@ from echo_adventure.decisions.cards import (
 )
 from echo_adventure.decisions.definitions import (
     BASE_DEFINITIONS,
+    C,
+    D,
     DEFINITIONS_BY_ID,
+    DECISION_CHOICE_ICON_KEYS,
+    F,
     FOLLOW_UP_DEFINITIONS,
+    R,
     SUPPORTED_CHOICE_ICON_KEYS,
 )
 from echo_adventure.decisions.effects import apply_choice
@@ -69,6 +74,88 @@ def test_catalog_is_large_unique_and_has_valid_choice_icons() -> None:
             icons = [choice.icon_key for choice in choices]
             assert len(icons) == len(set(icons))
             assert set(icons) <= SUPPORTED_CHOICE_ICON_KEYS
+
+
+def test_definition_helpers_build_followups_alternate_results_and_icons(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(
+        DECISION_CHOICE_ICON_KEYS,
+        "unit-definition",
+        ("route", "wait"),
+    )
+    follow_up = F("later-definition", probability=0.75, delay_days=2)
+    alternate = R(
+        "Alternate title",
+        "Alternate description",
+        C("Alternate first", score=0.5),
+        C("Alternate second", score=-0.5),
+    )
+
+    definition = D(
+        "unit-definition",
+        "Unit title",
+        "Unit description",
+        C("First", score=1.25, follow=(follow_up,)),
+        C("Second", score=-1.25),
+        is_follow_up=True,
+        shared=True,
+        card_follow=(follow_up,),
+        alternate_results=(alternate,),
+    )
+
+    assert definition.is_follow_up is True
+    assert definition.shared_across_routes is True
+    assert definition.unavoidable_follow_up_edges == (follow_up,)
+    assert definition.choices[0].follow_up_edges == (follow_up,)
+    assert [choice.icon_key for choice in definition.choices] == ["route", "wait"]
+    assert [choice.icon_key for choice in definition.alternate_results[0].choices] == [
+        "route",
+        "wait",
+    ]
+
+
+def test_definition_builder_rejects_invalid_icon_and_result_contracts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = C("First", score=1)
+    second = C("Second", score=-1)
+
+    with pytest.raises(ValueError, match="one icon key per choice"):
+        D("missing-icons", "Title", "Description", first, second)
+
+    monkeypatch.setitem(DECISION_CHOICE_ICON_KEYS, "duplicate-icons", ("route", "route"))
+    with pytest.raises(ValueError, match="cannot repeat"):
+        D("duplicate-icons", "Title", "Description", first, second)
+
+    monkeypatch.setitem(DECISION_CHOICE_ICON_KEYS, "unknown-icons", ("route", "not-supported"))
+    with pytest.raises(ValueError, match="unknown icon keys"):
+        D("unknown-icons", "Title", "Description", first, second)
+
+    monkeypatch.setitem(DECISION_CHOICE_ICON_KEYS, "base-result", ("route", "wait"))
+    alternate = R("Alternate", "Description", first, second)
+    with pytest.raises(ValueError, match="cannot vary a base-question result"):
+        D(
+            "base-result",
+            "Title",
+            "Description",
+            first,
+            second,
+            alternate_results=(alternate,),
+        )
+
+    monkeypatch.setitem(DECISION_CHOICE_ICON_KEYS, "result-count", ("route", "wait"))
+    short_alternate = R("Alternate", "Description", first)
+    with pytest.raises(ValueError, match="same choice count"):
+        D(
+            "result-count",
+            "Title",
+            "Description",
+            first,
+            second,
+            is_follow_up=True,
+            alternate_results=(short_alternate,),
+        )
 
 
 @pytest.mark.parametrize(
@@ -155,6 +242,51 @@ def test_apply_choice_schedules_each_valid_follow_up_at_most_once() -> None:
             source_choice_id="choice-1",
         )
     ]
+
+
+def test_apply_choice_clamps_follow_up_probabilities_to_never_or_always() -> None:
+    state = initialize_state(scenario_from_durations(3))
+    never = DecisionFollowUp("never-follow-up", probability=-10.0, delay_days=1)
+    guaranteed = DecisionFollowUp("guaranteed-follow-up", probability=10.0, delay_days=4)
+    choice = make_choice(
+        "choice-1",
+        changes={"JOB-01": 1},
+        follow_ups=(never, guaranteed),
+    )
+
+    apply_choice(state, make_card(choice), choice, actor="player")
+
+    assert [item.definition_id for item in state.pending_follow_ups] == [
+        "guaranteed-follow-up"
+    ]
+    assert state.pending_follow_ups[0].available_day == 5
+
+
+def test_player_only_choice_records_no_echo_comparison_or_follow_up_when_disabled() -> None:
+    state = initialize_state(scenario_from_durations(3))
+    follow_up = DecisionFollowUp("later", probability=1.0, delay_days=1)
+    choice = make_choice(
+        "choice-1",
+        changes={"JOB-01": -1},
+        score=1.0,
+        follow_ups=(follow_up,),
+    )
+    card = make_card(choice)
+    card.player_only = True
+
+    apply_choice(
+        state,
+        card,
+        choice,
+        actor="player",
+        schedule_follow_ups=False,
+    )
+
+    record = state.decision_history[0]
+    assert record.echo_choice_label is None
+    assert record.aligned_with_echo is None
+    assert record.applied_day_changes == {"JOB-01": -1}
+    assert state.pending_follow_ups == []
 
 
 def test_daily_card_generation_is_deterministic_varied_and_free_of_subjob_copy() -> None:
@@ -525,6 +657,23 @@ def test_decision_web_is_deterministic_and_every_node_is_fully_solved(solved_web
             node.optimal_future_unfinished_job_days,
             node.optimal_choice_id,
         )
+
+
+def test_decision_web_accessors_return_current_graph_members(solved_web_bundle) -> None:
+    _, _, web = solved_web_bundle
+    root = web.node(web.root_node_id)
+    choice_id = root.card.choices[0].id
+
+    assert web.node(web.root_node_id) is root
+    assert web.transition(web.root_node_id, choice_id) is root.transitions[choice_id]
+    assert web.question_count(root.state.day) == web.question_counts[root.state.day]
+
+    with pytest.raises(KeyError):
+        web.node("missing-node")
+    with pytest.raises(KeyError):
+        web.transition(web.root_node_id, "missing-choice")
+    with pytest.raises(KeyError):
+        web.question_count(10_000)
 
 
 def test_decision_web_detects_runtime_drift(solved_web_bundle) -> None:

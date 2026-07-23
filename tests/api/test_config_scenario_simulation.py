@@ -9,6 +9,7 @@ from echo_adventure.config import GameConfig, resolve_seed
 from echo_adventure.enums import JobStatus
 from echo_adventure.metrics import calculate_snapshot
 from echo_adventure.scenario_generator import _weighted_duration, generate_scenario, validate_scenario
+from echo_adventure.scoring import public_score, public_score_delta
 from echo_adventure.simulation import advance_day, complete_job, initialize_state
 
 from .helpers import scenario_from_durations, small_config
@@ -36,6 +37,16 @@ def test_calendar_labels_are_one_based_and_cross_month_boundaries() -> None:
     "overrides, message",
     [
         ({"job_count": 0}, "job_count must be at least 1"),
+        ({"min_job_duration_days": 0}, "min_job_duration_days must be at least 1"),
+        ({"max_job_duration_days": 0}, "max_job_duration_days must be at least 1"),
+        ({"min_decisions_per_day": 0}, "min_decisions_per_day must be at least 1"),
+        ({"max_decisions_per_day": 0}, "max_decisions_per_day must be at least 1"),
+        ({"max_campaign_day": 0}, "max_campaign_day must be at least 1"),
+        ({"day_cycle_duration_ms": 0}, "day_cycle_duration_ms must be at least 1"),
+        (
+            {"daily_summary_counter_duration_ms": 0},
+            "daily_summary_counter_duration_ms must be at least 1",
+        ),
         ({"min_job_duration_days": 5, "max_job_duration_days": 4}, "Minimum job duration"),
         ({"min_decisions_per_day": 3, "max_decisions_per_day": 2}, "Minimum daily decisions"),
         ({"max_job_duration_days": 9, "max_campaign_day": 8}, "Campaign horizon"),
@@ -55,6 +66,22 @@ def test_resolve_seed_preserves_explicit_values_and_uses_system_random() -> None
         system_random.return_value.randint.return_value = 456789
         assert resolve_seed(None) == 456789
         system_random.return_value.randint.assert_called_once_with(100_000, 999_999_999)
+
+
+def test_public_score_is_bounded_monotonic_symmetric_and_reports_exact_deltas() -> None:
+    raw_scores = [-1_000_000, -10, -2, 0, 2, 10, 1_000_000]
+    scores = [public_score(raw_score) for raw_score in raw_scores]
+
+    assert scores == sorted(scores)
+    assert scores[0] == 0.0
+    assert scores[-1] == 100.0
+    assert public_score(-10) == 25.0
+    assert public_score(0) == 50.0
+    assert public_score(10) == 75.0
+    assert public_score(-2) + public_score(2) == 100.0
+    assert public_score_delta(0, 2) == 8.33
+    assert public_score_delta(2, 0) == -8.33
+    assert public_score_delta(-2, 2) == 16.67
 
 
 def test_scenario_generation_is_deterministic_and_within_bounds() -> None:
@@ -102,6 +129,18 @@ def test_initialization_deep_copies_jobs_and_builds_initial_metrics() -> None:
     assert snapshot.jobs_remaining == 3
     assert snapshot.total_remaining_days == 104
     assert snapshot.projected_completion_day == 99
+
+
+def test_job_completion_property_and_incomplete_job_filter_follow_status() -> None:
+    state = initialize_state(scenario_from_durations(1, 2))
+
+    assert state.jobs["JOB-01"].is_complete is False
+    assert [job.id for job in state.incomplete_jobs()] == ["JOB-01", "JOB-02"]
+
+    complete_job(state, "JOB-01")
+
+    assert state.jobs["JOB-01"].is_complete is True
+    assert [job.id for job in state.incomplete_jobs()] == ["JOB-02"]
 
 
 def test_advance_day_ticks_every_unfinished_job_once_and_records_summary() -> None:
@@ -156,3 +195,17 @@ def test_snapshot_projection_uses_the_longest_unfinished_duration() -> None:
     final_job_snapshot = calculate_snapshot(state)
     assert final_job_snapshot.jobs_remaining == 1
     assert final_job_snapshot.projected_completion_day == 8
+
+
+def test_completed_snapshot_keeps_the_original_completion_day() -> None:
+    state = initialize_state(scenario_from_durations(1))
+    complete_job(state, "JOB-01")
+    state.current_day = 9
+
+    snapshot = calculate_snapshot(state)
+
+    assert snapshot.jobs_remaining == 0
+    assert snapshot.total_remaining_days == 0
+    assert snapshot.projected_completion_day == 1
+    assert snapshot.final_item_completed is True
+    assert state.completion_day == 1

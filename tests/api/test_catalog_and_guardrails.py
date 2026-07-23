@@ -153,6 +153,37 @@ def test_daily_generation_handles_completed_work_and_exhausted_definition_pool()
     assert _format_job_list([]) == ""
 
 
+def test_echo_applies_and_advances_one_optimal_daily_step() -> None:
+    config = small_config(
+        job_count=2,
+        min_job_duration_days=3,
+        max_job_duration_days=3,
+        max_campaign_day=6,
+        seed=909,
+    )
+    scenario = generate_scenario(config)
+    web = generate_decision_web(scenario, config)
+    state = initialize_state(scenario)
+    root = web.node(web.root_node_id)
+
+    transition = apply_omniscient_choice(state, web, web.root_node_id)
+
+    assert state.decision_cards[root.card.id] is root.card
+    assert len(state.decision_history) == 1
+    assert state.decision_history[0].actor == "ECHO"
+    assert state.decision_history[0].aligned_with_echo is True
+    assert state.pending_follow_ups == []
+    assert transition is root.transitions[root.optimal_choice_id]
+    assert transition.advances_day is True
+
+    next_node_id = advance_omniscient_day(state, transition)
+
+    assert next_node_id == transition.next_node_id
+    assert state.current_day == 2
+    assert next_node_id is not None
+    web.assert_runtime_matches(state, next_node_id)
+
+
 def test_echo_guardrails_reject_completed_non_daily_overtime_and_early_terminal_states() -> None:
     config = small_config(job_count=2, min_job_duration_days=2, max_job_duration_days=3, max_campaign_day=6)
     scenario = generate_scenario(config)
