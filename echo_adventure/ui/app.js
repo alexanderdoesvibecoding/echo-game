@@ -199,6 +199,7 @@ configureDayClock({
 configureDecisionActions({ choose });
 configureModals({ renderDecisionQueue, renderDevTools, showNewRunError });
 configureDevTools({
+  diagnosticsChanged: renderDecisionQueue,
   instantProgressionChanged: handleInstantProgressionChanged,
   openNewRunModal,
 });

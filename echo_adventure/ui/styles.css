@@ -1769,6 +1769,10 @@ html[data-theme="dark"] #closeWelcomeBtn {
   display: grid;
   gap: 10px;
 }
+.decision-choice-item {
+  display: grid;
+  gap: 6px;
+}
 .decision-choice {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -1800,4 +1804,69 @@ html[data-theme="dark"] #closeWelcomeBtn {
 .decision-choice.selected {
   border-color: var(--teal);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--teal) 25%, transparent);
+}
+.decision-choice-diagnostics {
+  display: grid;
+  gap: 7px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--teal) 38%, var(--line));
+  border-left-width: 4px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--teal) 7%, var(--panel));
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.decision-diagnostic-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 800;
+}
+.decision-diagnostic-badge {
+  display: inline-flex;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--teal) 18%, var(--panel));
+  color: var(--teal-dark);
+}
+.decision-choice-diagnostics.is-preferred {
+  border-color: color-mix(in srgb, var(--green) 58%, var(--line));
+  background: color-mix(in srgb, var(--green) 10%, var(--panel));
+}
+.decision-choice-diagnostics.is-preferred .decision-diagnostic-badge {
+  background: color-mix(in srgb, var(--green) 20%, var(--panel));
+  color: var(--green);
+}
+.decision-choice-diagnostics.is-not-preferred {
+  border-color: color-mix(in srgb, var(--red) 58%, var(--line));
+  background: color-mix(in srgb, var(--red) 9%, var(--panel));
+}
+.decision-choice-diagnostics.is-not-preferred .decision-diagnostic-badge {
+  background: color-mix(in srgb, var(--red) 18%, var(--panel));
+  color: var(--red);
+}
+.decision-diagnostic-score,
+.decision-diagnostic-preference,
+.decision-diagnostic-projection {
+  overflow-wrap: anywhere;
+}
+.decision-diagnostic-job-list {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.decision-diagnostic-job-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding-top: 5px;
+  border-top: 1px solid color-mix(in srgb, var(--teal) 24%, var(--line));
+}
+.decision-diagnostic-job-list li > span:last-child {
+  grid-column: 1 / -1;
+  color: var(--muted);
 }

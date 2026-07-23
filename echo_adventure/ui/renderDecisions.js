@@ -108,6 +108,7 @@ export function renderDecisionQueue() {
     progress.total,
     card?.id || "",
     pendingChoiceId,
+    uiState.devShowDiagnostics,
     finalAssembly?.status || "",
     finalAssembly?.jobName || "",
   ]);
@@ -148,14 +149,17 @@ export function renderDecisionQueue() {
             uiState.pendingChoice?.choiceId === choice.id;
 
           return `
-            <button
-              class="decision-choice ${selected ? "selected" : ""}"
-              data-choice-id="${escapeHtml(choice.id)}"
-              onclick="selectPendingChoice('${card.id}', '${choice.id}')"
-            >
-              ${renderChoiceIcon(choice.icon)}
-              <span class="decision-choice-label">${escapeHtml(choice.label)}</span>
-            </button>
+            <div class="decision-choice-item">
+              <button
+                class="decision-choice ${selected ? "selected" : ""}"
+                data-choice-id="${escapeHtml(choice.id)}"
+                onclick="selectPendingChoice('${card.id}', '${choice.id}')"
+              >
+                ${renderChoiceIcon(choice.icon)}
+                <span class="decision-choice-label">${escapeHtml(choice.label)}</span>
+              </button>
+              ${renderChoiceDiagnostics(card, choice)}
+            </div>
           `;
         }).join("")}
       </div>
@@ -171,6 +175,79 @@ export function renderDecisionQueue() {
       </div>
     </article>
   `;
+}
+
+function renderChoiceDiagnostics(card, choice) {
+  const diagnostics = choice.developer;
+  const preference = card.developer?.preference;
+  if (!uiState.devShowDiagnostics || !diagnostics || !preference) return "";
+
+  const publicScore = diagnostics.publicScore || {};
+  const preferenceStatus = preferenceStatusLabel(
+    preference,
+    diagnostics.isPreferred,
+  );
+  const jobChanges = diagnostics.jobDayChanges?.length
+    ? diagnostics.jobDayChanges.map(change => `
+        <li>
+          <strong>${escapeHtml(change.jobName)}</strong>
+          <span>${escapeHtml(change.jobLabel)} · ${escapeHtml(change.jobId)}</span>
+          <span>${formatSigned(change.days)} day${Math.abs(change.days) === 1 ? "" : "s"} · ${escapeHtml(change.remainingBefore)} → ${escapeHtml(change.remainingAfter)} remaining</span>
+        </li>
+      `).join("")
+    : "<li>No job-day changes.</li>";
+  const projection = diagnostics.completionProjection || {};
+
+  return `
+    <div class="decision-choice-diagnostics ${diagnostics.isPreferred ? "is-preferred" : "is-not-preferred"}">
+      <div class="decision-diagnostic-head">
+        <span class="decision-diagnostic-badge">${escapeHtml(preferenceStatus)}</span>
+        <span>Raw schedule: ${formatSigned(diagnostics.rawScoreDelta)}</span>
+      </div>
+      <div class="decision-diagnostic-score">
+        Public score: ${formatScore(publicScore.before)}
+        → ${formatScore(publicScore.after)}
+        (${formatSigned(publicScore.delta)})
+      </div>
+      <div class="decision-diagnostic-preference">
+        <strong>Preference basis:</strong> ${escapeHtml(preference.basis)}
+      </div>
+      <div class="decision-diagnostic-projection">
+        <strong>${projectionLabel(projection.basis)}:</strong>
+        ${escapeHtml(projection.label)}
+        ${projection.day ? ` (Day ${escapeHtml(projection.day)})` : ""}
+        ${projection.exact ? "" : " · future decision effects are not included"}
+      </div>
+      <ul class="decision-diagnostic-job-list">${jobChanges}</ul>
+    </div>
+  `;
+}
+
+function preferenceStatusLabel(preference, isPreferred) {
+  if (isPreferred) return preference.label;
+  if (preference.kind === "player-only-recommendation") {
+    return "Not the player-only recommendation";
+  }
+  if (preference.kind === "echo-local") {
+    return "Not ECHO's locally preferred choice";
+  }
+  return "Not ECHO preferred";
+}
+
+function projectionLabel(basis) {
+  if (basis === "solved-optimal-continuation") return "Solved optimal continuation";
+  if (basis === "player-only-immediate-projection") return "Immediate player projection";
+  return "Immediate local projection";
+}
+
+function formatSigned(value) {
+  const number = Number(value) || 0;
+  return `${number >= 0 ? "+" : ""}${number.toFixed(2)}`;
+}
+
+function formatScore(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : "—";
 }
 
 function updateQueueDayProgress(section, paused) {

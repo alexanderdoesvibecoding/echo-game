@@ -4,6 +4,7 @@ import { $ } from "./html.js";
 import { uiState } from "./state.js";
 
 const callbacks = {
+  diagnosticsChanged: () => {},
   instantProgressionChanged: () => {},
   openNewRunModal: () => {},
   skipToDay: null,
@@ -25,6 +26,7 @@ export function initDevTools() {
   });
   $("devShowDiagnostics")?.addEventListener("change", event => {
     uiState.devShowDiagnostics = Boolean(event.target.checked);
+    callbacks.diagnosticsChanged(uiState.devShowDiagnostics);
     renderDevTools();
   });
   $("devStrategy")?.addEventListener("change", event => {

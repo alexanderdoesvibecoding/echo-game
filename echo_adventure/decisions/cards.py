@@ -694,19 +694,27 @@ def select_echo_choice_for_state(
     """
 
     def outcome(choice: DecisionChoice) -> tuple[int, float, str]:
-        remaining = {
-            job.id: max(0, job.remaining_days)
-            for job in state.incomplete_jobs()
-        }
-        for job_id, delta in choice.day_changes.items():
-            if job_id in remaining:
-                remaining[job_id] = max(0, remaining[job_id] + delta)
-        longest = max(remaining.values(), default=0)
-        completion_day = state.current_day + max(0, longest - 1)
+        completion_day = projected_completion_day_after_choice(state, choice)
         overall_score = round(state.decision_score + choice.score_delta, 2)
         return (-completion_day, overall_score, choice.id)
 
     return max(choices, key=outcome)
+
+
+def projected_completion_day_after_choice(
+    state: SimulationState,
+    choice: DecisionChoice,
+) -> int:
+    """Project the finish after one choice, before any later decision effects."""
+    remaining = {
+        job.id: max(0, job.remaining_days)
+        for job in state.incomplete_jobs()
+    }
+    for job_id, delta in choice.day_changes.items():
+        if job_id in remaining:
+            remaining[job_id] = max(0, remaining[job_id] + delta)
+    longest = max(remaining.values(), default=0)
+    return state.current_day + max(0, longest - 1)
 
 
 def _stable_seed(seed: int, day: int, suffix: str) -> int:

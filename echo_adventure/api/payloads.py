@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..decisions import (
+    projected_completion_day_after_choice,
+    select_echo_choice_for_state,
+)
 from ..metrics import calculate_snapshot
 from ..models import DecisionCard, DecisionChoice, MetricSnapshot, SimulationState
 from ..scoring import public_score, public_score_delta
@@ -261,16 +265,32 @@ class PayloadMixin:
             "progressPercent": round(progress_percent, 4),
         }
 
-    @staticmethod
-    def _card_payload(card: DecisionCard) -> dict[str, Any]:
+    def _card_payload(self, card: DecisionCard) -> dict[str, Any]:
+        preference = self._choice_preference_payload(card) if self.dev_mode else None
         payload = {
             "id": card.id,
             "title": card.title,
             "description": card.description,
-            "choices": [_choice_payload(choice) for choice in card.choices],
+            "choices": [
+                _choice_payload(
+                    choice,
+                    developer=(
+                        self._choice_diagnostics_payload(
+                            card,
+                            choice,
+                            preference or {},
+                        )
+                        if self.dev_mode
+                        else None
+                    ),
+                )
+                for choice in card.choices
+            ],
             "eventId": card.event_id or card.id,
             "eventScope": card.event_scope,
         }
+        if preference is not None:
+            payload["developer"] = {"preference": preference}
         if card.follow_up_source_day is not None:
             payload["followUpSource"] = {
                 "day": card.follow_up_source_day,
@@ -282,13 +302,163 @@ class PayloadMixin:
             }
         return payload
 
+    def _choice_preference_payload(self, card: DecisionCard) -> dict[str, Any]:
+        if card.player_only:
+            choice_id = card.echo_choice_id
+            kind = "player-only-recommendation"
+            label = "Best player-only choice"
+            basis = (
+                "Highest raw schedule score among this player-only card's choices; "
+                "ECHO does not take or prefer a final-assembly choice."
+            )
+        elif self.player_in_overtime:
+            choice_id = select_echo_choice_for_state(
+                self.player_state,
+                card.choices,
+            ).id
+            kind = "echo-local"
+            label = "ECHO locally preferred"
+            basis = (
+                "Best locally evaluated choice for the current runtime state: "
+                "earliest immediate projected completion, then highest resulting raw score."
+            )
+        else:
+            choice_id = self.decision_web.node(
+                self.player_node_id
+            ).optimal_choice_id
+            kind = "echo-solved"
+            label = "ECHO preferred"
+            basis = (
+                "Exact backward-solved choice for this preplanned node: completion day, "
+                "then route score, then cumulative unfinished work."
+            )
+        choice_label = next(
+            (
+                choice.label
+                for choice in card.choices
+                if choice.id == choice_id
+            ),
+            "",
+        )
+        return {
+            "choiceId": choice_id,
+            "choiceLabel": choice_label,
+            "kind": kind,
+            "label": label,
+            "basis": basis,
+        }
 
-def _choice_payload(choice: DecisionChoice) -> dict[str, Any]:
-    return {
+    def _choice_diagnostics_payload(
+        self,
+        card: DecisionCard,
+        choice: DecisionChoice,
+        preference: dict[str, Any],
+    ) -> dict[str, Any]:
+        raw_before = self.player_state.decision_score
+        raw_after = round(raw_before + choice.score_delta, 2)
+        return {
+            "rawScoreDelta": choice.score_delta,
+            "publicScore": {
+                "before": public_score(raw_before),
+                "delta": public_score_delta(raw_before, raw_after),
+                "after": public_score(raw_after),
+            },
+            "jobDayChanges": [
+                self._job_day_change_payload(job_id, delta)
+                for job_id, delta in sorted(choice.day_changes.items())
+            ],
+            "isPreferred": choice.id == preference.get("choiceId"),
+            "completionProjection": self._choice_completion_projection(
+                card,
+                choice,
+            ),
+        }
+
+    def _job_day_change_payload(
+        self,
+        job_id: str,
+        delta: int,
+    ) -> dict[str, Any]:
+        job = self.player_state.jobs.get(job_id)
+        applies = bool(job and not job.is_complete)
+        remaining_before = max(0, job.remaining_days) if job else None
+        remaining_after = (
+            max(0, (job.remaining_days if job else 0) + delta)
+            if applies
+            else remaining_before
+        )
+        return {
+            "jobId": job_id,
+            "jobLabel": _job_label(job_id),
+            "jobName": job.name if job else job_id,
+            "days": delta,
+            "applies": applies,
+            "remainingBefore": remaining_before,
+            "remainingAfter": remaining_after,
+        }
+
+    def _choice_completion_projection(
+        self,
+        card: DecisionCard,
+        choice: DecisionChoice,
+    ) -> dict[str, Any]:
+        if not self.player_in_overtime and not card.player_only:
+            transition = self.decision_web.transition(
+                self.player_node_id,
+                choice.id,
+            )
+            exact = not transition.enters_overtime
+            if transition.completion_day is not None:
+                day = transition.completion_day
+            elif transition.enters_overtime:
+                day = self.config.max_campaign_day
+            else:
+                successor = self.decision_web.node(
+                    transition.next_node_id or ""
+                )
+                day = successor.optimal_completion_day
+            return {
+                "day": day,
+                "date": self.config.date_label_for_day(day),
+                "exact": exact,
+                "label": (
+                    self.config.date_label_for_day(day)
+                    if exact
+                    else f"Day {day}+ (enters overtime)"
+                ),
+                "basis": "solved-optimal-continuation",
+            }
+
+        day = projected_completion_day_after_choice(
+            self.player_state,
+            choice,
+        )
+        return {
+            "day": day,
+            "date": self.config.date_label_for_day(day),
+            "exact": False,
+            "label": self.config.date_label_for_day(day),
+            "basis": (
+                "player-only-immediate-projection"
+                if card.player_only
+                else "runtime-local-immediate-projection"
+            ),
+        }
+
+
+def _choice_payload(
+    choice: DecisionChoice,
+    *,
+    developer: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = {
         "id": choice.id,
         "label": choice.label,
         "icon": choice.icon_key,
     }
+    if developer is not None:
+        payload["developer"] = developer
+    return payload
 
 
 def _chart_decision_payload(

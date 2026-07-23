@@ -15,6 +15,7 @@ from echo_adventure.api import server as server_module
 from echo_adventure.api import session as session_module
 from echo_adventure.api.payloads import _echo_comparison_state
 from echo_adventure.api.server import GameRequestHandler, STATIC_ASSETS, _parse_optional_seed
+from echo_adventure.scoring import public_score, public_score_delta
 
 from .helpers import small_config
 
@@ -71,9 +72,11 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
     assert set(payload["timelines"]) == {"player", "echo"}
     assert payload["lastSummary"] is None
     assert "developer" not in payload
+    assert all("developer" not in choice for choice in payload["decisions"][0]["choices"])
 
     dev_session = session_module.GameSession(seed=404, dev_mode=True)
-    assert dev_session.state_payload()["developer"] == {
+    dev_payload = dev_session.state_payload()
+    assert dev_payload["developer"] == {
         "generation": {},
         "runState": {
             "inDecisionWeb": True,
@@ -81,6 +84,51 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
             "canSkipToDay": True,
         },
     }
+    dev_card = dev_payload["decisions"][0]
+    node = dev_session.decision_web.node(dev_session.player_node_id)
+    assert dev_card["developer"]["preference"] == {
+        "choiceId": node.optimal_choice_id,
+        "choiceLabel": next(
+            choice.label
+            for choice in node.card.choices
+            if choice.id == node.optimal_choice_id
+        ),
+        "kind": "echo-solved",
+        "label": "ECHO preferred",
+        "basis": (
+            "Exact backward-solved choice for this preplanned node: completion day, "
+            "then route score, then cumulative unfinished work."
+        ),
+    }
+    for choice, choice_payload in zip(node.card.choices, dev_card["choices"], strict=True):
+        diagnostics = choice_payload["developer"]
+        raw_after = round(dev_session.player_state.decision_score + choice.score_delta, 2)
+        assert diagnostics["rawScoreDelta"] == choice.score_delta
+        assert diagnostics["publicScore"] == {
+            "before": public_score(dev_session.player_state.decision_score),
+            "delta": public_score_delta(
+                dev_session.player_state.decision_score,
+                raw_after,
+            ),
+            "after": public_score(raw_after),
+        }
+        assert diagnostics["isPreferred"] == (
+            choice.id == node.optimal_choice_id
+        )
+        assert isinstance(diagnostics["jobDayChanges"], list)
+        assert all(
+            {"jobId", "jobLabel", "jobName", "days", "remainingBefore", "remainingAfter"}
+            <= change.keys()
+            for change in diagnostics["jobDayChanges"]
+        )
+        assert diagnostics["completionProjection"]["basis"] == (
+            "solved-optimal-continuation"
+        )
+        assert diagnostics["completionProjection"]["day"] >= 1
+    assert any(
+        choice["developer"]["jobDayChanges"]
+        for choice in dev_card["choices"]
+    )
 
     real_generate_decision_web = session_module.generate_decision_web
     generation_calls: list[tuple[int, float | None]] = []
@@ -132,6 +180,23 @@ def test_session_rejects_invalid_or_out_of_sequence_actions(monkeypatch: pytest.
     session.apply_choice(card.id, card.choices[0].id)
     with pytest.raises(ValueError, match="no longer active|already"):
         session.apply_choice(card.id, card.choices[0].id)
+
+    overtime = session_module.GameSession(seed=405, dev_mode=True)
+    overtime.player_in_overtime = True
+    overtime._start_overtime_day()
+    overtime_card = overtime.current_cards[0]
+    overtime_payload = overtime.state_payload()["decisions"][0]
+    local_preference = session_module.select_echo_choice_for_state(
+        overtime.player_state,
+        overtime_card.choices,
+    )
+    assert overtime_payload["developer"]["preference"]["kind"] == "echo-local"
+    assert overtime_payload["developer"]["preference"]["choiceId"] == local_preference.id
+    assert all(
+        choice["developer"]["completionProjection"]["basis"]
+        == "runtime-local-immediate-projection"
+        for choice in overtime_payload["choices"]
+    )
 
 
 def test_choice_and_advance_update_player_and_echo_once_per_slot(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -374,11 +439,22 @@ def test_slow_route_uses_one_player_only_final_assembly_batch_then_normal_workda
     )
     assert accelerating_cards <= max(0, safe_removal_budget)
     echo_history_count = len(session.automated_state.decision_history)
-    assert session.state_payload()["developer"]["runState"] == {
+    final_assembly_payload = session.state_payload()
+    assert final_assembly_payload["developer"]["runState"] == {
         "inDecisionWeb": False,
         "canSkipToEnd": True,
         "canSkipToDay": False,
     }
+    final_card_payload = final_assembly_payload["decisions"][0]
+    assert final_card_payload["developer"]["preference"]["kind"] == (
+        "player-only-recommendation"
+    )
+    assert final_card_payload["developer"]["preference"]["label"] == (
+        "Best player-only choice"
+    )
+    assert "does not take or prefer" in (
+        final_card_payload["developer"]["preference"]["basis"]
+    )
 
     while not session.player_final_assembly_locked and not session.player_state.final_item_completed:
         card = session.current_cards[0]
