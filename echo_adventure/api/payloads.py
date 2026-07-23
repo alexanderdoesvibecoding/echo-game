@@ -66,7 +66,7 @@ class PayloadMixin:
                     and not self.player_final_assembly_started
                 )
                 payload["developer"] = {
-                    "generation": {},
+                    "generation": dict(self.generation_stats),
                     "runState": {
                         "inDecisionWeb": in_decision_web,
                         "canSkipToEnd": not self._game_over(),

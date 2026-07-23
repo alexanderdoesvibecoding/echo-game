@@ -202,7 +202,10 @@ The browser uses a small local JSON API served from the same process.
 When developer mode is active, state responses additionally contain a
 top-level `developer` object with generation metadata and state-aware action
 availability. Standard-mode responses omit this object. There is no shift
-endpoint.
+endpoint. The initial state request and each successful new-game request print
+one decision-web generation report to the terminal that launched the app. Its
+peak RSS value is the process high-water mark, so later in-process games do not
+report an isolated fresh-process peak.
 
 ## Use the simulation directly
 

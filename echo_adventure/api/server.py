@@ -92,6 +92,7 @@ class GameRequestHandler(BaseHTTPRequestHandler):
             self._send_html(INDEX_HTML)
         elif parsed.path == "/api/state":
             self._send_json(self.session_store.state_payload())
+            self.session_store.log_generation_stats()
         elif parsed.path in STATIC_ASSETS:
             self._send_static(parsed.path)
         else:
@@ -104,6 +105,7 @@ class GameRequestHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/new":
                 data = self._read_json()
                 self._send_json(self.session_store.new_session_payload(seed=_parse_optional_seed(data.get("seed"))))
+                self.session_store.log_generation_stats()
             elif parsed.path == "/api/choice":
                 data = self._read_json()
                 self._send_json(

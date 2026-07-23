@@ -76,7 +76,42 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
 
     dev_session = session_module.GameSession(seed=404, dev_mode=True)
     dev_payload = dev_session.state_payload()
-    assert dev_payload["developer"]["generation"] == {}
+    generation = dev_payload["developer"]["generation"]
+    assert generation == dev_session.generation_stats
+    assert set(generation) == {
+        "acceptedSeed",
+        "requestedSeedMode",
+        "totalGenerationSeconds",
+        "acceptedWebGenerationSeconds",
+        "timedOutRandomSeedsDiscarded",
+        "nodeCount",
+        "edgeCount",
+        "optimalCompletionDay",
+        "nodesPerSecond",
+        "processPeakRssBytes",
+        "processPeakRssScope",
+    }
+    assert generation["acceptedSeed"] == 404
+    assert generation["requestedSeedMode"] == "explicit"
+    assert generation["totalGenerationSeconds"] >= (
+        generation["acceptedWebGenerationSeconds"]
+    ) > 0
+    assert generation["timedOutRandomSeedsDiscarded"] == 0
+    assert generation["nodeCount"] == len(dev_session.decision_web.nodes)
+    assert generation["edgeCount"] == sum(
+        len(node.transitions)
+        for node in dev_session.decision_web.nodes.values()
+    )
+    assert generation["optimalCompletionDay"] == (
+        dev_session.decision_web.optimal_completion_day
+    )
+    assert generation["nodesPerSecond"] == pytest.approx(
+        generation["nodeCount"] / generation["acceptedWebGenerationSeconds"]
+    )
+    assert generation["processPeakRssBytes"] is None or (
+        generation["processPeakRssBytes"] > 0
+    )
+    assert generation["processPeakRssScope"] == "process-high-water-mark"
     dev_run_state = dev_payload["developer"]["runState"]
     assert {
         key: dev_run_state[key]
@@ -205,11 +240,19 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
     explicit = session_module.GameSession(seed=505)
     assert explicit.seed == 505
     assert generation_calls == [(505, None)]
+    assert explicit.generation_stats["requestedSeedMode"] == "explicit"
+    assert explicit.generation_stats["timedOutRandomSeedsDiscarded"] == 0
 
     generation_calls.clear()
     random_session = session_module.GameSession()
     assert random_session.seed == random_session.scenario.seed == 222
     assert generation_calls == [(111, 15.0), (222, 15.0)]
+    assert random_session.generation_stats["acceptedSeed"] == 222
+    assert random_session.generation_stats["requestedSeedMode"] == "random"
+    assert random_session.generation_stats["timedOutRandomSeedsDiscarded"] == 1
+    assert random_session.generation_stats["totalGenerationSeconds"] >= (
+        random_session.generation_stats["acceptedWebGenerationSeconds"]
+    ) > 0
 
 
 def test_session_rejects_invalid_or_out_of_sequence_actions(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -739,11 +782,27 @@ def test_timeline_stops_rescaling_after_echo_finishes(monkeypatch: pytest.Monkey
     assert payload["timelines"]["echo"]["displayCompletion"] == final["automated"]["completion"]
 
 
-def test_session_store_serializes_duplicate_concurrent_choices(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_session_store_serializes_duplicate_concurrent_choices(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     install_fast_session_config(monkeypatch)
+    monkeypatch.setattr(session_module, "_process_peak_rss_bytes", lambda: None)
     store = session_module.SessionStore(seed=414, dev_mode=True)
     assert store.dev_mode is True
     assert store.session.dev_mode is True
+    initial_payload = store.state_payload()
+    assert capsys.readouterr().out == ""
+    store.log_generation_stats()
+    initial_report = capsys.readouterr().out
+    assert initial_report.count("[ECHO dev] Decision web generation") == 1
+    assert "Accepted seed: 414" in initial_report
+    assert "Requested seed mode: explicit" in initial_report
+    assert "Process peak RSS: unavailable (process high-water mark)" in initial_report
+    assert initial_payload["developer"]["generation"]["processPeakRssBytes"] is None
+    store.state_payload()
+    assert capsys.readouterr().out == ""
+
     card = store.session.current_cards[0]
     choice = card.choices[0]
     barrier = threading.Barrier(2)
@@ -766,11 +825,22 @@ def test_session_store_serializes_duplicate_concurrent_choices(monkeypatch: pyte
     assert [kind for kind, _ in results].count("ok") == 1
     assert [kind for kind, _ in results].count("error") == 1
     assert len(store.session.player_state.decision_history) == 1
+    assert capsys.readouterr().out == ""
 
-    replacement = store.new_session_payload(seed=415)
-    assert store.session.seed == 415
+    replacement = store.new_session_payload(seed=414)
+    assert capsys.readouterr().out == ""
+    store.log_generation_stats()
+    replacement_report = capsys.readouterr().out
+    assert replacement_report.count("[ECHO dev] Decision web generation") == 1
+    assert "Accepted seed: 414" in replacement_report
+    assert store.session.seed == 414
     assert store.session.dev_mode is True
     assert "developer" in replacement
+
+    standard_store = session_module.SessionStore(seed=415)
+    standard_payload = standard_store.state_payload()
+    assert "developer" not in standard_payload
+    assert capsys.readouterr().out == ""
 
 
 @pytest.mark.parametrize("value, expected", [(None, None), ("", None), (" 007 ", 7), (42, 42), (-2, -2)])
@@ -827,6 +897,9 @@ def test_request_handler_routes_state_actions_html_and_not_found(
 
         def state_payload(self):
             return {"route": "state"}
+
+        def log_generation_stats(self):
+            return None
 
         def new_session_payload(self, seed=None):
             return {"route": "new", "seed": seed}

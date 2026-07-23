@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 import threading
+import time
 from typing import Any
 
 from ..config import GameConfig, resolve_seed
@@ -36,14 +38,32 @@ _MAX_AUTOMATED_DAYS = 1_000
 _MAX_WORST_STAGNANT_DAYS = 20
 
 
+def _process_peak_rss_bytes() -> int | None:
+    """Return this process's high-water RSS using platform-normalized bytes."""
+    try:
+        import resource
+    except ImportError:
+        return None
+
+    peak = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    if sys.platform != "darwin":
+        peak *= 1024
+    return peak
+
+
 class GameSession(PayloadMixin, ReviewMixin):
     def __init__(self, seed: int | None = None, dev_mode: bool = False) -> None:
         self.lock = threading.RLock()
         self.dev_mode = dev_mode
+        requested_seed_mode = "explicit" if seed is not None else "random"
+        generation_started = time.perf_counter()
+        timed_out_random_seeds = 0
+        accepted_web_seconds = 0.0
         while True:
             self.seed = resolve_seed(seed)
             self.config = GameConfig(seed=self.seed)
             self.scenario = generate_scenario(self.config)
+            web_started = time.perf_counter()
             try:
                 self.decision_web = generate_decision_web(
                     self.scenario,
@@ -57,8 +77,33 @@ class GameSession(PayloadMixin, ReviewMixin):
             except DecisionWebGenerationTimeout:
                 if seed is not None:
                     raise
+                timed_out_random_seeds += 1
                 continue
+            accepted_web_seconds = time.perf_counter() - web_started
             break
+        total_generation_seconds = time.perf_counter() - generation_started
+        node_count = len(self.decision_web.nodes)
+        self.generation_stats: dict[str, Any] = {
+            "acceptedSeed": self.seed,
+            "requestedSeedMode": requested_seed_mode,
+            "totalGenerationSeconds": total_generation_seconds,
+            "acceptedWebGenerationSeconds": accepted_web_seconds,
+            "timedOutRandomSeedsDiscarded": timed_out_random_seeds,
+            "nodeCount": node_count,
+            "edgeCount": sum(
+                len(node.transitions)
+                for node in self.decision_web.nodes.values()
+            ),
+            "optimalCompletionDay": self.decision_web.optimal_completion_day,
+            "nodesPerSecond": (
+                node_count / accepted_web_seconds
+                if accepted_web_seconds > 0
+                else None
+            ),
+            "processPeakRssBytes": _process_peak_rss_bytes(),
+            "processPeakRssScope": "process-high-water-mark",
+        }
+        self._generation_stats_logged = False
         self.player_state = initialize_state(self.scenario)
         self.automated_state = initialize_state(self.scenario)
         self.player_node_id = self.decision_web.root_node_id
@@ -83,6 +128,61 @@ class GameSession(PayloadMixin, ReviewMixin):
         self.day_completed_before: set[str] = set(self.player_state.completed_jobs)
         self._developer_follow_up_cache: dict[tuple[str, str], dict[str, Any]] = {}
         self._ensure_cards()
+
+    def log_generation_stats_once(self) -> None:
+        """Write this dev generation's retained statistics to stdout once."""
+        with self.lock:
+            if not self.dev_mode or self._generation_stats_logged:
+                return
+            self._generation_stats_logged = True
+            stats = self.generation_stats
+            peak_rss = stats["processPeakRssBytes"]
+            peak_label = (
+                "unavailable"
+                if peak_rss is None
+                else (
+                    f"{peak_rss} bytes "
+                    f"({peak_rss / (1024 * 1024):.2f} MiB)"
+                )
+            )
+            report = "\n".join(
+                (
+                    "[ECHO dev] Decision web generation",
+                    f"  Accepted seed: {stats['acceptedSeed']}",
+                    f"  Requested seed mode: {stats['requestedSeedMode']}",
+                    (
+                        "  Total generation time: "
+                        f"{stats['totalGenerationSeconds']:.6f} seconds"
+                    ),
+                    (
+                        "  Accepted web generation time: "
+                        f"{stats['acceptedWebGenerationSeconds']:.6f} seconds"
+                    ),
+                    (
+                        "  Timed-out random seeds discarded: "
+                        f"{stats['timedOutRandomSeedsDiscarded']}"
+                    ),
+                    f"  Node count: {stats['nodeCount']}",
+                    f"  Edge count: {stats['edgeCount']}",
+                    (
+                        "  Optimal completion day: "
+                        f"{stats['optimalCompletionDay']}"
+                    ),
+                    (
+                        "  Nodes per second: "
+                        + (
+                            "unavailable"
+                            if stats["nodesPerSecond"] is None
+                            else f"{stats['nodesPerSecond']:.2f}"
+                        )
+                    ),
+                    (
+                        "  Process peak RSS: "
+                        f"{peak_label} (process high-water mark)"
+                    ),
+                )
+            )
+            print(report, flush=True)
 
     def apply_choice(self, card_id: str, choice_id: str) -> None:
         with self.lock:
@@ -591,6 +691,10 @@ class SessionStore:
         with self.lock:
             self.session = GameSession(seed=seed, dev_mode=self.dev_mode)
             return self.session.state_payload()
+
+    def log_generation_stats(self) -> None:
+        with self.lock:
+            self.session.log_generation_stats_once()
 
     def choice_payload(self, card_id: str, choice_id: str) -> dict[str, Any]:
         with self.lock:
