@@ -361,9 +361,12 @@ def test_exact_optimal_path_ties_echo(monkeypatch: pytest.MonkeyPatch) -> None:
         == session.decision_web.optimal_unfinished_job_days
     )
     assert all(record.aligned_with_echo for record in session.player_state.decision_history)
-    assert len(final["review"]["reasons"]) == 1
-    assert "matched ECHO on all" in final["review"]["reasons"][0]
-    assert len([final["review"]["headline"], *final["review"]["reasons"]]) <= 3
+    reasons = final["review"]["reasons"]
+    assert len(reasons) == 3
+    record_count = len(session.player_state.decision_history)
+    assert reasons[1].startswith("Choice alignment")
+    assert f"{record_count} of {record_count}" in reasons[1]
+    assert len([final["review"]["headline"], *reasons]) <= 6
 
     with pytest.raises(ValueError, match="already ended"):
         session.apply_choice("finished", "finished")
@@ -394,13 +397,19 @@ def test_every_first_decision_divergence_loses_to_echo(
         )
         assert any(not record.aligned_with_echo for record in session.player_state.decision_history)
         reasons = final["review"]["reasons"]
-        assert reasons
-        assert reasons[0].startswith("On day 1, question 1, choosing ")
+        assert 4 <= len(reasons) <= 5
+        assert reasons[0].startswith("Turning point — on day 1, question 1, choosing ")
         assert "instead of" in reasons[0]
         assert any(job.name in reasons[0] for job in session.player_state.jobs.values())
-        assert len([final["review"]["headline"], *reasons]) <= 3
+        assert any(reason.startswith("Completion timing") for reason in reasons)
+        assert any(reason.startswith("Choice alignment") for reason in reasons)
+        assert any(reason.startswith("Final totals") for reason in reasons)
+        assert len([final["review"]["headline"], *reasons]) <= 6
         if seed == 402:
             assert "same immediate job-day total" in reasons[0]
+            assert "changed your decision score by +4.55 points" in reasons[0]
+        else:
+            assert "changed your decision score by -4.55 points" in reasons[0]
 
 
 @pytest.mark.parametrize("seed", [421, 422, 423, 424, 425, 426])

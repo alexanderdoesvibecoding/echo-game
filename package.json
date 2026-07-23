@@ -3,6 +3,7 @@
   "scripts": {
     "test:api": "pytest",
     "test:ui": "node --test --experimental-test-coverage --test-coverage-include='echo_adventure/ui/*.js' --test-coverage-lines=90 --test-coverage-branches=60 --test-coverage-functions=85 tests/ui/*.test.mjs",
-    "test": "npm run test:api && npm run test:ui"
+    "test": "npm run test:api && npm run test:ui",
+    "bench": "python3 scripts/benchmark_decision_web.py"
   }
 }

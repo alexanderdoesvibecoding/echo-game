@@ -92,6 +92,9 @@ export class TestElement {
   matches(selector) {
     if (selector.startsWith(".")) return this.classList.contains(selector.slice(1));
     if (selector.startsWith("#")) return this.id === selector.slice(1);
+    if (selector === "[data-chart-tooltip-close]") {
+      return Object.hasOwn(this.dataset, "chartTooltipClose");
+    }
     return false;
   }
 
@@ -203,6 +206,9 @@ export function installDom() {
     runInterval(id) {
       const callback = intervals.get(id);
       if (callback) callback();
+    },
+    dispatchDocument(type, event) {
+      for (const callback of documentListeners.get(type) || []) callback(event);
     },
     reset() {
       for (const candidate of elements.values()) candidate.reset();

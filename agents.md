@@ -17,7 +17,7 @@
 ## Source tools
 
 - If the `code-review-graph` source tool is available, always load and use it.
-- When it is available, run its build script (```code-review-graph build```) before beginning work on a task and
+- When it is available, run its build script (```.venv/bin/code-review-graph build```) before beginning work on a task and
   again after completing the work.
 
 ## Core game premise

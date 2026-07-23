@@ -11,17 +11,18 @@
   are done – Matt
 
 - [ ] Research better ways to fix the “one job left, game takes forever issue” – Matt
-  - A fix has been implemented. More testing is needed to ensure its success
+    - A fix has been implemented. More testing is needed to ensure its success
 
 - [x] Update the outcome deciders to use AI or something that are to better describe the outcomes because right now they
   are preset and foolish – Matt
-  - [ ] DO MORE HERE: WE WANT SOMETHING THAT SAYS THIS QUESTION IMPACTED YOU THIS MUCH
+    - [x] DO MORE HERE: WE WANT SOMETHING THAT SAYS THIS QUESTION IMPACTED YOU THIS MUCH
 
 - [x] Investigate follow-ups occurring only on the same day – Matt
-    - Some things it makes sense for you and ECHO to have the same thing (like the acknowledgements), but others can
-      be otherwise
+    - Some things it makes sense for you and ECHO to have the same thing (like the acknowledgements), but others can be
+      otherwise
 
 - [ ] Update new game screen – Alexander
+    - We kinda need a tutorial. We understand the game but some admiral will 100% not
 
 - [ ] Finalize end-of-game screen – Alexander
     - [ ] Finalize graph

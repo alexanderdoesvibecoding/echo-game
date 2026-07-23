@@ -573,10 +573,14 @@ export function renderFinal() {
   const outcomeHeadline = $("finalOutcomeHeadline");
   outcomeHeadline.textContent = review.headline || "Final player and ECHO results";
   outcomeHeadline.className = `final-outcome-headline final-outcome-${review.outcome || "behind"}`;
+  $("finalNotesTitle").textContent = review.outcome === "tied"
+    ? "Why It Was a Tie"
+    : "Where It Went Wrong";
   $("finalMetricsBar").innerHTML = renderFinalMetricBar(p, a);
   $("finalCompletionChart").innerHTML = renderDecisionScoreChart(final.completionHistory);
 
   $("finalNotes").innerHTML = (review.reasons || final.explanation || [])
+    .slice(0, 5)
     .map(note => `<li>${escapeHtml(note)}</li>`)
     .join("") || "<li>No final review notes recorded.</li>";
 }
