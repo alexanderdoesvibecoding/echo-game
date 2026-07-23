@@ -267,6 +267,76 @@ test("decision queue reveals due choices, tracks selection, and submits the sele
   assert.equal(queueProgress.getAttribute("aria-valuenow"), "20");
   assert.equal(queueProgress.getAttribute("aria-valuetext"), "Day 20 percent complete; waiting for a decision.");
   assert.equal(queueProgress.style.getPropertyValue("--day-cycle-progress"), "20%");
+  assert.doesNotMatch(body.innerHTML, /decision-choice-diagnostics/);
+
+  uiState.state.decisions[0].developer = {
+    preference: {
+      choiceId: "choice-1",
+      choiceLabel: "Accelerate",
+      kind: "echo-solved",
+      label: "ECHO preferred",
+      basis: "Exact backward-solved choice for this <node>.",
+    },
+  };
+  uiState.state.decisions[0].choices[0].developer = {
+    rawScoreDelta: 1,
+    publicScore: { before: 50, delta: 4.55, after: 54.55 },
+    isPreferred: true,
+    completionProjection: {
+      day: 3,
+      label: "July <3>",
+      exact: true,
+      basis: "solved-optimal-continuation",
+    },
+    jobDayChanges: [{
+      jobId: "JOB-01",
+      jobLabel: "Job 1",
+      jobName: "Pressure <Hull>",
+      days: -1,
+      remainingBefore: 4,
+      remainingAfter: 3,
+    }],
+  };
+  uiState.state.decisions[0].choices[1].developer = {
+    rawScoreDelta: -1,
+    publicScore: { before: 50, delta: -5.56, after: 44.44 },
+    isPreferred: false,
+    completionProjection: {
+      day: 5,
+      label: "July 5",
+      exact: true,
+      basis: "solved-optimal-continuation",
+    },
+    jobDayChanges: [{
+      jobId: "JOB-02",
+      jobLabel: "Job 2",
+      jobName: "Electrical",
+      days: 1,
+      remainingBefore: 4,
+      remainingAfter: 5,
+    }],
+  };
+  uiState.devShowDiagnostics = true;
+  renderDecisionQueue();
+  assert.match(body.innerHTML, /decision-choice-diagnostics/);
+  assert.equal(
+    (body.innerHTML.match(/decision-choice-diagnostics is-preferred/g) || []).length,
+    1,
+  );
+  assert.equal(
+    (body.innerHTML.match(/decision-choice-diagnostics is-not-preferred/g) || []).length,
+    1,
+  );
+  assert.match(body.innerHTML, /ECHO preferred/);
+  assert.match(body.innerHTML, /Not ECHO preferred/);
+  assert.match(body.innerHTML, /Raw schedule: \+1\.00/);
+  assert.match(body.innerHTML, /Public score: 50\.00[\s\S]*54\.55[\s\S]*\+4\.55/);
+  assert.match(body.innerHTML, /Pressure &lt;Hull&gt;/);
+  assert.match(body.innerHTML, /Job 1 · JOB-01/);
+  assert.match(body.innerHTML, /-1\.00 day · 4 → 3 remaining/);
+  assert.match(body.innerHTML, /July &lt;3&gt;[\s\S]*\(Day 3\)/);
+  assert.match(body.innerHTML, /Exact backward-solved choice for this &lt;node&gt;\./);
+  assert.doesNotMatch(body.innerHTML, /Pressure <Hull>|July <3>|this <node>/);
 
   selectPendingChoice("CARD-1", "choice-1");
   assert.deepEqual(uiState.pendingChoice, { cardId: "CARD-1", choiceId: "choice-1" });

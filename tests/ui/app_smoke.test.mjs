@@ -91,6 +91,12 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.deepEqual(JSON.parse(calls.at(-1).options.body), { seed: "12345" });
   assert.equal(uiState.state.seed, 12345);
   assert.equal(dom.element("devPanel").classList.contains("hidden"), false);
+  const callsBeforeDiagnosticsToggle = calls.length;
+  dom.element("devShowDiagnostics").listeners.get("change")[0]({
+    target: { checked: true },
+  });
+  assert.equal(uiState.devShowDiagnostics, true);
+  assert.equal(calls.length, callsBeforeDiagnosticsToggle);
 
   uiState.newRunModalVisible = true;
   nextError = "new run failed";
