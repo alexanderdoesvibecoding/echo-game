@@ -129,6 +129,15 @@ html[data-theme="dark"] .modal-error {
   color: #ffb29b;
 }
 
+html[data-theme="dark"] .dev-panel {
+  background: #151c24;
+  border-color: #56b4e9;
+}
+
+html[data-theme="dark"] .dev-panel-titlebar {
+  background: #123247;
+}
+
 * { box-sizing: border-box; }
 body {
   margin: 0;
@@ -234,6 +243,23 @@ html[data-theme="dark"] .welcome-logo {
 .settings-form {
   display: grid;
   gap: 12px;
+}
+.seed-field {
+  display: grid;
+  gap: 6px;
+  color: var(--ink);
+  font-weight: 700;
+}
+.seed-field input,
+.dev-panel select {
+  width: 100%;
+  height: 36px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
 }
 .modal-error {
   padding: 9px 10px;
@@ -1442,6 +1468,118 @@ html[data-theme="dark"] .puzzle-stage {
   border-radius: 8px;
 }
 
+.dev-panel {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: 70;
+  width: min(340px, calc(100vw - 24px));
+  overflow: hidden;
+  border: 2px solid var(--teal);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 18px 44px rgba(10, 24, 36, 0.28);
+}
+.dev-panel-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  background: #dff3ff;
+  color: var(--ink);
+  letter-spacing: 0.08em;
+}
+.dev-panel-toggle {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.dev-panel-body {
+  display: grid;
+  gap: 10px;
+  max-height: min(620px, calc(100vh - 90px));
+  overflow: auto;
+  padding: 10px;
+}
+.dev-run-info {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+.dev-run-info div {
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.dev-run-info dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.dev-run-info dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 800;
+}
+.dev-panel-notice {
+  padding: 8px 9px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--teal) 12%, var(--panel));
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.dev-control-stack {
+  display: grid;
+  gap: 8px;
+}
+.dev-toggle-row,
+.dev-field-row,
+.dev-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.dev-toggle-row input {
+  width: 18px;
+  height: 18px;
+}
+.dev-field-row select {
+  width: 132px;
+}
+.dev-action-row > div {
+  display: flex;
+  gap: 6px;
+}
+.dev-action-row select {
+  width: 132px;
+}
+.dev-action-row button {
+  height: 36px;
+}
+.dev-game-over-controls {
+  display: grid;
+  gap: 8px;
+}
+.dev-game-over-controls p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 @media (max-width: 1120px) {
   main { grid-template-columns: 1fr; }
   .summary-grid { grid-template-columns: 1fr; }
@@ -1478,6 +1616,10 @@ html[data-theme="dark"] .puzzle-stage {
   .chart-tooltip-summary,
   .chart-tooltip-fields {
     grid-template-columns: 1fr;
+  }
+  .dev-panel {
+    left: 12px;
+    bottom: 12px;
   }
 }
 .modal-overlay {

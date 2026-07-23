@@ -17,4 +17,9 @@ export const uiState = {
   modalVisible: false,
   summaryAnimationKey: null,
   pendingChoice: null,
+  devPanelCollapsed: false,
+  devInstantProgression: false,
+  devShowDiagnostics: false,
+  devStrategy: "echo",
+  devRequestInFlight: false,
 };

@@ -323,7 +323,7 @@ def test_slow_route_uses_one_player_only_final_assembly_batch_then_normal_workda
         max_job_duration_days=4,
         max_campaign_day=5,
     )
-    session = session_module.GameSession(seed=1)
+    session = session_module.GameSession(seed=1, dev_mode=True)
 
     guard = 0
     while not session.player_final_assembly_started:
@@ -365,6 +365,11 @@ def test_slow_route_uses_one_player_only_final_assembly_batch_then_normal_workda
     )
     assert accelerating_cards <= max(0, safe_removal_budget)
     echo_history_count = len(session.automated_state.decision_history)
+    assert session.state_payload()["developer"]["runState"] == {
+        "inDecisionWeb": False,
+        "canSkipToEnd": True,
+        "canSkipToDay": False,
+    }
 
     while not session.player_final_assembly_locked and not session.player_state.final_item_completed:
         card = session.current_cards[0]
@@ -398,7 +403,13 @@ def test_slow_route_uses_one_player_only_final_assembly_batch_then_normal_workda
         assert session.ready_to_advance()
         session.advance_day()
 
-    final = session.state_payload()["finalReveal"]
+    final_payload = session.state_payload()
+    assert final_payload["developer"]["runState"] == {
+        "inDecisionWeb": False,
+        "canSkipToEnd": False,
+        "canSkipToDay": False,
+    }
+    final = final_payload["finalReveal"]
     assert final["review"]["outcome"] == "behind"
     assert session.player_state.completion_day > session.automated_state.completion_day
     final_points = [

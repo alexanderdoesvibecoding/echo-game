@@ -10,7 +10,12 @@ for (const id of [
   "summarySection", "summaryGrid", "summaryModalOverlay", "summaryModalBody", "summaryModalTitle",
   "finalSection", "finalMetricsBar", "finalCompletionChart", "finalNotes", "welcomeModalOverlay",
   "welcomeSubmarineVisual", "welcomeBlurb", "newRunModalOverlay", "newRunSettings", "newRunLoading",
-  "closeNewRunModalBtn", "cancelNewRunBtn", "startNewRunBtn", "settingsPanel",
+  "closeNewRunModalBtn", "cancelNewRunBtn", "startNewRunBtn", "settingsPanel", "newRunDescription",
+  "devSeedField", "newRunSeedInput", "devPanel", "devPanelToggle", "devPanelBody", "devRunSeed",
+  "devRunDay", "devRunPhase", "devBusyState", "devModalNotice", "devActiveControls",
+  "devGameOverControls", "devDiagnosticsRow", "devSkipDayRow", "devSkipEndRow",
+  "devInstantProgression", "devShowDiagnostics", "devStrategy", "devTargetDay",
+  "devSkipToDayBtn", "devSkipToEndBtn", "devNewGameBtn",
 ]) dom.element(id);
 
 const initialState = {
@@ -61,6 +66,7 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(dom.element("welcomeModalOverlay").classList.contains("active"), true);
   assert.match(dom.element("welcomeBlurb").textContent, /all 2 jobs/);
   assert.match(dom.element("inlineDecisionBody").innerHTML, /data-timeline-actor="player"/);
+  assert.equal(dom.element("devPanel").classList.contains("hidden"), true);
   assert.equal(typeof window.startNewRun, "function");
   assert.equal(typeof window.submitDecision, "function");
 
@@ -70,6 +76,20 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(calls.at(-1).options.method, "POST");
   assert.equal(dom.element("error").classList.contains("hidden"), true);
   assert.equal(dom.element("dayBadge").textContent, "July 1");
+
+  uiState.state = {
+    ...initialState,
+    developer: {
+      generation: {},
+      runState: { inDecisionWeb: true, canSkipToEnd: true, canSkipToDay: true },
+    },
+  };
+  dom.element("newRunSeedInput").value = "12345";
+  nextPayload = { ...uiState.state, seed: 12345 };
+  await window.startNewRun();
+  assert.deepEqual(JSON.parse(calls.at(-1).options.body), { seed: "12345" });
+  assert.equal(uiState.state.seed, 12345);
+  assert.equal(dom.element("devPanel").classList.contains("hidden"), false);
 
   uiState.newRunModalVisible = true;
   nextError = "new run failed";

@@ -2,6 +2,7 @@
 
 import { api } from "./api.js";
 import { configureDayClock, readyToAdvance, resetDayCycle, syncDayCycleForState } from "./dayClock.js";
+import { configureDevTools, initDevTools, renderDevTools } from "./devTools.js";
 import { $ } from "./html.js";
 import {
   closeNewRunModal,
@@ -63,11 +64,14 @@ async function startNewRun() {
   uiState.newRunLoading = true;
   showNewRunError("");
   renderNewRunModal();
+  renderDevTools();
 
   try {
+    const seedValue = $("newRunSeedInput")?.value?.trim() || null;
+    const body = uiState.state?.developer ? { seed: seedValue } : {};
     uiState.state = await api("/api/new", {
       method: "POST",
-      body: JSON.stringify({})
+      body: JSON.stringify(body)
     });
     uiState.runCycleId += 1;
     resetDayCycle();
@@ -83,6 +87,7 @@ async function startNewRun() {
   } catch (error) {
     uiState.newRunLoading = false;
     renderNewRunModal();
+    renderDevTools();
     if (uiState.newRunModalVisible) {
       showNewRunError(error.message);
     } else {
@@ -154,6 +159,7 @@ function render() {
   renderNewRunModal();
   renderDecisionQueue();
   renderSettingsMenu();
+  renderDevTools();
 }
 
 function renderMainSectionVisibility() {
@@ -168,7 +174,9 @@ configureDayClock({
   renderDecisionQueue,
 });
 configureDecisionActions({ choose });
-configureModals({ renderDecisionQueue, showNewRunError });
+configureModals({ renderDecisionQueue, renderDevTools, showNewRunError });
+configureDevTools({ openNewRunModal });
+initDevTools();
 
 $("settingsMenuBtn").addEventListener("click", toggleSettingsMenu);
 $("openNewRunModalBtn").addEventListener("click", openNewRunModal);

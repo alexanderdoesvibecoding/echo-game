@@ -6,6 +6,7 @@ import { SUBMARINE_IMAGE_SRC } from "./submarineVisual.js";
 
 const callbacks = {
   renderDecisionQueue: () => {},
+  renderDevTools: null,
   showNewRunError: () => {},
 };
 
@@ -39,6 +40,7 @@ export function closeWelcomeModal() {
   uiState.welcomeModalVisible = false;
   renderWelcomeModal();
   callbacks.renderDecisionQueue();
+  callbacks.renderDevTools?.();
 }
 
 export function toggleSettingsMenu() {
@@ -65,6 +67,7 @@ export function openNewRunModal() {
   callbacks.showNewRunError("");
   renderNewRunModal();
   callbacks.renderDecisionQueue();
+  callbacks.renderDevTools?.();
 }
 
 export function closeNewRunModal() {
@@ -73,21 +76,30 @@ export function closeNewRunModal() {
   callbacks.showNewRunError("");
   renderNewRunModal();
   callbacks.renderDecisionQueue();
+  callbacks.renderDevTools?.();
 }
 
 export function renderNewRunModal() {
   const overlay = $("newRunModalOverlay");
   if (!overlay) return;
+  const developerMode = Boolean(uiState.state?.developer);
   overlay.classList.toggle("active", uiState.newRunModalVisible);
   overlay.setAttribute("aria-busy", uiState.newRunLoading ? "true" : "false");
 
   $("newRunSettings")?.classList.toggle("hidden", uiState.newRunLoading);
   $("newRunLoading")?.classList.toggle("hidden", !uiState.newRunLoading);
+  $("devSeedField")?.classList.toggle("hidden", !developerMode);
+  if ($("newRunDescription")) {
+    $("newRunDescription").textContent = developerMode
+      ? "Start a fresh run with a random seed or enter an exact seed."
+      : "Start a fresh standard run with a newly generated seed.";
+  }
 
   for (const id of ["closeNewRunModalBtn", "cancelNewRunBtn", "startNewRunBtn"]) {
     const button = $(id);
     if (button) button.disabled = uiState.newRunLoading;
   }
+  if ($("newRunSeedInput")) $("newRunSeedInput").disabled = uiState.newRunLoading;
 }
 
 export function initDarkMode() {

@@ -29,6 +29,7 @@ STATIC_ASSETS = {
     ),
     "/ui/assets/virginia-submarine-cutout.png": ("image/png", UI_DIR / "assets" / "virginia-submarine-cutout.png"),
     "/ui/dayClock.js": ("application/javascript; charset=utf-8", UI_DIR / "dayClock.js"),
+    "/ui/devTools.js": ("application/javascript; charset=utf-8", UI_DIR / "devTools.js"),
     "/ui/html.js": ("application/javascript; charset=utf-8", UI_DIR / "html.js"),
     "/ui/modals.js": ("application/javascript; charset=utf-8", UI_DIR / "modals.js"),
     "/ui/renderDecisions.js": ("application/javascript; charset=utf-8", UI_DIR / "renderDecisions.js"),

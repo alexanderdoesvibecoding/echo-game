@@ -6,6 +6,11 @@ import { installDom } from "./testDom.mjs";
 const dom = installDom();
 const { uiState } = await import("../../echo_adventure/ui/state.js");
 const {
+  configureDevTools,
+  initDevTools,
+  renderDevTools,
+} = await import("../../echo_adventure/ui/devTools.js");
+const {
   buildDailyDecisionGroups,
   hideDecisionChartTooltip,
   renderFinal,
@@ -41,6 +46,11 @@ function resetUiState() {
     modalVisible: false,
     summaryAnimationKey: null,
     pendingChoice: null,
+    devPanelCollapsed: false,
+    devInstantProgression: false,
+    devShowDiagnostics: false,
+    devStrategy: "echo",
+    devRequestInFlight: false,
   });
 }
 
@@ -196,27 +206,69 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
   assert.equal(dom.element("finalNotes").innerHTML, "<li>ECHO finished &lt;first&gt;.</li>");
 });
 
-test("welcome, settings, and new-run controls reflect browser-local state", () => {
+test("welcome, settings, new-run, and developer controls reflect browser-local state", () => {
   for (const id of [
     "welcomeModalOverlay", "welcomeSubmarineVisual", "welcomeBlurb", "settingsPanel", "settingsMenuBtn",
     "newRunModalOverlay", "newRunSettings", "newRunLoading", "closeNewRunModalBtn", "cancelNewRunBtn",
-    "startNewRunBtn", "themeMenuBtn",
+    "startNewRunBtn", "themeMenuBtn", "newRunDescription", "devSeedField", "newRunSeedInput",
+    "devPanel", "devPanelToggle", "devPanelBody", "devRunSeed", "devRunDay", "devRunPhase",
+    "devBusyState", "devModalNotice", "devActiveControls", "devGameOverControls",
+    "devDiagnosticsRow", "devSkipDayRow", "devSkipEndRow", "devInstantProgression",
+    "devShowDiagnostics", "devStrategy", "devTargetDay", "devSkipToDayBtn",
+    "devSkipToEndBtn", "devNewGameBtn",
   ]) dom.element(id);
   let queueRenders = 0;
   let lastError = "unset";
+  let devNewGameRequests = 0;
   configureModals({
     renderDecisionQueue: () => { queueRenders += 1; },
+    renderDevTools,
     showNewRunError: value => { lastError = value; },
   });
-  uiState.state = { jobCount: 3 };
+  configureDevTools({
+    openNewRunModal: () => { devNewGameRequests += 1; },
+  });
+  initDevTools();
+  uiState.state = {
+    seed: 700,
+    day: 1,
+    jobCount: 3,
+    gameOver: false,
+    decisions: [{ id: "CARD-1" }],
+    developer: {
+      generation: {},
+      runState: { inDecisionWeb: true, canSkipToEnd: true, canSkipToDay: true },
+    },
+  };
   uiState.welcomeModalVisible = true;
 
   renderWelcomeModal();
   assert.equal(dom.element("welcomeModalOverlay").classList.contains("active"), true);
   assert.match(dom.element("welcomeSubmarineVisual").innerHTML, /Submarine underway/);
   assert.match(dom.element("welcomeBlurb").textContent, /all 3 jobs/);
+  renderDevTools();
+  assert.equal(dom.element("devPanel").classList.contains("hidden"), false);
+  assert.equal(dom.element("devActiveControls").classList.contains("hidden"), true);
+  assert.equal(dom.element("devModalNotice").classList.contains("hidden"), false);
   closeWelcomeModal();
   assert.equal(uiState.welcomeModalVisible, false);
+
+  assert.equal(dom.element("devActiveControls").classList.contains("hidden"), false);
+  assert.equal(dom.element("devSkipDayRow").classList.contains("hidden"), false);
+  assert.equal(dom.element("devDiagnosticsRow").classList.contains("hidden"), false);
+  assert.equal(dom.element("devSkipToDayBtn").disabled, true);
+  assert.equal(dom.element("devSkipToEndBtn").disabled, true);
+  assert.equal(dom.element("devRunPhase").textContent, "Preplanned run");
+
+  dom.element("devPanelToggle").listeners.get("click")[0]();
+  assert.equal(uiState.devPanelCollapsed, true);
+  assert.equal(dom.element("devPanelBody").classList.contains("hidden"), true);
+  dom.element("devInstantProgression").listeners.get("change")[0]({ target: { checked: true } });
+  dom.element("devShowDiagnostics").listeners.get("change")[0]({ target: { checked: true } });
+  dom.element("devStrategy").listeners.get("change")[0]({ target: { value: "worst" } });
+  assert.equal(uiState.devInstantProgression, true);
+  assert.equal(uiState.devShowDiagnostics, true);
+  assert.equal(uiState.devStrategy, "worst");
 
   toggleSettingsMenu();
   assert.equal(dom.element("settingsPanel").classList.contains("active"), true);
@@ -226,15 +278,55 @@ test("welcome, settings, and new-run controls reflect browser-local state", () =
   assert.equal(uiState.newRunModalVisible, true);
   assert.equal(lastError, "");
   assert.equal(dom.element("newRunModalOverlay").classList.contains("active"), true);
+  assert.equal(dom.element("devSeedField").classList.contains("hidden"), false);
+  assert.match(dom.element("newRunDescription").textContent, /exact seed/);
+  assert.equal(dom.element("devActiveControls").classList.contains("hidden"), true);
   closeNewRunModal();
   assert.equal(uiState.newRunModalVisible, false);
+
+  uiState.state = {
+    ...uiState.state,
+    finalAssembly: { active: true },
+    decisions: [{ id: "FINAL-1" }],
+    developer: {
+      generation: {},
+      runState: { inDecisionWeb: false, canSkipToEnd: true, canSkipToDay: false },
+    },
+  };
+  renderDevTools();
+  assert.equal(dom.element("devRunPhase").textContent, "Final assembly");
+  assert.equal(dom.element("devSkipDayRow").classList.contains("hidden"), true);
+  assert.equal(dom.element("devSkipEndRow").classList.contains("hidden"), false);
+
+  uiState.state = {
+    ...uiState.state,
+    gameOver: true,
+    decisions: [],
+    finalAssembly: null,
+    developer: {
+      generation: {},
+      runState: { inDecisionWeb: false, canSkipToEnd: false, canSkipToDay: false },
+    },
+  };
+  renderDevTools();
+  assert.equal(dom.element("devActiveControls").classList.contains("hidden"), true);
+  assert.equal(dom.element("devGameOverControls").classList.contains("hidden"), false);
+  assert.equal(dom.element("devRunPhase").textContent, "Game over");
+  dom.element("devNewGameBtn").listeners.get("click")[0]();
+  assert.equal(devNewGameRequests, 1);
+
+  uiState.newRunLoading = true;
+  renderDevTools();
+  assert.equal(dom.element("devBusyState").classList.contains("hidden"), false);
+  assert.match(dom.element("devBusyState").textContent, /Generating/);
   assert.ok(queueRenders >= 3);
 });
 
 test("new-run loading locks dismissal and theme preference persists", () => {
   for (const id of [
     "newRunModalOverlay", "newRunSettings", "newRunLoading", "closeNewRunModalBtn", "cancelNewRunBtn",
-    "startNewRunBtn", "settingsPanel", "settingsMenuBtn", "themeMenuBtn",
+    "startNewRunBtn", "settingsPanel", "settingsMenuBtn", "themeMenuBtn", "devSeedField",
+    "newRunSeedInput", "newRunDescription",
   ]) dom.element(id);
   configureModals({ renderDecisionQueue() {}, showNewRunError() {} });
   uiState.newRunModalVisible = true;
@@ -275,7 +367,8 @@ test("final view hides without a reveal and tooltip tolerates invalid event data
 test("new-run loading exposes busy state and disables every modal action", () => {
   for (const id of [
     "newRunModalOverlay", "newRunSettings", "newRunLoading", "closeNewRunModalBtn",
-    "cancelNewRunBtn", "startNewRunBtn",
+    "cancelNewRunBtn", "startNewRunBtn", "devSeedField", "newRunSeedInput",
+    "newRunDescription",
   ]) dom.element(id);
   uiState.newRunModalVisible = true;
   uiState.newRunLoading = true;
@@ -288,4 +381,5 @@ test("new-run loading exposes busy state and disables every modal action", () =>
   assert.equal(dom.element("closeNewRunModalBtn").disabled, true);
   assert.equal(dom.element("cancelNewRunBtn").disabled, true);
   assert.equal(dom.element("startNewRunBtn").disabled, true);
+  assert.equal(dom.element("newRunSeedInput").disabled, true);
 });

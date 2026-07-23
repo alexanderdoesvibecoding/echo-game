@@ -86,6 +86,57 @@
     </div>
   </main>
 
+  <aside id="devPanel" class="dev-panel hidden" aria-label="Developer tools" aria-hidden="true">
+    <div class="dev-panel-titlebar">
+      <strong>DEV MODE</strong>
+      <button id="devPanelToggle" class="dev-panel-toggle" type="button" aria-controls="devPanelBody" aria-expanded="true">Collapse</button>
+    </div>
+    <div id="devPanelBody" class="dev-panel-body">
+      <dl class="dev-run-info">
+        <div><dt>Seed</dt><dd id="devRunSeed">—</dd></div>
+        <div><dt>Day</dt><dd id="devRunDay">—</dd></div>
+        <div><dt>State</dt><dd id="devRunPhase">—</dd></div>
+      </dl>
+      <div id="devBusyState" class="dev-panel-notice hidden" role="status" aria-live="polite"></div>
+      <div id="devModalNotice" class="dev-panel-notice hidden">Controls paused while a modal is open.</div>
+      <div id="devActiveControls" class="dev-control-stack">
+        <label class="dev-toggle-row" for="devInstantProgression">
+          <span>Instant progression</span>
+          <input id="devInstantProgression" type="checkbox">
+        </label>
+        <label id="devDiagnosticsRow" class="dev-toggle-row" for="devShowDiagnostics">
+          <span>Show choice diagnostics</span>
+          <input id="devShowDiagnostics" type="checkbox">
+        </label>
+        <label class="dev-field-row" for="devStrategy">
+          <span>Automated strategy</span>
+          <select id="devStrategy">
+            <option value="echo">ECHO</option>
+            <option value="random">Random</option>
+            <option value="first">First choice</option>
+            <option value="last">Last choice</option>
+            <option value="worst">Worst path</option>
+          </select>
+        </label>
+        <div id="devSkipDayRow" class="dev-action-row">
+          <label for="devTargetDay">Skip to day</label>
+          <div>
+            <select id="devTargetDay"><option value="">No reachable days</option></select>
+            <button id="devSkipToDayBtn" type="button" disabled>Skip</button>
+          </div>
+        </div>
+        <div id="devSkipEndRow" class="dev-action-row">
+          <span>Finish automated run</span>
+          <button id="devSkipToEndBtn" type="button" disabled>Skip to end</button>
+        </div>
+      </div>
+      <div id="devGameOverControls" class="dev-game-over-controls hidden">
+        <p>Run complete. Start another game with a random or explicit seed.</p>
+        <button id="devNewGameBtn" type="button">New game…</button>
+      </div>
+    </div>
+  </aside>
+
   <div id="welcomeModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="welcomeModalTitle">
     <div class="modal welcome-modal">
       <h1 id="welcomeModalTitle" class="welcome-title">
@@ -113,7 +164,11 @@
       </div>
       <div class="modal-body">
         <div id="newRunSettings" class="settings-form">
-          <p class="subtle">Start a fresh standard run with a newly generated seed.</p>
+          <p id="newRunDescription" class="subtle">Start a fresh standard run with a newly generated seed.</p>
+          <label id="devSeedField" class="seed-field hidden" for="newRunSeedInput">
+            <span>Seed <span class="subtle">(optional)</span></span>
+            <input id="newRunSeedInput" type="number" step="1" inputmode="numeric" placeholder="Random seed">
+          </label>
           <div id="newRunError" class="modal-error hidden"></div>
         </div>
         <div id="newRunLoading" class="new-run-loading hidden" role="status" aria-live="polite">
