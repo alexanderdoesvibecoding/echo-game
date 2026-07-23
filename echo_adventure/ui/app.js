@@ -1,7 +1,13 @@
 "use strict";
 
 import { api } from "./api.js";
-import { configureDayClock, readyToAdvance, resetDayCycle, syncDayCycleForState } from "./dayClock.js";
+import {
+  configureDayClock,
+  instantProgressionEnabled,
+  readyToAdvance,
+  resetDayCycle,
+  syncDayCycleForState,
+} from "./dayClock.js";
 import { configureDevTools, initDevTools, renderDevTools } from "./devTools.js";
 import { $ } from "./html.js";
 import {
@@ -97,6 +103,10 @@ async function startNewRun() {
 }
 
 async function choose(cardId, choiceId) {
+  if (uiState.choiceRequestInFlight) return null;
+  uiState.choiceRequestInFlight = true;
+  renderDecisionQueue();
+  let result = null;
   try {
     uiState.state = await api("/api/choice", {
       method: "POST",
@@ -104,34 +114,42 @@ async function choose(cardId, choiceId) {
     });
     uiState.pendingChoice = null;
     showError("");
-    render();
-    return uiState.state;
+    result = uiState.state;
   } catch (error) {
     showError(error.message);
-    return null;
+  } finally {
+    uiState.choiceRequestInFlight = false;
+    render();
   }
+  return result;
 }
 
 async function prepareAdvanceDay() {
+  if (uiState.advanceRequestInFlight) return;
   if (!readyToAdvance()) {
     uiState.dayCycleAdvancing = false;
     document.getElementById("dailyDecisionSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
   }
+  uiState.advanceRequestInFlight = true;
   try {
     const nextState = await api("/api/advance", { method: "POST", body: "{}" });
     showError("");
-    uiState.pendingAdvanceState = nextState;
-    if (nextState.finalReveal) {
+    if (nextState.finalReveal || instantProgressionEnabled()) {
       uiState.state = nextState;
       uiState.pendingAdvanceState = null;
       uiState.modalVisible = false;
     } else {
+      uiState.pendingAdvanceState = nextState;
       uiState.modalVisible = true;
     }
+    uiState.advanceRequestInFlight = false;
     render();
   } catch (error) {
+    uiState.dayCycleAdvancing = false;
     showError(error.message);
+  } finally {
+    uiState.advanceRequestInFlight = false;
   }
 }
 
@@ -168,6 +186,11 @@ function renderMainSectionVisibility() {
   $("game-area").classList.toggle("hidden", gameOver);
 }
 
+function handleInstantProgressionChanged(enabled) {
+  if (!enabled) resetDayCycle();
+  render();
+}
+
 configureDayClock({
   renderInlineDecisions,
   prepareAdvanceDay,
@@ -175,7 +198,10 @@ configureDayClock({
 });
 configureDecisionActions({ choose });
 configureModals({ renderDecisionQueue, renderDevTools, showNewRunError });
-configureDevTools({ openNewRunModal });
+configureDevTools({
+  instantProgressionChanged: handleInstantProgressionChanged,
+  openNewRunModal,
+});
 initDevTools();
 
 $("settingsMenuBtn").addEventListener("click", toggleSettingsMenu);

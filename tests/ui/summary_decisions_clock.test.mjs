@@ -44,11 +44,18 @@ function resetUiState() {
     dayCycleTimer: null,
     dayCycleLastTick: null,
     dayCycleAdvancing: false,
+    advanceRequestInFlight: false,
     dayDecisionThresholds: [],
     pendingAdvanceState: null,
     modalVisible: false,
     summaryAnimationKey: null,
     pendingChoice: null,
+    choiceRequestInFlight: false,
+    devPanelCollapsed: false,
+    devInstantProgression: false,
+    devShowDiagnostics: false,
+    devStrategy: "echo",
+    devRequestInFlight: false,
   });
 }
 
@@ -190,6 +197,18 @@ test("day clock creates deterministic decision thresholds and blocks at the righ
   uiState.welcomeModalVisible = false;
   uiState.state.decisionProgress.completed = 2;
   assert.equal(readyToAdvance(), true);
+
+  uiState.state = statePayload({
+    developer: {
+      generation: {},
+      runState: { inDecisionWeb: true, canSkipToEnd: true, canSkipToDay: true },
+    },
+  });
+  uiState.devInstantProgression = true;
+  uiState.dayCycleProgress = 0;
+  assert.equal(nextDecisionIsDue(), true);
+  uiState.devRequestInFlight = true;
+  assert.equal(decisionInteractionBlocked(), true);
 });
 
 test("day clock markup and timeline updates expose both player and ECHO progress", () => {
@@ -330,13 +349,28 @@ test("automatic clock advances at 100 percent and stops cleanly at game over", (
   uiState.state.gameOver = true;
   dom.runInterval(timer);
   assert.equal(uiState.dayCycleTimer, null);
+
+  uiState.state = statePayload({
+    developer: {
+      generation: {},
+      runState: { inDecisionWeb: true, canSkipToEnd: true, canSkipToDay: true },
+    },
+    decisionProgress: { completed: 0, total: 0 },
+    decisions: [],
+  });
+  uiState.devInstantProgression = true;
+  resetDayCycle();
+  syncDayCycleForState();
+  assert.equal(prepareCalls, 2);
+  assert.equal(uiState.dayCycleProgress, 0);
 });
 
 test("automatic clock pauses at a due decision and while overlays are active", () => {
+  let prepareCalls = 0;
   let inlineRenders = 0;
   let queueRenders = 0;
   configureDayClock({
-    prepareAdvanceDay() {},
+    prepareAdvanceDay: () => { prepareCalls += 1; },
     renderInlineDecisions: () => { inlineRenders += 1; },
     renderDecisionQueue: () => { queueRenders += 1; },
   });
@@ -357,6 +391,26 @@ test("automatic clock pauses at a due decision and while overlays are active", (
   dom.setNow(900);
   dom.runInterval(timer);
   assert.equal(uiState.dayCycleProgress, uiState.dayDecisionThresholds[0]);
+
+  uiState.state = statePayload({
+    developer: {
+      generation: {},
+      runState: { inDecisionWeb: true, canSkipToEnd: true, canSkipToDay: true },
+    },
+    decisionProgress: { completed: 0, total: 0 },
+    decisions: [],
+  });
+  uiState.devInstantProgression = true;
+  uiState.devRequestInFlight = true;
+  resetDayCycle();
+  syncDayCycleForState();
+  const instantTimer = uiState.dayCycleTimer;
+  uiState.welcomeModalVisible = false;
+  dom.runInterval(instantTimer);
+  assert.equal(prepareCalls, 0);
+  uiState.devRequestInFlight = false;
+  dom.runInterval(instantTimer);
+  assert.equal(prepareCalls, 1);
 });
 
 test("summary and decision queue hide or idle safely when content is unavailable", () => {

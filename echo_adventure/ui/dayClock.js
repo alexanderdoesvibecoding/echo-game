@@ -28,6 +28,10 @@ export function readyToAdvance() {
   return Boolean(uiState.state && !uiState.state.gameOver && progress.completed === progress.total);
 }
 
+export function instantProgressionEnabled() {
+  return Boolean(uiState.state?.developer && uiState.devInstantProgression);
+}
+
 export function resetDayCycle() {
   uiState.dayCycleKey = null;
   uiState.dayCycleProgress = 0;
@@ -53,6 +57,7 @@ export function syncDayCycleForState() {
   if (!uiState.dayCycleTimer) {
     uiState.dayCycleTimer = window.setInterval(tick, TICK_MS);
   }
+  maybeAdvanceInstantly();
 }
 
 function buildThresholds(total) {
@@ -74,6 +79,7 @@ function tick() {
   const now = performance.now();
   const elapsed = now - (uiState.dayCycleLastTick ?? now);
   uiState.dayCycleLastTick = now;
+  if (maybeAdvanceInstantly()) return;
   if (!cycleBlocked()) {
     uiState.dayCycleProgress = Math.min(100, uiState.dayCycleProgress + elapsed / dayDurationMs() * 100);
   }
@@ -90,8 +96,34 @@ function tick() {
 function cycleBlocked() {
   return uiState.welcomeModalVisible
     || uiState.newRunModalVisible
+    || uiState.modalVisible
+    || uiState.newRunLoading
+    || uiState.devRequestInFlight
+    || uiState.choiceRequestInFlight
+    || instantProgressionEnabled()
     || nextDecisionIsDue()
     || Boolean(uiState.pendingAdvanceState);
+}
+
+function maybeAdvanceInstantly() {
+  if (
+    !instantProgressionEnabled()
+    || uiState.welcomeModalVisible
+    || uiState.newRunModalVisible
+    || uiState.modalVisible
+    || uiState.newRunLoading
+    || uiState.devRequestInFlight
+    || uiState.choiceRequestInFlight
+    || uiState.advanceRequestInFlight
+    || uiState.pendingAdvanceState
+    || uiState.dayCycleAdvancing
+    || !readyToAdvance()
+  ) {
+    return false;
+  }
+  uiState.dayCycleAdvancing = true;
+  callbacks.prepareAdvanceDay();
+  return true;
 }
 
 function dayDurationMs() {
@@ -106,7 +138,10 @@ export function dayCyclePercent() {
 export function nextDecisionIsDue() {
   const progress = decisionProgress();
   const threshold = uiState.dayDecisionThresholds[progress.completed] ?? 100;
-  return Boolean(currentOpenDecisionCard() && dayCyclePercent() >= threshold);
+  return Boolean(
+    currentOpenDecisionCard()
+      && (instantProgressionEnabled() || dayCyclePercent() >= threshold)
+  );
 }
 
 export function currentOpenDecisionCard() {
@@ -114,7 +149,14 @@ export function currentOpenDecisionCard() {
 }
 
 export function decisionInteractionBlocked() {
-  return !uiState.state || uiState.state.gameOver || uiState.welcomeModalVisible || uiState.newRunModalVisible;
+  return !uiState.state
+    || uiState.state.gameOver
+    || uiState.welcomeModalVisible
+    || uiState.newRunModalVisible
+    || uiState.modalVisible
+    || uiState.newRunLoading
+    || uiState.devRequestInFlight
+    || uiState.choiceRequestInFlight;
 }
 
 export function renderDayClock() {

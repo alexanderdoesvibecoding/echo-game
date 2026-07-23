@@ -38,6 +38,7 @@ const initialState = {
 const calls = [];
 let nextError = null;
 let nextPayload = null;
+let nextPayloads = [];
 globalThis.fetch = async (path, options = {}) => {
   calls.push({ path, options });
   if (nextError) {
@@ -48,7 +49,7 @@ globalThis.fetch = async (path, options = {}) => {
   return {
     ok: true,
     async json() {
-      const payload = nextPayload;
+      const payload = nextPayloads.length ? nextPayloads.shift() : nextPayload;
       nextPayload = null;
       return payload || { ...initialState, seed: path === "/api/new" ? 701 : 700 };
     },
@@ -57,7 +58,7 @@ globalThis.fetch = async (path, options = {}) => {
 
 await import("../../echo_adventure/ui/app.js");
 const { uiState } = await import("../../echo_adventure/ui/state.js");
-const { syncDayCycleForState } = await import("../../echo_adventure/ui/dayClock.js");
+const { resetDayCycle, syncDayCycleForState } = await import("../../echo_adventure/ui/dayClock.js");
 await new Promise(resolve => globalThis.setTimeout(resolve, 0));
 
 test("app bootstrap loads state, renders the shell, and exposes working global actions", async () => {
@@ -112,6 +113,90 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   await window.submitDecision();
   assert.equal(dom.element("error").textContent, "choice failed");
   assert.equal(dom.element("error").classList.contains("hidden"), false);
+
+  uiState.welcomeModalVisible = false;
+  uiState.newRunModalVisible = false;
+  uiState.modalVisible = false;
+  uiState.pendingAdvanceState = null;
+  uiState.choiceRequestInFlight = false;
+  uiState.advanceRequestInFlight = false;
+  uiState.devInstantProgression = false;
+  uiState.state = {
+    ...initialState,
+    decisionProgress: { completed: 0, total: 2 },
+    decisions: [{
+      id: "CARD-INSTANT-1",
+      title: "First instant decision",
+      description: "Choose immediately",
+      choices: [{ id: "choice-1", label: "First", icon: "adjust" }],
+    }],
+    developer: {
+      generation: {},
+      runState: { inDecisionWeb: true, canSkipToEnd: true, canSkipToDay: true },
+    },
+  };
+  resetDayCycle();
+  dom.element("devInstantProgression").listeners.get("change")[0]({
+    target: { checked: true },
+  });
+  assert.equal(uiState.devInstantProgression, true);
+  assert.match(dom.element("decisionQueueBody").innerHTML, /First instant decision/);
+
+  nextPayloads = [{
+    ...uiState.state,
+    decisionProgress: { completed: 1, total: 2 },
+    decisions: [{
+      id: "CARD-INSTANT-2",
+      title: "Second instant decision",
+      description: "Choose on the same day",
+      choices: [{ id: "choice-2", label: "Second", icon: "adjust" }],
+    }],
+  }];
+  uiState.pendingChoice = { cardId: "CARD-INSTANT-1", choiceId: "choice-1" };
+  const firstInstantSubmit = window.submitDecision();
+  const duplicateInstantSubmit = window.submitDecision();
+  await Promise.all([firstInstantSubmit, duplicateInstantSubmit]);
+  assert.match(dom.element("decisionQueueBody").innerHTML, /Second instant decision/);
+  assert.equal(
+    calls.filter(call => call.path === "/api/choice" && call.options.body?.includes("CARD-INSTANT-1")).length,
+    1,
+  );
+
+  nextPayloads = [
+    {
+      ...uiState.state,
+      decisionProgress: { completed: 2, total: 2 },
+      decisions: [],
+    },
+    {
+      ...uiState.state,
+      day: 2,
+      currentDate: "July 2",
+      decisionProgress: { completed: 0, total: 1 },
+      decisions: [{
+        id: "CARD-DAY-2",
+        title: "Next day decision",
+        description: "Already visible",
+        choices: [{ id: "choice-3", label: "Continue", icon: "adjust" }],
+      }],
+    },
+  ];
+  uiState.pendingChoice = { cardId: "CARD-INSTANT-2", choiceId: "choice-2" };
+  await window.submitDecision();
+  await new Promise(resolve => globalThis.setTimeout(resolve, 0));
+  assert.equal(calls.at(-1).path, "/api/advance");
+  assert.equal(uiState.state.day, 2);
+  assert.equal(uiState.pendingAdvanceState, null);
+  assert.equal(uiState.modalVisible, false);
+  assert.match(dom.element("decisionQueueBody").innerHTML, /Next day decision/);
+
+  uiState.dayCycleProgress = 75;
+  dom.element("devInstantProgression").listeners.get("change")[0]({
+    target: { checked: false },
+  });
+  assert.equal(uiState.devInstantProgression, false);
+  assert.equal(uiState.dayCycleProgress, 0);
+  assert.doesNotMatch(dom.element("decisionQueueBody").innerHTML, /Next day decision/);
 
   uiState.welcomeModalVisible = false;
   uiState.newRunModalVisible = false;
