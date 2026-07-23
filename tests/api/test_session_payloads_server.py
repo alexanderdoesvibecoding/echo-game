@@ -125,10 +125,38 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
             "solved-optimal-continuation"
         )
         assert diagnostics["completionProjection"]["day"] >= 1
+        assert diagnostics["followUp"]["mode"] == "preplanned"
+        assert isinstance(diagnostics["followUp"]["scheduled"], bool)
     assert any(
         choice["developer"]["jobDayChanges"]
         for choice in dev_card["choices"]
     )
+
+    source_card = replace(
+        dev_session.current_cards[0],
+        event_scope="follow-up",
+        follow_up_source_day=1,
+        follow_up_source_definition_id="calibration-drift",
+        follow_up_source_title="Measurements may be <unreliable>",
+        follow_up_source_choice_id="choice-1",
+        follow_up_source_choice_label="Recalibrate <now>",
+    )
+    generated_by = dev_session._card_payload(source_card)["developer"]["generatedBy"]
+    assert generated_by == {
+        "sourceDay": 1,
+        "sourceDefinitionId": "calibration-drift",
+        "sourceTitle": "Measurements may be <unreliable>",
+        "sourceChoiceId": "choice-1",
+        "sourceChoiceLabel": "Recalibrate <now>",
+        "affectedJob": {
+            "jobId": source_card.primary_job_id,
+            "jobLabel": f"Job {int(source_card.primary_job_id.rsplit('-', 1)[-1])}",
+            "jobName": dev_session.player_state.jobs[
+                source_card.primary_job_id
+            ].name,
+        },
+    }
+    assert "developer" not in session._card_payload(source_card)
 
     real_generate_decision_web = session_module.generate_decision_web
     generation_calls: list[tuple[int, float | None]] = []
@@ -195,6 +223,10 @@ def test_session_rejects_invalid_or_out_of_sequence_actions(monkeypatch: pytest.
     assert all(
         choice["developer"]["completionProjection"]["basis"]
         == "runtime-local-immediate-projection"
+        for choice in overtime_payload["choices"]
+    )
+    assert all(
+        choice["developer"]["followUp"]["mode"] == "runtime"
         for choice in overtime_payload["choices"]
     )
 

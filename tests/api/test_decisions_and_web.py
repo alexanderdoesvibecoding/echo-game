@@ -10,9 +10,15 @@ from echo_adventure.decision_web import (
     _JOB_TARGET_WINDOW_PATTERN,
     _DecisionWebBuilder,
     _target_window_index,
+    DecisionWeb,
     DecisionWebGenerationTimeout,
+    DecisionWebNode,
     DecisionWebState,
     generate_decision_web,
+)
+from echo_adventure.api.developer import (
+    inspect_preplanned_follow_up,
+    inspect_runtime_follow_up,
 )
 from echo_adventure.decisions.cards import (
     _avoid_exact_cancellation,
@@ -140,6 +146,18 @@ def test_apply_choice_schedules_each_valid_follow_up_at_most_once() -> None:
     follow_up = DecisionFollowUp(follow_up_id, probability=1.0, delay_days=2)
     choice = make_choice("choice-1", changes={"JOB-01": 1}, follow_ups=(follow_up, follow_up))
     card = make_card(choice, definition_id="trigger")
+
+    diagnostics = inspect_runtime_follow_up(state, card, choice)
+    assert diagnostics["mode"] == "runtime"
+    assert diagnostics["scheduled"] is True
+    assert [target["definitionId"] for target in diagnostics["targets"] if target["scheduled"]] == [
+        follow_up_id,
+    ]
+    assert all(
+        target["effectNote"] == "Effect determined when follow-up appears"
+        for target in diagnostics["targets"]
+    )
+    assert diagnostics["targets"][0]["possibilities"]
 
     apply_choice(state, card, choice, actor="player")
     apply_choice(state, card, choice, actor="player")
@@ -420,7 +438,7 @@ def test_decision_web_is_deterministic_and_every_node_is_fully_solved(solved_web
 
     delayed_choice = make_choice(
         "choice-1",
-        follow_ups=(DecisionFollowUp(FOLLOW_UP_DEFINITIONS[0].id, 1.0, 3),),
+        follow_ups=(DecisionFollowUp(FOLLOW_UP_DEFINITIONS[0].id, 1.0, 1),),
     )
     delayed_card = make_card(
         delayed_choice,
@@ -436,10 +454,56 @@ def test_decision_web_is_deterministic_and_every_node_is_fully_solved(solved_web
     delayed_state = multi_question_builder.nodes[
         delayed_transition.next_node_id
     ].state
-    assert delayed_state.pending_available_day == 4
+    assert delayed_state.pending_available_day == 2
     assert delayed_state.pending_source_day == 1
     assert delayed_state.pending_source_definition_id == "calibration-drift"
     assert delayed_state.pending_source_choice_id == "choice-1"
+
+    delayed_root_state = DecisionWebState(1, 0, remaining, 0)
+    multi_question_builder.nodes["NODE-UNIT-DELAYED"] = DecisionWebNode(
+        state=delayed_root_state,
+        card=delayed_card,
+        transitions={delayed_choice.id: delayed_transition},
+    )
+    inspection_web = DecisionWeb(
+        root_node_id="NODE-UNIT-DELAYED",
+        nodes=multi_question_builder.nodes,
+        question_counts=multi_question_builder.question_counts,
+        optimal_completion_day=0,
+        optimal_unfinished_job_days=0,
+        generation_attempt=multi_question_builder.generation_attempt,
+    )
+    forward = inspect_preplanned_follow_up(
+        inspection_web,
+        "NODE-UNIT-DELAYED",
+        delayed_choice,
+        scenario.jobs,
+        config.date_label_for_day,
+    )
+    assert forward["scheduled"] is True
+    assert forward["target"]["definitionId"] == FOLLOW_UP_DEFINITIONS[0].id
+    assert forward["target"]["delayDays"] == 1
+    assert forward["possibleDays"]
+    assert forward["earliestDay"] == min(forward["possibleDays"])
+    assert forward["variants"]
+    assert all(
+        variant["definitionId"] == FOLLOW_UP_DEFINITIONS[0].id
+        for variant in forward["variants"]
+    )
+    assert all(
+        {
+            "jobId",
+            "jobLabel",
+            "jobName",
+            "days",
+            "remainingBefore",
+            "remainingAfter",
+        }
+        <= change.keys()
+        for variant in forward["variants"]
+        for variant_choice in variant["choices"]
+        for change in variant_choice["jobDayChanges"]
+    )
 
     non_longest_scenario = scenario_from_durations(10, 3, 2, seed=1)
     non_longest_config = small_config(
