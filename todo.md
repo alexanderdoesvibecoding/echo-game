@@ -22,6 +22,7 @@
       otherwise
 
 - [ ] Update new game screen – Alexander
+    - We kinda need a tutorial. We understand the game but some admiral will 100% not
 
 - [ ] Finalize end-of-game screen – Alexander
     - [ ] Finalize graph
