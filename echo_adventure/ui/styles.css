@@ -1847,6 +1847,32 @@ html[data-theme="dark"] #closeWelcomeBtn {
   background: color-mix(in srgb, var(--red) 18%, var(--panel));
   color: var(--red);
 }
+.decision-generated-by,
+.decision-diagnostic-follow-up {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--teal) 30%, var(--line));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+  overflow-wrap: anywhere;
+}
+.decision-generated-by {
+  margin-top: 10px;
+  border-left: 4px solid var(--teal);
+  font-size: 12px;
+}
+.decision-follow-up-variant-list,
+.decision-follow-up-variant-list ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 16px;
+}
+.decision-follow-up-variant-list li {
+  display: grid;
+  gap: 3px;
+}
 .decision-diagnostic-score,
 .decision-diagnostic-preference,
 .decision-diagnostic-projection {

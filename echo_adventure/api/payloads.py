@@ -11,6 +11,7 @@ from ..decisions import (
 from ..metrics import calculate_snapshot
 from ..models import DecisionCard, DecisionChoice, MetricSnapshot, SimulationState
 from ..scoring import public_score, public_score_delta
+from .developer import inspect_preplanned_follow_up, inspect_runtime_follow_up
 
 
 _FINAL_ASSEMBLY_DAY_CYCLE_DURATION_MS = 2_000
@@ -291,6 +292,9 @@ class PayloadMixin:
         }
         if preference is not None:
             payload["developer"] = {"preference": preference}
+            generated_by = self._generated_by_payload(card)
+            if generated_by is not None:
+                payload["developer"]["generatedBy"] = generated_by
         if card.follow_up_source_day is not None:
             payload["followUpSource"] = {
                 "day": card.follow_up_source_day,
@@ -372,7 +376,53 @@ class PayloadMixin:
                 card,
                 choice,
             ),
+            "followUp": self._choice_follow_up_payload(card, choice),
         }
+
+    def _generated_by_payload(
+        self,
+        card: DecisionCard,
+    ) -> dict[str, Any] | None:
+        if card.follow_up_source_day is None:
+            return None
+        job = self.player_state.jobs.get(card.primary_job_id)
+        return {
+            "sourceDay": card.follow_up_source_day,
+            "sourceDefinitionId": card.follow_up_source_definition_id,
+            "sourceTitle": card.follow_up_source_title,
+            "sourceChoiceId": card.follow_up_source_choice_id,
+            "sourceChoiceLabel": card.follow_up_source_choice_label,
+            "affectedJob": {
+                "jobId": card.primary_job_id,
+                "jobLabel": _job_label(card.primary_job_id),
+                "jobName": job.name if job else card.context_label,
+            },
+        }
+
+    def _choice_follow_up_payload(
+        self,
+        card: DecisionCard,
+        choice: DecisionChoice,
+    ) -> dict[str, Any]:
+        if self.player_in_overtime or card.player_only:
+            return inspect_runtime_follow_up(
+                self.player_state,
+                card,
+                choice,
+            )
+
+        cache_key = (self.player_node_id, choice.id)
+        cached = self._developer_follow_up_cache.get(cache_key)
+        if cached is None:
+            cached = inspect_preplanned_follow_up(
+                self.decision_web,
+                self.player_node_id,
+                choice,
+                self.scenario.jobs,
+                self.config.date_label_for_day,
+            )
+            self._developer_follow_up_cache[cache_key] = cached
+        return cached
 
     def _job_day_change_payload(
         self,

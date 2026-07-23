@@ -70,6 +70,7 @@ class GameSession(PayloadMixin, ReviewMixin):
         self.last_summary_puzzle: dict[str, Any] | None = None
         self.last_summary_remaining_jobs: list[dict[str, Any]] = []
         self.day_completed_before: set[str] = set(self.player_state.completed_jobs)
+        self._developer_follow_up_cache: dict[tuple[str, str], dict[str, Any]] = {}
         self._ensure_cards()
 
     def apply_choice(self, card_id: str, choice_id: str) -> None:

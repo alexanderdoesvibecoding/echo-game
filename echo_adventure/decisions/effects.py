@@ -62,7 +62,13 @@ def _schedule_follow_ups(
         if (
             follow_up.definition_id in state.shown_follow_up_decision_ids
             or follow_up.definition_id in pending_ids
-            or not _follow_up_occurs(state, card, choice, follow_up.definition_id, follow_up.probability)
+            or not follow_up_occurs(
+                state,
+                card,
+                choice,
+                follow_up.definition_id,
+                follow_up.probability,
+            )
         ):
             continue
         state.pending_follow_ups.append(
@@ -79,7 +85,7 @@ def _schedule_follow_ups(
         pending_ids.add(follow_up.definition_id)
 
 
-def _follow_up_occurs(
+def follow_up_occurs(
     state: SimulationState,
     card: DecisionCard,
     choice: DecisionChoice,
@@ -98,3 +104,6 @@ def _follow_up_occurs(
     ).encode("utf-8")
     roll = int(hashlib.sha256(material).hexdigest(), 16) / float(1 << 256)
     return roll < max(0.0, min(1.0, probability))
+
+
+_follow_up_occurs = follow_up_occurs
