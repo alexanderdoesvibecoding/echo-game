@@ -10,6 +10,7 @@ for (const id of [
   "summarySection", "summaryGrid", "summaryModalOverlay", "summaryModalBody", "summaryModalTitle",
   "finalSection", "finalMetricsBar", "finalCompletionChart", "finalNotes", "welcomeModalOverlay",
   "welcomeSubmarineVisual", "welcomeBlurb", "newRunModalOverlay", "newRunSettings", "newRunLoading",
+  "tutorialOverlay", "tutorialStepLabel", "tutorialTitle", "tutorialDescription", "tutorialNextBtn",
   "closeNewRunModalBtn", "cancelNewRunBtn", "startNewRunBtn", "settingsPanel", "newRunDescription",
   "devSeedField", "newRunSeededToggle", "newRunSeedInput", "newRunSeedHint",
   "devPanel", "devPanelToggle", "devPanelBody", "devRunSeed",
@@ -40,8 +41,17 @@ const calls = [];
 let nextError = null;
 let nextPayload = null;
 let nextPayloads = [];
+let releaseInitialState;
+const initialStateGate = new Promise(resolve => {
+  releaseInitialState = resolve;
+});
+let initialStatePending = true;
 globalThis.fetch = async (path, options = {}) => {
   calls.push({ path, options });
+  if (path === "/api/state" && initialStatePending) {
+    initialStatePending = false;
+    await initialStateGate;
+  }
   if (nextError) {
     const error = nextError;
     nextError = null;
@@ -60,18 +70,28 @@ globalThis.fetch = async (path, options = {}) => {
 await import("../../echo_adventure/ui/app.js");
 const { uiState } = await import("../../echo_adventure/ui/state.js");
 const { resetDayCycle, syncDayCycleForState } = await import("../../echo_adventure/ui/dayClock.js");
+window.closeWelcomeModal();
+releaseInitialState();
 await new Promise(resolve => globalThis.setTimeout(resolve, 0));
 
 test("app bootstrap loads state, renders the shell, and exposes working global actions", async () => {
   assert.equal(calls[0].path, "/api/state");
   assert.equal(dom.element("dayBadge").textContent, "July 1");
-  assert.equal(dom.element("welcomeModalOverlay").classList.contains("active"), true);
-  assert.match(dom.element("welcomeBlurb").textContent, /all 2 jobs/);
+  assert.equal(dom.element("welcomeModalOverlay").classList.contains("active"), false);
+  assert.equal(uiState.tutorialStep, 0);
+  assert.equal(dom.element("tutorialOverlay").classList.contains("active"), true);
+  assert.match(dom.element("welcomeBlurb").innerHTML, /Finish all 2 jobs/);
+  assert.match(dom.element("welcomeBlurb").innerHTML, /AI planner/);
+  assert.match(dom.element("welcomeBlurb").innerHTML, /estimated completion date \(ECD\)/);
+  assert.doesNotMatch(dom.element("welcomeBlurb").innerHTML, /always win|designed to beat/i);
   assert.match(dom.element("inlineDecisionBody").innerHTML, /data-timeline-actor="player"/);
   assert.equal(dom.element("devPanel").classList.contains("hidden"), true);
+  assert.equal(typeof window.advanceTutorial, "function");
+  assert.equal(typeof window.skipTutorial, "function");
   assert.equal(typeof window.startNewRun, "function");
   assert.equal(typeof window.submitDecision, "function");
 
+  window.skipTutorial();
   await window.startNewRun();
 
   assert.equal(calls.at(-1).path, "/api/new");

@@ -61,6 +61,7 @@ export function renderDevTools() {
   const hasDecision = Boolean(uiState.state.decisions?.length);
   const modalOpen = Boolean(
     uiState.welcomeModalVisible
+      || uiState.tutorialStep >= 0
       || uiState.newRunModalVisible
       || uiState.modalVisible
   );

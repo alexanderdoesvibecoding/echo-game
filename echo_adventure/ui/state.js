@@ -3,6 +3,8 @@
 export const uiState = {
   state: null,
   welcomeModalVisible: false,
+  tutorialStep: -1,
+  tutorialCompletedRunKey: null,
   newRunModalVisible: false,
   newRunLoading: false,
   settingsMenuOpen: false,

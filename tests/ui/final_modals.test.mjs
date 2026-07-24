@@ -28,11 +28,21 @@ const {
   toggleDarkMode,
   toggleSettingsMenu,
 } = await import("../../echo_adventure/ui/modals.js");
+const {
+  advanceTutorial,
+  configureTutorial,
+  renderTutorial,
+  resetTutorial,
+  startTutorial,
+  skipTutorial,
+} = await import("../../echo_adventure/ui/tutorial.js");
 
 function resetUiState() {
   Object.assign(uiState, {
     state: null,
     welcomeModalVisible: false,
+    tutorialStep: -1,
+    tutorialCompletedRunKey: null,
     newRunModalVisible: false,
     newRunLoading: false,
     settingsMenuOpen: false,
@@ -189,12 +199,13 @@ test("decision chart tooltip safely renders, locks, and closes", () => {
   assert.match(tooltip.innerHTML, /July &lt;1&gt;/);
   assert.match(tooltip.innerHTML, /Route &lt;now&gt;/);
   assert.doesNotMatch(tooltip.innerHTML, /Route <now>/);
-  assert.match(tooltip.innerHTML, /Same context · preference matched/);
-  assert.match(tooltip.innerHTML, /Same context · different response/);
-  assert.match(tooltip.innerHTML, /Shared event · preference matched/);
-  assert.match(tooltip.innerHTML, /Shared event · different response/);
-  assert.match(tooltip.innerHTML, /Different events · preference matched/);
-  assert.match(tooltip.innerHTML, /Different events · different response/);
+  assert.match(tooltip.innerHTML, /Same event and job · ECHO preferred your response/);
+  assert.match(tooltip.innerHTML, /Same event and job · ECHO preferred another response/);
+  assert.match(tooltip.innerHTML, /Same event, different routes · ECHO preferred your response/);
+  assert.match(tooltip.innerHTML, /Same event, different routes · ECHO preferred another response/);
+  assert.match(tooltip.innerHTML, /Different events · ECHO preferred your response/);
+  assert.match(tooltip.innerHTML, /Different events · ECHO preferred another response/);
+  assert.doesNotMatch(tooltip.innerHTML, /<small>/);
   assert.match(tooltip.innerHTML, /Follow-up to Day 1: Earlier inspection · Pause work/);
   assert.match(tooltip.innerHTML, /data-preference-state="same-context-different-choice"/);
   assert.match(tooltip.innerHTML, /data-preference-state="different-events-different-choice"/);
@@ -240,7 +251,7 @@ test("decision chart document handlers support mouse, keyboard, escape, and outs
   dom.dispatchDocument("click", event);
   assert.equal(tooltip.classList.contains("active"), true);
   assert.equal(marker.getAttribute("aria-expanded"), "true");
-  assert.match(tooltip.innerHTML, /Shared event · preference matched/);
+  assert.match(tooltip.innerHTML, /Same event, different routes · ECHO preferred your response/);
   assert.equal(tooltip.style.left, "448px");
   assert.equal(tooltip.style.top, "38px");
 
@@ -332,6 +343,8 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
 test("welcome, settings, new-run, and developer controls reflect browser-local state", () => {
   for (const id of [
     "welcomeModalOverlay", "welcomeSubmarineVisual", "welcomeBlurb", "settingsPanel", "settingsMenuBtn",
+    "tutorialOverlay", "tutorialStepLabel", "tutorialTitle", "tutorialDescription", "tutorialNextBtn",
+    "summarySection", "decisionQueueSection", "dailyDecisionSection",
     "newRunModalOverlay", "newRunSettings", "newRunLoading", "closeNewRunModalBtn", "cancelNewRunBtn",
     "startNewRunBtn", "themeMenuBtn", "newRunDescription", "devSeedField",
     "newRunSeededToggle", "newRunSeedInput", "newRunSeedHint",
@@ -348,6 +361,10 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
     renderDecisionQueue: () => { queueRenders += 1; },
     renderDevTools,
     showNewRunError: value => { lastError = value; },
+  });
+  configureTutorial({
+    renderDecisionQueue: () => { queueRenders += 1; },
+    renderDevTools,
   });
   configureDevTools({
     openNewRunModal: () => { devNewGameRequests += 1; },
@@ -370,13 +387,40 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
   renderWelcomeModal();
   assert.equal(dom.element("welcomeModalOverlay").classList.contains("active"), true);
   assert.match(dom.element("welcomeSubmarineVisual").innerHTML, /Submarine underway/);
-  assert.match(dom.element("welcomeBlurb").textContent, /all 3 jobs/);
+  assert.match(dom.element("welcomeBlurb").innerHTML, /Finish all 3 jobs/);
+  assert.match(dom.element("welcomeBlurb").innerHTML, /AI planner/);
+  assert.match(dom.element("welcomeBlurb").innerHTML, /estimated completion date \(ECD\)/);
+  assert.doesNotMatch(dom.element("welcomeBlurb").innerHTML, /always win|designed to beat/i);
   renderDevTools();
   assert.equal(dom.element("devPanel").classList.contains("hidden"), false);
   assert.equal(dom.element("devActiveControls").classList.contains("hidden"), true);
   assert.equal(dom.element("devModalNotice").classList.contains("hidden"), false);
   closeWelcomeModal();
   assert.equal(uiState.welcomeModalVisible, false);
+  assert.equal(uiState.tutorialStep, 0);
+  assert.equal(dom.element("tutorialOverlay").classList.contains("active"), true);
+  assert.equal(dom.element("tutorialTitle").textContent, "Submarine Puzzle");
+  assert.match(dom.element("tutorialDescription").textContent, /blank section is an unfinished job/);
+  assert.equal(dom.element("summarySection").classList.contains("tutorial-highlight"), true);
+
+  advanceTutorial();
+  assert.equal(uiState.tutorialStep, 1);
+  assert.equal(dom.element("tutorialTitle").textContent, "Decision Queue");
+  assert.match(dom.element("tutorialDescription").textContent, /questions appear here/);
+  assert.equal(dom.element("decisionQueueSection").classList.contains("tutorial-highlight"), true);
+
+  advanceTutorial();
+  assert.equal(uiState.tutorialStep, 2);
+  assert.equal(dom.element("tutorialTitle").textContent, "ECD Progress");
+  assert.match(dom.element("tutorialDescription").textContent, /your ECD and ECHO's ECD/);
+  assert.equal(dom.element("tutorialNextBtn").textContent, "Got it");
+  assert.equal(dom.element("dailyDecisionSection").classList.contains("tutorial-highlight"), true);
+
+  advanceTutorial();
+  assert.equal(uiState.tutorialStep, -1);
+  assert.equal(uiState.tutorialCompletedRunKey, "0:700");
+  assert.equal(dom.element("tutorialOverlay").classList.contains("active"), false);
+  assert.equal(dom.element("dailyDecisionSection").classList.contains("tutorial-highlight"), false);
 
   assert.equal(dom.element("devActiveControls").classList.contains("hidden"), false);
   assert.equal(dom.element("devSkipDayRow").classList.contains("hidden"), false);
@@ -384,6 +428,21 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
   assert.equal(dom.element("devSkipToDayBtn").disabled, true);
   assert.equal(dom.element("devSkipToEndBtn").disabled, true);
   assert.equal(dom.element("devRunPhase").textContent, "Preplanned run");
+
+  uiState.tutorialStep = 0;
+  renderTutorial();
+  skipTutorial();
+  assert.equal(uiState.tutorialStep, -1);
+
+  uiState.runCycleId += 1;
+  const tutorialNextButton = dom.element("tutorialNextBtn");
+  tutorialNextButton.focused = false;
+  resetTutorial();
+  assert.equal(dom.element("tutorialOverlay").dataset.renderedStep, undefined);
+  assert.equal(startTutorial(), true);
+  assert.equal(uiState.tutorialStep, 0);
+  assert.equal(tutorialNextButton.focused, true);
+  skipTutorial();
 
   dom.element("devPanelToggle").listeners.get("click")[0]();
   assert.equal(uiState.devPanelCollapsed, true);
@@ -404,6 +463,10 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
   assert.equal(lastError, "");
   assert.equal(dom.element("newRunModalOverlay").classList.contains("active"), true);
   assert.equal(dom.element("devSeedField").classList.contains("hidden"), false);
+  assert.equal(
+    dom.element("newRunDescription").textContent,
+    "Start a fresh game with newly generated jobs and decisions using a random seed, or enter an exact seed to replay a specific setup; your current run will be replaced.",
+  );
   assert.equal(dom.element("newRunSeedInput").value, "700");
   assert.equal(dom.element("newRunSeededToggle").checked, false);
   assert.equal(uiState.devSeededRun, false);
@@ -412,7 +475,6 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
     dom.element("devSeedField").classList.contains("seeded-run-active"),
     false,
   );
-  assert.match(dom.element("newRunDescription").textContent, /enable Seeded run/);
   assert.match(dom.element("newRunSeedHint").textContent, /ignored unless/);
   dom.element("newRunSeedInput").listeners.get("focus")[0]();
   assert.equal(uiState.devSeededRun, true);
@@ -442,7 +504,10 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
   openNewRunModal();
   assert.equal(dom.element("devSeedField").classList.contains("hidden"), true);
   assert.equal(uiState.devSeededRun, false);
-  assert.match(dom.element("newRunDescription").textContent, /standard run/);
+  assert.equal(
+    dom.element("newRunDescription").textContent,
+    "Start a fresh game with newly generated jobs and decisions, replacing your current run.",
+  );
   closeNewRunModal();
 
   uiState.state = {
@@ -490,7 +555,11 @@ test("new-run loading locks dismissal and theme preference persists", () => {
     "newRunSeedInput", "newRunDescription",
   ]) dom.element(id);
   configureModals({ renderDecisionQueue() {}, showNewRunError() {} });
-  uiState.newRunModalVisible = true;
+  openNewRunModal();
+  assert.equal(
+    dom.element("newRunDescription").textContent,
+    "Start a fresh game with newly generated jobs and decisions, replacing your current run.",
+  );
   uiState.newRunLoading = true;
   closeNewRunModal();
   assert.equal(uiState.newRunModalVisible, true);

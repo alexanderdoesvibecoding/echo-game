@@ -34,6 +34,14 @@ import {
 } from "./renderDecisions.js";
 import { renderSummary, renderSummaryModal } from "./renderSummary.js";
 import { uiState } from "./state.js";
+import {
+  advanceTutorial,
+  configureTutorial,
+  renderTutorial,
+  resetTutorial,
+  startTutorial,
+  skipTutorial,
+} from "./tutorial.js";
 
 function showMessageBox(box, message) {
   if (!box) return;
@@ -59,6 +67,9 @@ async function loadState() {
     uiState.state = await api("/api/state");
     showError("");
     render();
+    if (!uiState.welcomeModalVisible) {
+      startTutorial();
+    }
   } catch (error) {
     uiState.dayCycleAdvancing = false;
     showError(error.message);
@@ -92,6 +103,7 @@ async function startNewRun() {
     resetDayCycle();
     uiState.pendingChoice = null;
     uiState.summaryAnimationKey = null;
+    resetTutorial();
     uiState.welcomeModalVisible = true;
     uiState.newRunModalVisible = false;
     uiState.newRunLoading = false;
@@ -209,6 +221,7 @@ function render() {
   renderSummaryModal();
   renderFinal();
   renderWelcomeModal();
+  renderTutorial();
   renderNewRunModal();
   renderDecisionQueue();
   renderSettingsMenu();
@@ -233,6 +246,7 @@ configureDayClock({
 });
 configureDecisionActions({ choose });
 configureModals({ renderDecisionQueue, renderDevTools, showNewRunError });
+configureTutorial({ renderDecisionQueue, renderDevTools });
 configureDevTools({
   diagnosticsChanged: renderDecisionQueue,
   instantProgressionChanged: handleInstantProgressionChanged,
@@ -265,12 +279,14 @@ document.addEventListener("click", (event) => {
 });
 
 Object.assign(window, {
+  advanceTutorial,
   closeNewRunModal,
   closeWelcomeModal,
   commitAdvanceDay,
   hideDecisionChartTooltip,
   selectPendingChoice,
   showDecisionChartTooltip,
+  skipTutorial,
   startNewRun,
   submitDecision,
 });
