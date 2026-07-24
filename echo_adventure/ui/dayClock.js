@@ -95,6 +95,7 @@ function tick() {
 
 function cycleBlocked() {
   return uiState.welcomeModalVisible
+    || uiState.tutorialStep >= 0
     || uiState.newRunModalVisible
     || uiState.modalVisible
     || uiState.newRunLoading
@@ -109,6 +110,7 @@ function maybeAdvanceInstantly() {
   if (
     !instantProgressionEnabled()
     || uiState.welcomeModalVisible
+    || uiState.tutorialStep >= 0
     || uiState.newRunModalVisible
     || uiState.modalVisible
     || uiState.newRunLoading
@@ -152,6 +154,7 @@ export function decisionInteractionBlocked() {
   return !uiState.state
     || uiState.state.gameOver
     || uiState.welcomeModalVisible
+    || uiState.tutorialStep >= 0
     || uiState.newRunModalVisible
     || uiState.modalVisible
     || uiState.newRunLoading

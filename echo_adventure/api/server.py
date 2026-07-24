@@ -38,6 +38,7 @@ STATIC_ASSETS = {
     "/ui/state.js": ("application/javascript; charset=utf-8", UI_DIR / "state.js"),
     "/ui/submarineVisual.js": ("application/javascript; charset=utf-8", UI_DIR / "submarineVisual.js"),
     "/ui/styles.css": ("text/css; charset=utf-8", UI_DIR / "styles.css"),
+    "/ui/tutorial.js": ("application/javascript; charset=utf-8", UI_DIR / "tutorial.js"),
 }
 
 

@@ -3,6 +3,7 @@
 import { uiState } from "./state.js";
 import { $ } from "./html.js";
 import { SUBMARINE_IMAGE_SRC } from "./submarineVisual.js";
+import { startTutorial } from "./tutorial.js";
 
 const callbacks = {
   renderDecisionQueue: () => {},
@@ -33,12 +34,17 @@ function renderWelcomeContent() {
 
   const jobCount = Number(uiState.state?.jobCount) || 0;
   const jobText = jobCount ? `${jobCount} job${jobCount === 1 ? "" : "s"}` : "jobs";
-  blurb.textContent = `Your mission is to finish all ${jobText} and assemble the submarine. Each day, you will make decisions that affect the outcome of your journey. Good luck!`;
+  blurb.innerHTML = `
+    <p>Finish all ${jobText} to assemble the submarine.</p>
+    <p>ECHO is an AI planner answering the same production questions.</p>
+    <p>The progress bars track your estimated completion date (ECD) and ECHO's as you compete.</p>
+  `;
 }
 
 export function closeWelcomeModal() {
   uiState.welcomeModalVisible = false;
   renderWelcomeModal();
+  startTutorial();
   callbacks.renderDecisionQueue();
   callbacks.renderDevTools?.();
 }

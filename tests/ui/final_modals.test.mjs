@@ -27,11 +27,19 @@ const {
   toggleDarkMode,
   toggleSettingsMenu,
 } = await import("../../echo_adventure/ui/modals.js");
+const {
+  advanceTutorial,
+  configureTutorial,
+  renderTutorial,
+  skipTutorial,
+} = await import("../../echo_adventure/ui/tutorial.js");
 
 function resetUiState() {
   Object.assign(uiState, {
     state: null,
     welcomeModalVisible: false,
+    tutorialStep: -1,
+    tutorialCompletedRunKey: null,
     newRunModalVisible: false,
     newRunLoading: false,
     settingsMenuOpen: false,
@@ -330,6 +338,8 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
 test("welcome, settings, new-run, and developer controls reflect browser-local state", () => {
   for (const id of [
     "welcomeModalOverlay", "welcomeSubmarineVisual", "welcomeBlurb", "settingsPanel", "settingsMenuBtn",
+    "tutorialOverlay", "tutorialStepLabel", "tutorialTitle", "tutorialDescription", "tutorialNextBtn",
+    "summarySection", "decisionQueueSection", "dailyDecisionSection",
     "newRunModalOverlay", "newRunSettings", "newRunLoading", "closeNewRunModalBtn", "cancelNewRunBtn",
     "startNewRunBtn", "themeMenuBtn", "newRunDescription", "devSeedField", "newRunSeedInput",
     "devPanel", "devPanelToggle", "devPanelBody", "devRunSeed", "devRunDay", "devRunPhase",
@@ -345,6 +355,10 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
     renderDecisionQueue: () => { queueRenders += 1; },
     renderDevTools,
     showNewRunError: value => { lastError = value; },
+  });
+  configureTutorial({
+    renderDecisionQueue: () => { queueRenders += 1; },
+    renderDevTools,
   });
   configureDevTools({
     openNewRunModal: () => { devNewGameRequests += 1; },
@@ -366,13 +380,40 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
   renderWelcomeModal();
   assert.equal(dom.element("welcomeModalOverlay").classList.contains("active"), true);
   assert.match(dom.element("welcomeSubmarineVisual").innerHTML, /Submarine underway/);
-  assert.match(dom.element("welcomeBlurb").textContent, /all 3 jobs/);
+  assert.match(dom.element("welcomeBlurb").innerHTML, /Finish all 3 jobs/);
+  assert.match(dom.element("welcomeBlurb").innerHTML, /AI planner/);
+  assert.match(dom.element("welcomeBlurb").innerHTML, /estimated completion date \(ECD\)/);
+  assert.doesNotMatch(dom.element("welcomeBlurb").innerHTML, /always win|designed to beat/i);
   renderDevTools();
   assert.equal(dom.element("devPanel").classList.contains("hidden"), false);
   assert.equal(dom.element("devActiveControls").classList.contains("hidden"), true);
   assert.equal(dom.element("devModalNotice").classList.contains("hidden"), false);
   closeWelcomeModal();
   assert.equal(uiState.welcomeModalVisible, false);
+  assert.equal(uiState.tutorialStep, 0);
+  assert.equal(dom.element("tutorialOverlay").classList.contains("active"), true);
+  assert.equal(dom.element("tutorialTitle").textContent, "Submarine Puzzle");
+  assert.match(dom.element("tutorialDescription").textContent, /blank section is an unfinished job/);
+  assert.equal(dom.element("summarySection").classList.contains("tutorial-highlight"), true);
+
+  advanceTutorial();
+  assert.equal(uiState.tutorialStep, 1);
+  assert.equal(dom.element("tutorialTitle").textContent, "Decision Queue");
+  assert.match(dom.element("tutorialDescription").textContent, /questions appear here/);
+  assert.equal(dom.element("decisionQueueSection").classList.contains("tutorial-highlight"), true);
+
+  advanceTutorial();
+  assert.equal(uiState.tutorialStep, 2);
+  assert.equal(dom.element("tutorialTitle").textContent, "ECD Progress");
+  assert.match(dom.element("tutorialDescription").textContent, /your ECD and ECHO's ECD/);
+  assert.equal(dom.element("tutorialNextBtn").textContent, "Got it");
+  assert.equal(dom.element("dailyDecisionSection").classList.contains("tutorial-highlight"), true);
+
+  advanceTutorial();
+  assert.equal(uiState.tutorialStep, -1);
+  assert.equal(uiState.tutorialCompletedRunKey, "0:700");
+  assert.equal(dom.element("tutorialOverlay").classList.contains("active"), false);
+  assert.equal(dom.element("dailyDecisionSection").classList.contains("tutorial-highlight"), false);
 
   assert.equal(dom.element("devActiveControls").classList.contains("hidden"), false);
   assert.equal(dom.element("devSkipDayRow").classList.contains("hidden"), false);
@@ -380,6 +421,11 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
   assert.equal(dom.element("devSkipToDayBtn").disabled, true);
   assert.equal(dom.element("devSkipToEndBtn").disabled, true);
   assert.equal(dom.element("devRunPhase").textContent, "Preplanned run");
+
+  uiState.tutorialStep = 0;
+  renderTutorial();
+  skipTutorial();
+  assert.equal(uiState.tutorialStep, -1);
 
   dom.element("devPanelToggle").listeners.get("click")[0]();
   assert.equal(uiState.devPanelCollapsed, true);

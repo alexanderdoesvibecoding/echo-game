@@ -1642,6 +1642,69 @@ html[data-theme="dark"] .puzzle-stage {
   width: 100%;
   box-shadow: 0 30px 60px rgba(8,10,9,0.4);
 }
+.tutorial-overlay {
+  display: none;
+}
+.tutorial-overlay.active {
+  display: block;
+}
+.tutorial-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(16, 20, 24, 0.68);
+}
+.tutorial-highlight {
+  position: relative;
+  z-index: 91;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 4px var(--teal),
+    0 18px 48px rgba(0, 0, 0, 0.34);
+}
+.tutorial-card {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 92;
+  display: grid;
+  gap: 8px;
+  width: min(380px, calc(100vw - 48px));
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 24px 54px rgba(0, 0, 0, 0.38);
+}
+.tutorial-card h2,
+.tutorial-card p {
+  margin: 0;
+}
+.tutorial-card p {
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.45;
+}
+.tutorial-step {
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.tutorial-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+@media (max-width: 680px) {
+  .tutorial-card {
+    right: 12px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
+  }
+}
 .modal .modal-body { max-height: 60vh; overflow: auto; margin-bottom: 12px; }
 .modal .modal-footer { display:flex; justify-content:flex-end; gap:8px; }
 .modal h3 { margin-top: 0; }
@@ -1725,6 +1788,8 @@ html[data-theme="dark"] .puzzle-stage {
   padding: 18px 12px;
 }
 .welcome-blurb {
+  display: grid;
+  gap: 7px;
   color: var(--ink);
   font-size: 18px;
   line-height: 1.45;

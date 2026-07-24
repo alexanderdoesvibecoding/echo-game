@@ -10,6 +10,7 @@ for (const id of [
   "summarySection", "summaryGrid", "summaryModalOverlay", "summaryModalBody", "summaryModalTitle",
   "finalSection", "finalMetricsBar", "finalCompletionChart", "finalNotes", "welcomeModalOverlay",
   "welcomeSubmarineVisual", "welcomeBlurb", "newRunModalOverlay", "newRunSettings", "newRunLoading",
+  "tutorialOverlay", "tutorialStepLabel", "tutorialTitle", "tutorialDescription", "tutorialNextBtn",
   "closeNewRunModalBtn", "cancelNewRunBtn", "startNewRunBtn", "settingsPanel", "newRunDescription",
   "devSeedField", "newRunSeedInput", "devPanel", "devPanelToggle", "devPanelBody", "devRunSeed",
   "devRunDay", "devRunPhase", "devBusyState", "devModalNotice", "devActiveControls",
@@ -65,9 +66,14 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(calls[0].path, "/api/state");
   assert.equal(dom.element("dayBadge").textContent, "July 1");
   assert.equal(dom.element("welcomeModalOverlay").classList.contains("active"), true);
-  assert.match(dom.element("welcomeBlurb").textContent, /all 2 jobs/);
+  assert.match(dom.element("welcomeBlurb").innerHTML, /Finish all 2 jobs/);
+  assert.match(dom.element("welcomeBlurb").innerHTML, /AI planner/);
+  assert.match(dom.element("welcomeBlurb").innerHTML, /estimated completion date \(ECD\)/);
+  assert.doesNotMatch(dom.element("welcomeBlurb").innerHTML, /always win|designed to beat/i);
   assert.match(dom.element("inlineDecisionBody").innerHTML, /data-timeline-actor="player"/);
   assert.equal(dom.element("devPanel").classList.contains("hidden"), true);
+  assert.equal(typeof window.advanceTutorial, "function");
+  assert.equal(typeof window.skipTutorial, "function");
   assert.equal(typeof window.startNewRun, "function");
   assert.equal(typeof window.submitDecision, "function");
 

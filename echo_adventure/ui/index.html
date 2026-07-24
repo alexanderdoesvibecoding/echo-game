@@ -145,7 +145,11 @@
       </h1>
       <div class="welcome-copy">
         <div class="welcome-visual" id="welcomeSubmarineVisual"></div>
-        <p class="welcome-blurb" id="welcomeBlurb">Your mission is to finish all 20 jobs and assemble the submarine. Each day moves unfinished jobs forward, and your choices can speed work up or slow it down.</p>
+        <div class="welcome-blurb" id="welcomeBlurb">
+          <p>Finish all 20 jobs to assemble the submarine.</p>
+          <p>ECHO is an AI planner answering the same production questions.</p>
+          <p>The progress bars track your estimated completion date (ECD) and ECHO's as you compete.</p>
+        </div>
       </div>
       <div class="modal-footer">
         <button id="closeWelcomeBtn" class="primary" onclick="closeWelcomeModal()">Start</button>
@@ -182,6 +186,19 @@
       <div class="modal-footer">
         <button id="cancelNewRunBtn" onclick="closeNewRunModal()">Cancel</button>
         <button id="startNewRunBtn" class="primary" onclick="startNewRun()">Start Game</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tutorialOverlay" class="tutorial-overlay" aria-hidden="true">
+    <div class="tutorial-backdrop" aria-hidden="true"></div>
+    <div class="tutorial-card" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle" aria-describedby="tutorialDescription">
+      <div class="tutorial-step" id="tutorialStepLabel">1 of 3</div>
+      <h2 id="tutorialTitle">Submarine Puzzle</h2>
+      <p id="tutorialDescription">Each blank section is an unfinished job. Finish a job to build that part of the submarine.</p>
+      <div class="tutorial-actions">
+        <button type="button" onclick="skipTutorial()">Skip</button>
+        <button id="tutorialNextBtn" class="primary" type="button" onclick="advanceTutorial()">Next</button>
       </div>
     </div>
   </div>
