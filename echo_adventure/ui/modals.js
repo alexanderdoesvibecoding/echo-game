@@ -97,8 +97,8 @@ export function renderNewRunModal() {
   $("devSeedField")?.classList.toggle("hidden", !developerMode);
   if ($("newRunDescription")) {
     $("newRunDescription").textContent = developerMode
-      ? "Start a fresh run with a random seed or enter an exact seed."
-      : "Start a fresh standard run with a newly generated seed.";
+      ? "Start a fresh game with newly generated jobs and decisions using a random seed, or enter an exact seed to replay a specific setup; your current run will be replaced."
+      : "Start a fresh game with newly generated jobs and decisions, replacing your current run.";
   }
 
   for (const id of ["closeNewRunModalBtn", "cancelNewRunBtn", "startNewRunBtn"]) {

@@ -21,11 +21,10 @@
     - Some things it makes sense for you and ECHO to have the same thing (like the acknowledgements), but others can be
       otherwise
 
-- [ ] Update new game screen – Alexander
+- [x] Update new game screen – Alexander
     - We kinda need a tutorial. We understand the game but some admiral will 100% not
 
-- [ ] Finalize end-of-game screen – Alexander
-    - [ ] Finalize graph
+- [x] Finalize end-of-game screen – Alexander
+    - [x] Finalize graph
 
 - [ ] Impact of decisions randomized – Ethan and Matt
-    - [ ] Research increasing the number of decisions if possible

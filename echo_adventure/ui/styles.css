@@ -1269,10 +1269,6 @@ html[data-theme="dark"] .chart-hover-zone.is-selected {
 .chart-echo-preference strong {
   color: var(--ink);
 }
-.chart-echo-preference small {
-  color: var(--muted);
-  line-height: 1.3;
-}
 .chart-echo-preference.is-aligned {
   border-color: rgba(0, 122, 94, 0.25);
   border-left-color: var(--green);

@@ -342,33 +342,27 @@ function preferencePresentation(decision) {
   const presentations = {
     "same-context-same-choice": {
       badge: "Same context",
-      label: "Same context · preference matched",
-      detail: "You and ECHO faced the same event for the same job, and your response matched ECHO's preference.",
+      label: "Same event and job · ECHO preferred your response",
     },
     "same-context-different-choice": {
       badge: "Same context",
-      label: "Same context · different response",
-      detail: "You and ECHO faced the same event for the same job, and your response differed from ECHO's preference.",
+      label: "Same event and job · ECHO preferred another response",
     },
     "same-event-different-context-same-choice": {
       badge: "Shared event",
-      label: "Shared event · preference matched",
-      detail: "You and ECHO faced the same day-level incident in different route contexts. In your context, ECHO would have preferred your response.",
+      label: "Same event, different routes · ECHO preferred your response",
     },
     "same-event-different-context-different-choice": {
       badge: "Shared event",
-      label: "Shared event · different response",
-      detail: "You and ECHO faced the same day-level incident in different route contexts. In your context, ECHO would have preferred a different response.",
+      label: "Same event, different routes · ECHO preferred another response",
     },
     "different-events-same-choice": {
       badge: "Different events",
-      label: "Different events · preference matched",
-      detail: "ECHO faced a different event on its route. In your event, it would have preferred the response you chose.",
+      label: "Different events · ECHO preferred your response",
     },
     "different-events-different-choice": {
       badge: "Different events",
-      label: "Different events · different response",
-      detail: "ECHO faced a different event on its route. In your event, it would have preferred a different response.",
+      label: "Different events · ECHO preferred another response",
     },
   };
   return { state, ...(presentations[state] || presentations["different-events-different-choice"]) };
@@ -391,7 +385,6 @@ function renderRouteDecision(decision, actor) {
       <div class="chart-echo-preference ${decision.alignedWithEcho ? "is-aligned" : ""}" data-preference-state="${escapeHtml(presentation.state)}">
         <span>${escapeHtml(presentation.label)}</span>
         <strong>${escapeHtml(decision.echoPreferredChoice)}</strong>
-        <small>${escapeHtml(presentation.detail)}</small>
       </div>
     `
     : "";

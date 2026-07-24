@@ -195,12 +195,13 @@ test("decision chart tooltip safely renders, locks, and closes", () => {
   assert.match(tooltip.innerHTML, /July &lt;1&gt;/);
   assert.match(tooltip.innerHTML, /Route &lt;now&gt;/);
   assert.doesNotMatch(tooltip.innerHTML, /Route <now>/);
-  assert.match(tooltip.innerHTML, /Same context · preference matched/);
-  assert.match(tooltip.innerHTML, /Same context · different response/);
-  assert.match(tooltip.innerHTML, /Shared event · preference matched/);
-  assert.match(tooltip.innerHTML, /Shared event · different response/);
-  assert.match(tooltip.innerHTML, /Different events · preference matched/);
-  assert.match(tooltip.innerHTML, /Different events · different response/);
+  assert.match(tooltip.innerHTML, /Same event and job · ECHO preferred your response/);
+  assert.match(tooltip.innerHTML, /Same event and job · ECHO preferred another response/);
+  assert.match(tooltip.innerHTML, /Same event, different routes · ECHO preferred your response/);
+  assert.match(tooltip.innerHTML, /Same event, different routes · ECHO preferred another response/);
+  assert.match(tooltip.innerHTML, /Different events · ECHO preferred your response/);
+  assert.match(tooltip.innerHTML, /Different events · ECHO preferred another response/);
+  assert.doesNotMatch(tooltip.innerHTML, /<small>/);
   assert.match(tooltip.innerHTML, /Follow-up to Day 1: Earlier inspection · Pause work/);
   assert.match(tooltip.innerHTML, /data-preference-state="same-context-different-choice"/);
   assert.match(tooltip.innerHTML, /data-preference-state="different-events-different-choice"/);
@@ -246,7 +247,7 @@ test("decision chart document handlers support mouse, keyboard, escape, and outs
   dom.dispatchDocument("click", event);
   assert.equal(tooltip.classList.contains("active"), true);
   assert.equal(marker.getAttribute("aria-expanded"), "true");
-  assert.match(tooltip.innerHTML, /Shared event · preference matched/);
+  assert.match(tooltip.innerHTML, /Same event, different routes · ECHO preferred your response/);
   assert.equal(tooltip.style.left, "448px");
   assert.equal(tooltip.style.top, "38px");
 
@@ -446,7 +447,10 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
   assert.equal(lastError, "");
   assert.equal(dom.element("newRunModalOverlay").classList.contains("active"), true);
   assert.equal(dom.element("devSeedField").classList.contains("hidden"), false);
-  assert.match(dom.element("newRunDescription").textContent, /exact seed/);
+  assert.equal(
+    dom.element("newRunDescription").textContent,
+    "Start a fresh game with newly generated jobs and decisions using a random seed, or enter an exact seed to replay a specific setup; your current run will be replaced.",
+  );
   assert.equal(dom.element("devActiveControls").classList.contains("hidden"), true);
   closeNewRunModal();
   assert.equal(uiState.newRunModalVisible, false);
@@ -496,7 +500,11 @@ test("new-run loading locks dismissal and theme preference persists", () => {
     "newRunSeedInput", "newRunDescription",
   ]) dom.element(id);
   configureModals({ renderDecisionQueue() {}, showNewRunError() {} });
-  uiState.newRunModalVisible = true;
+  openNewRunModal();
+  assert.equal(
+    dom.element("newRunDescription").textContent,
+    "Start a fresh game with newly generated jobs and decisions, replacing your current run.",
+  );
   uiState.newRunLoading = true;
   closeNewRunModal();
   assert.equal(uiState.newRunModalVisible, true);

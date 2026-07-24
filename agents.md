@@ -36,6 +36,68 @@
   exact reproduction of ECHO's optimal path, which may affect whether ECHO wins
   by producing a tie; no divergent player path may tie or win.
 
+## Developer mode
+
+### Purpose and capabilities
+
+- Developer mode is the opt-in local inspection and automation layer enabled by
+  starting the server with `--dev`. It operates on the real game session rather
+  than a separate simulation or simplified ruleset.
+- Dev-mode state includes generation performance metadata, the current run
+  phase, available actions, and the days reachable by each automation strategy.
+  The server reports generation statistics once after the initial state request
+  and once for each successful new game.
+- The state-aware `DEV MODE` panel exposes the active seed, day, and phase. It
+  can remove day-progression animation delay, reveal inline choice diagnostics,
+  start a random or explicitly seeded new game, and automate play to a reachable
+  preplanned day or to the end of the run.
+- Choice diagnostics expose ECHO's preferred choice, schedule and score effects,
+  completion projections, follow-up behavior, and generation provenance when
+  applicable. Diagnostics are present in dev payloads but remain visually off
+  by default so they do not bias ordinary manual testing.
+- Automated play supports `echo`, `random`, `first`, `last`, and `worst`
+  strategies. Specific-day skipping is limited to reachable days in the
+  preplanned decision web; skip-to-end can continue through overtime and final
+  assembly.
+- The main implementation areas are `echo_adventure/api/server.py`,
+  `echo_adventure/api/session.py`, `echo_adventure/api/payloads.py`,
+  `echo_adventure/api/developer.py`, `echo_adventure/api/automation.py`, and
+  the developer-aware modules under `echo_adventure/ui/`.
+
+### Invariants
+
+- Developer mode is fixed for the lifetime of the server. Keep
+  `dev_mode=False` as the default for programmatic entry points, and keep
+  `SessionStore` responsible for preserving the server-level flag across new
+  games.
+- Preserve strict standard-mode isolation: omit top-level, card-level, and
+  choice-level developer metadata; hide developer controls; suppress developer
+  generation reports; and return `404 Not Found` from developer-only routes.
+  Backend route protection is required even when the corresponding UI is
+  hidden.
+- Developer tools may inspect and orchestrate the real game, but must not fork,
+  bypass, or weaken its rules. Automated skipping must apply normal choices and
+  day advances, honor valid state transitions and safety bounds, and preserve
+  every core ECHO outcome guarantee.
+- Keep developer controls state-aware and serialize developer mutations. Do not
+  offer actions that are invalid for the current phase, while a modal is
+  blocking play, or while another developer or new-game request is in flight.
+- Choice diagnostics and instant progression must default to off. Dev-only
+  presentation preferences may change display timing or visibility, but must
+  not change simulation outcomes.
+
+### Verification
+
+- Changes that touch sessions, payload serialization, decisions, API routes,
+  day progression, new-game behavior, or developer-aware UI must consider both
+  developer and standard modes.
+- For developer-mode changes, start the app briefly with
+  `python3 -m echo_adventure --dev --seed 100007` on a free local port, confirm
+  `/api/state` includes the developer generation and run-state fields, and
+  exercise at least one valid `/api/dev/skip` request.
+- Also start or inspect a standard-mode run and confirm its state omits all
+  developer data and `/api/dev/skip` returns `404 Not Found`.
+
 ## Progress tracking
 
 - At the beginning of each new coding task, replace the contents of
