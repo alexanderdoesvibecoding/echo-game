@@ -1,0 +1,14 @@
+Decision-web startup benchmark
+Python 3.14.6 (x86_64); 5 seed(s), 1 run(s) per seed
+Timings exclude imports; peak RSS includes the Python process and retained web.
+
+      Seed  Run   Scenario        Web     Nodes     Edges Try  Day     UJD Ord All OT    Nodes/s    Peak RSS
+         2    1    0.0001s    50.230s   490,880 1,356,889   0   14     812   9   9  N      9,773  1394.5 MiB
+    100000    1    0.0001s    13.150s   130,143   371,087   0   14     947   9   9  N      9,897   398.5 MiB
+    100001    1    0.0001s     9.265s    95,662   257,865   0   13     783   6   6  N     10,325   295.7 MiB
+    100002    1    0.0001s    11.399s   112,313   323,040   0   11     569   8   8  N      9,853   350.4 MiB
+         2    1    0.0001s    49.295s   490,880 1,356,889   0   14     812   9   9  N      9,958  1411.2 MiB
+
+Web time: median 13.150s, mean 26.668s, p95 50.043s, range 9.265-50.230s
+Web size: median 130,143 nodes, range 95,662-490,880; aggregate 9,899 nodes/s
+Peak RSS: median 398.5 MiB, maximum 1411.2 MiB

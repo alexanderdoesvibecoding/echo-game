@@ -38,7 +38,9 @@ python3 -m echo_adventure --dev --seed 12345
 Developer mode is fixed for the lifetime of the server, including runs started
 through the new-game action. Developer metadata and controls are omitted from
 ordinary runs, and developer-only API routes return `404 Not Found` unless the
-server was started with `--dev`.
+server was started with `--dev`. The developer New Game modal shows the current
+accepted seed for reference but starts random runs by default. Enable
+`Seeded run` in that modal to replay the displayed seed or another integer.
 
 The installed console entry point accepts the same options:
 

@@ -21,6 +21,7 @@ const {
   closeWelcomeModal,
   configureModals,
   initDarkMode,
+  initNewRunModal,
   openNewRunModal,
   renderSettingsMenu,
   renderWelcomeModal,
@@ -53,6 +54,7 @@ function resetUiState() {
     devShowDiagnostics: false,
     devStrategy: "echo",
     devRequestInFlight: false,
+    devSeededRun: false,
   });
 }
 
@@ -331,7 +333,8 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
   for (const id of [
     "welcomeModalOverlay", "welcomeSubmarineVisual", "welcomeBlurb", "settingsPanel", "settingsMenuBtn",
     "newRunModalOverlay", "newRunSettings", "newRunLoading", "closeNewRunModalBtn", "cancelNewRunBtn",
-    "startNewRunBtn", "themeMenuBtn", "newRunDescription", "devSeedField", "newRunSeedInput",
+    "startNewRunBtn", "themeMenuBtn", "newRunDescription", "devSeedField",
+    "newRunSeededToggle", "newRunSeedInput", "newRunSeedHint",
     "devPanel", "devPanelToggle", "devPanelBody", "devRunSeed", "devRunDay", "devRunPhase",
     "devBusyState", "devModalNotice", "devActiveControls", "devGameOverControls",
     "devDiagnosticsRow", "devSkipDayRow", "devSkipEndRow", "devInstantProgression",
@@ -349,6 +352,7 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
   configureDevTools({
     openNewRunModal: () => { devNewGameRequests += 1; },
   });
+  initNewRunModal();
   initDevTools();
   uiState.state = {
     seed: 700,
@@ -400,10 +404,46 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
   assert.equal(lastError, "");
   assert.equal(dom.element("newRunModalOverlay").classList.contains("active"), true);
   assert.equal(dom.element("devSeedField").classList.contains("hidden"), false);
-  assert.match(dom.element("newRunDescription").textContent, /exact seed/);
+  assert.equal(dom.element("newRunSeedInput").value, "700");
+  assert.equal(dom.element("newRunSeededToggle").checked, false);
+  assert.equal(uiState.devSeededRun, false);
+  assert.equal(dom.element("newRunSeedInput").disabled, false);
+  assert.equal(
+    dom.element("devSeedField").classList.contains("seeded-run-active"),
+    false,
+  );
+  assert.match(dom.element("newRunDescription").textContent, /enable Seeded run/);
+  assert.match(dom.element("newRunSeedHint").textContent, /ignored unless/);
+  dom.element("newRunSeedInput").listeners.get("focus")[0]();
+  assert.equal(uiState.devSeededRun, true);
+  assert.equal(dom.element("newRunSeededToggle").checked, true);
+  assert.equal(
+    dom.element("devSeedField").classList.contains("seeded-run-active"),
+    true,
+  );
+  assert.equal(dom.element("newRunSeedInput").value, "700");
+  assert.match(dom.element("newRunSeedHint").textContent, /exact seed will be used/);
+  dom.element("newRunSeededToggle").listeners.get("change")[0]({
+    target: { checked: false },
+  });
+  dom.element("newRunSeedInput").value = "701";
+  dom.element("newRunSeedInput").listeners.get("input")[0]();
+  assert.equal(uiState.devSeededRun, true);
+  assert.equal(dom.element("newRunSeededToggle").checked, true);
   assert.equal(dom.element("devActiveControls").classList.contains("hidden"), true);
   closeNewRunModal();
   assert.equal(uiState.newRunModalVisible, false);
+
+  uiState.state = {
+    ...uiState.state,
+    seed: 701,
+  };
+  delete uiState.state.developer;
+  openNewRunModal();
+  assert.equal(dom.element("devSeedField").classList.contains("hidden"), true);
+  assert.equal(uiState.devSeededRun, false);
+  assert.match(dom.element("newRunDescription").textContent, /standard run/);
+  closeNewRunModal();
 
   uiState.state = {
     ...uiState.state,
@@ -612,7 +652,7 @@ test("new-run loading exposes busy state and disables every modal action", () =>
   for (const id of [
     "newRunModalOverlay", "newRunSettings", "newRunLoading", "closeNewRunModalBtn",
     "cancelNewRunBtn", "startNewRunBtn", "devSeedField", "newRunSeedInput",
-    "newRunDescription",
+    "newRunSeededToggle", "newRunDescription",
   ]) dom.element(id);
   uiState.newRunModalVisible = true;
   uiState.newRunLoading = true;
@@ -626,4 +666,5 @@ test("new-run loading exposes busy state and disables every modal action", () =>
   assert.equal(dom.element("cancelNewRunBtn").disabled, true);
   assert.equal(dom.element("startNewRunBtn").disabled, true);
   assert.equal(dom.element("newRunSeedInput").disabled, true);
+  assert.equal(dom.element("newRunSeededToggle").disabled, true);
 });

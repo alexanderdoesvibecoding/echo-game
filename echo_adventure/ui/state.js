@@ -24,4 +24,5 @@ export const uiState = {
   devShowDiagnostics: false,
   devStrategy: "echo",
   devRequestInFlight: false,
+  devSeededRun: false,
 };

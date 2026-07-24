@@ -11,7 +11,8 @@ for (const id of [
   "finalSection", "finalMetricsBar", "finalCompletionChart", "finalNotes", "welcomeModalOverlay",
   "welcomeSubmarineVisual", "welcomeBlurb", "newRunModalOverlay", "newRunSettings", "newRunLoading",
   "closeNewRunModalBtn", "cancelNewRunBtn", "startNewRunBtn", "settingsPanel", "newRunDescription",
-  "devSeedField", "newRunSeedInput", "devPanel", "devPanelToggle", "devPanelBody", "devRunSeed",
+  "devSeedField", "newRunSeededToggle", "newRunSeedInput", "newRunSeedHint",
+  "devPanel", "devPanelToggle", "devPanelBody", "devRunSeed",
   "devRunDay", "devRunPhase", "devBusyState", "devModalNotice", "devActiveControls",
   "devGameOverControls", "devDiagnosticsRow", "devSkipDayRow", "devSkipEndRow",
   "devInstantProgression", "devShowDiagnostics", "devStrategy", "devTargetDay",
@@ -85,11 +86,26 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
       runState: { inDecisionWeb: true, canSkipToEnd: true, canSkipToDay: true },
     },
   };
+  dom.element("openNewRunModalBtn").listeners.get("click")[0]();
+  assert.equal(dom.element("newRunSeedInput").value, "700");
+  assert.equal(dom.element("newRunSeededToggle").checked, false);
+  dom.element("newRunSeedInput").value = "99999";
+  nextPayload = { ...uiState.state, seed: 701 };
+  await window.startNewRun();
+  assert.deepEqual(JSON.parse(calls.at(-1).options.body), {});
+  assert.equal(uiState.state.seed, 701);
+  assert.equal(dom.element("newRunSeedInput").value, "701");
+
+  dom.element("openNewRunModalBtn").listeners.get("click")[0]();
+  assert.equal(dom.element("newRunSeedInput").value, "701");
+  dom.element("newRunSeedInput").listeners.get("focus")[0]();
+  assert.equal(dom.element("newRunSeededToggle").checked, true);
   dom.element("newRunSeedInput").value = "12345";
   nextPayload = { ...uiState.state, seed: 12345 };
   await window.startNewRun();
   assert.deepEqual(JSON.parse(calls.at(-1).options.body), { seed: "12345" });
   assert.equal(uiState.state.seed, 12345);
+  assert.equal(dom.element("newRunSeedInput").value, "12345");
   assert.equal(dom.element("devPanel").classList.contains("hidden"), false);
   const callsBeforeDiagnosticsToggle = calls.length;
   dom.element("devShowDiagnostics").listeners.get("change")[0]({
@@ -135,11 +151,30 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(uiState.dayCycleProgress, 0);
   assert.equal(uiState.devRequestInFlight, false);
 
-  uiState.newRunModalVisible = true;
+  dom.element("openNewRunModalBtn").listeners.get("click")[0]();
+  dom.element("newRunSeededToggle").listeners.get("change")[0]({
+    target: { checked: true },
+  });
+  dom.element("newRunSeedInput").value = "12.5";
+  const callsBeforeInvalidSeed = calls.length;
+  const stateBeforeInvalidSeed = uiState.state;
+  await window.startNewRun();
+  assert.equal(calls.length, callsBeforeInvalidSeed);
+  assert.equal(uiState.state, stateBeforeInvalidSeed);
+  assert.equal(uiState.newRunModalVisible, true);
+  assert.equal(uiState.newRunLoading, false);
+  assert.match(dom.element("newRunError").textContent, /valid integer seed/);
+  assert.equal(dom.element("newRunSeedInput").focused, true);
+
+  dom.element("newRunSeededToggle").listeners.get("change")[0]({
+    target: { checked: false },
+  });
+  const stateBeforeGenerationError = uiState.state;
   nextError = "new run failed";
   await window.startNewRun();
   assert.equal(dom.element("newRunError").textContent, "new run failed");
   assert.equal(dom.element("newRunError").classList.contains("hidden"), false);
+  assert.equal(uiState.state, stateBeforeGenerationError);
 
   uiState.newRunModalVisible = false;
   nextError = "background new run failed";

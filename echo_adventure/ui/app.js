@@ -16,6 +16,7 @@ import {
   closeWelcomeModal,
   configureModals,
   initDarkMode,
+  initNewRunModal,
   openNewRunModal,
   renderNewRunModal,
   renderSettingsMenu,
@@ -67,14 +68,22 @@ async function loadState() {
 async function startNewRun() {
   if (uiState.newRunLoading) return;
 
+  const developerMode = Boolean(uiState.state?.developer);
+  const seededRun = developerMode && uiState.devSeededRun;
+  const seedValue = $("newRunSeedInput")?.value?.trim() || "";
+  if (seededRun && !/^[+-]?\d+$/.test(seedValue)) {
+    showNewRunError("Enter a valid integer seed before starting a seeded run.");
+    $("newRunSeedInput")?.focus();
+    return;
+  }
+
   uiState.newRunLoading = true;
   showNewRunError("");
   renderNewRunModal();
   renderDevTools();
 
   try {
-    const seedValue = $("newRunSeedInput")?.value?.trim() || null;
-    const body = uiState.state?.developer ? { seed: seedValue } : {};
+    const body = seededRun ? { seed: seedValue } : {};
     uiState.state = await api("/api/new", {
       method: "POST",
       body: JSON.stringify(body)
@@ -86,6 +95,10 @@ async function startNewRun() {
     uiState.welcomeModalVisible = true;
     uiState.newRunModalVisible = false;
     uiState.newRunLoading = false;
+    uiState.devSeededRun = false;
+    if ($("newRunSeedInput") && uiState.state?.seed != null) {
+      $("newRunSeedInput").value = String(uiState.state.seed);
+    }
     $("inlineDecisionBody").replaceChildren();
     showNewRunError("");
     showError("");
@@ -228,6 +241,7 @@ configureDevTools({
   skipToEnd: runDeveloperSkip,
 });
 initDevTools();
+initNewRunModal();
 
 $("settingsMenuBtn").addEventListener("click", toggleSettingsMenu);
 $("openNewRunModalBtn").addEventListener("click", openNewRunModal);

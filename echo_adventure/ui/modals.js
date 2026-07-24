@@ -61,8 +61,38 @@ export function renderSettingsMenu() {
   button.setAttribute("aria-expanded", uiState.settingsMenuOpen ? "true" : "false");
 }
 
+export function initNewRunModal() {
+  $("newRunSeededToggle")?.addEventListener("change", event => {
+    uiState.devSeededRun = Boolean(event.target.checked);
+    renderNewRunModal();
+  });
+  const enableSeededRun = () => {
+    if (
+      !uiState.state?.developer
+      || uiState.newRunLoading
+      || uiState.devSeededRun
+    ) {
+      return;
+    }
+    uiState.devSeededRun = true;
+    renderNewRunModal();
+  };
+  $("newRunSeedInput")?.addEventListener("focus", enableSeededRun);
+  $("newRunSeedInput")?.addEventListener("click", enableSeededRun);
+  $("newRunSeedInput")?.addEventListener("input", enableSeededRun);
+}
+
 export function openNewRunModal() {
   closeSettingsMenu();
+  const developerMode = Boolean(uiState.state?.developer);
+  uiState.devSeededRun = false;
+  if ($("newRunSeedInput")) {
+    $("newRunSeedInput").value = (
+      developerMode && uiState.state?.seed != null
+        ? String(uiState.state.seed)
+        : ""
+    );
+  }
   uiState.newRunModalVisible = true;
   callbacks.showNewRunError("");
   renderNewRunModal();
@@ -89,9 +119,21 @@ export function renderNewRunModal() {
   $("newRunSettings")?.classList.toggle("hidden", uiState.newRunLoading);
   $("newRunLoading")?.classList.toggle("hidden", !uiState.newRunLoading);
   $("devSeedField")?.classList.toggle("hidden", !developerMode);
+  $("devSeedField")?.classList.toggle(
+    "seeded-run-active",
+    developerMode && uiState.devSeededRun,
+  );
+  if ($("newRunSeededToggle")) {
+    $("newRunSeededToggle").checked = developerMode && uiState.devSeededRun;
+  }
+  if ($("newRunSeedHint")) {
+    $("newRunSeedHint").textContent = uiState.devSeededRun
+      ? "This exact seed will be used for the new run."
+      : "This seed is visible for reference but is ignored unless Seeded run is enabled.";
+  }
   if ($("newRunDescription")) {
     $("newRunDescription").textContent = developerMode
-      ? "Start a fresh run with a random seed or enter an exact seed."
+      ? "Start a random run, or enable Seeded run to replay an exact seed."
       : "Start a fresh standard run with a newly generated seed.";
   }
 
@@ -100,6 +142,9 @@ export function renderNewRunModal() {
     if (button) button.disabled = uiState.newRunLoading;
   }
   if ($("newRunSeedInput")) $("newRunSeedInput").disabled = uiState.newRunLoading;
+  if ($("newRunSeededToggle")) {
+    $("newRunSeededToggle").disabled = uiState.newRunLoading;
+  }
 }
 
 export function initDarkMode() {

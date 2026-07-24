@@ -827,6 +827,18 @@ def test_session_store_serializes_duplicate_concurrent_choices(
     assert len(store.session.player_state.decision_history) == 1
     assert capsys.readouterr().out == ""
 
+    current_session = store.session
+    real_game_session = session_module.GameSession
+
+    def fail_generation(*args, **kwargs):
+        raise RuntimeError("generation failed")
+
+    monkeypatch.setattr(session_module, "GameSession", fail_generation)
+    with pytest.raises(RuntimeError, match="generation failed"):
+        store.new_session_payload(seed=414)
+    assert store.session is current_session
+    monkeypatch.setattr(session_module, "GameSession", real_game_session)
+
     replacement = store.new_session_payload(seed=414)
     assert capsys.readouterr().out == ""
     store.log_generation_stats()
