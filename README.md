@@ -205,9 +205,10 @@ When developer mode is active, state responses additionally contain a
 top-level `developer` object with generation metadata and state-aware action
 availability. Standard-mode responses omit this object. There is no shift
 endpoint. The initial state request and each successful new-game request print
-one decision-web generation report to the terminal that launched the app. Its
-peak RSS value is the process high-water mark, so later in-process games do not
-report an isolated fresh-process peak.
+one decision-web generation report to the terminal that launched the app. Each
+report includes the current RSS retained after the active session is replaced
+and the process's lifetime peak RSS. Current RSS can fall when a smaller game
+replaces a large one; peak RSS is a high-water mark and cannot decrease.
 
 ## Use the simulation directly
 

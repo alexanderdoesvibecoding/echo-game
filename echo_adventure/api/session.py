@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import threading
 import time
@@ -36,6 +37,93 @@ _RANDOM_SEED_WEB_TIMEOUT_SECONDS = 15.0
 _MAX_AUTOMATED_ACTIONS = 10_000
 _MAX_AUTOMATED_DAYS = 1_000
 _MAX_WORST_STAGNANT_DAYS = 20
+
+
+def _process_current_rss_bytes() -> int | None:
+    """Return the process's current resident memory using only the standard library."""
+    if sys.platform == "darwin":
+        try:
+            import ctypes
+
+            class TimeValue(ctypes.Structure):
+                _fields_ = [
+                    ("seconds", ctypes.c_int32),
+                    ("microseconds", ctypes.c_int32),
+                ]
+
+            class MachTaskBasicInfo(ctypes.Structure):
+                _fields_ = [
+                    ("virtual_size", ctypes.c_uint64),
+                    ("resident_size", ctypes.c_uint64),
+                    ("resident_size_max", ctypes.c_uint64),
+                    ("user_time", TimeValue),
+                    ("system_time", TimeValue),
+                    ("policy", ctypes.c_int32),
+                    ("suspend_count", ctypes.c_int32),
+                ]
+
+            library = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+            library.mach_task_self.restype = ctypes.c_uint32
+            library.task_info.argtypes = [
+                ctypes.c_uint32,
+                ctypes.c_int,
+                ctypes.c_void_p,
+                ctypes.POINTER(ctypes.c_uint32),
+            ]
+            library.task_info.restype = ctypes.c_int
+            info = MachTaskBasicInfo()
+            count = ctypes.c_uint32(
+                ctypes.sizeof(info) // ctypes.sizeof(ctypes.c_uint32)
+            )
+            status = library.task_info(
+                library.mach_task_self(),
+                20,  # MACH_TASK_BASIC_INFO
+                ctypes.byref(info),
+                ctypes.byref(count),
+            )
+            return int(info.resident_size) if status == 0 else None
+        except (AttributeError, OSError, TypeError, ValueError):
+            return None
+
+    if sys.platform.startswith("linux"):
+        try:
+            with open("/proc/self/statm", encoding="ascii") as statm:
+                resident_pages = int(statm.read().split()[1])
+            return resident_pages * int(os.sysconf("SC_PAGE_SIZE"))
+        except (IndexError, OSError, TypeError, ValueError):
+            return None
+
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class ProcessMemoryCounters(ctypes.Structure):
+                _fields_ = [
+                    ("cb", wintypes.DWORD),
+                    ("page_fault_count", wintypes.DWORD),
+                    ("peak_working_set_size", ctypes.c_size_t),
+                    ("working_set_size", ctypes.c_size_t),
+                    ("quota_peak_paged_pool_usage", ctypes.c_size_t),
+                    ("quota_paged_pool_usage", ctypes.c_size_t),
+                    ("quota_peak_non_paged_pool_usage", ctypes.c_size_t),
+                    ("quota_non_paged_pool_usage", ctypes.c_size_t),
+                    ("pagefile_usage", ctypes.c_size_t),
+                    ("peak_pagefile_usage", ctypes.c_size_t),
+                ]
+
+            counters = ProcessMemoryCounters()
+            counters.cb = ctypes.sizeof(counters)
+            status = ctypes.windll.psapi.GetProcessMemoryInfo(
+                ctypes.windll.kernel32.GetCurrentProcess(),
+                ctypes.byref(counters),
+                counters.cb,
+            )
+            return int(counters.working_set_size) if status else None
+        except (AttributeError, OSError, TypeError, ValueError):
+            return None
+
+    return None
 
 
 def _process_peak_rss_bytes() -> int | None:
@@ -100,6 +188,7 @@ class GameSession(PayloadMixin, ReviewMixin):
                 if accepted_web_seconds > 0
                 else None
             ),
+            "processCurrentRssBytes": _process_current_rss_bytes(),
             "processPeakRssBytes": _process_peak_rss_bytes(),
             "processPeakRssScope": "process-high-water-mark",
         }
@@ -129,6 +218,13 @@ class GameSession(PayloadMixin, ReviewMixin):
         self._developer_follow_up_cache: dict[tuple[str, str], dict[str, Any]] = {}
         self._ensure_cards()
 
+    def refresh_current_rss_stat(self) -> None:
+        """Record retained memory after this session becomes the active run."""
+        with self.lock:
+            self.generation_stats["processCurrentRssBytes"] = (
+                _process_current_rss_bytes()
+            )
+
     def log_generation_stats_once(self) -> None:
         """Write this dev generation's retained statistics to stdout once."""
         with self.lock:
@@ -136,7 +232,16 @@ class GameSession(PayloadMixin, ReviewMixin):
                 return
             self._generation_stats_logged = True
             stats = self.generation_stats
+            current_rss = stats["processCurrentRssBytes"]
             peak_rss = stats["processPeakRssBytes"]
+            current_label = (
+                "unavailable"
+                if current_rss is None
+                else (
+                    f"{current_rss} bytes "
+                    f"({current_rss / (1024 * 1024):.2f} MiB)"
+                )
+            )
             peak_label = (
                 "unavailable"
                 if peak_rss is None
@@ -176,9 +281,10 @@ class GameSession(PayloadMixin, ReviewMixin):
                             else f"{stats['nodesPerSecond']:.2f}"
                         )
                     ),
+                    f"  Process current RSS: {current_label}",
                     (
                         "  Process peak RSS: "
-                        f"{peak_label} (process high-water mark)"
+                        f"{peak_label} (lifetime high-water mark; does not decrease)"
                     ),
                 )
             )
@@ -689,7 +795,9 @@ class SessionStore:
 
     def new_session_payload(self, seed: int | None = None) -> dict[str, Any]:
         with self.lock:
-            self.session = GameSession(seed=seed, dev_mode=self.dev_mode)
+            new_session = GameSession(seed=seed, dev_mode=self.dev_mode)
+            self.session = new_session
+            new_session.refresh_current_rss_stat()
             return self.session.state_payload()
 
     def log_generation_stats(self) -> None:

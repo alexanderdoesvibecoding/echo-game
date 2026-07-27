@@ -89,6 +89,7 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
         "edgeCount",
         "optimalCompletionDay",
         "nodesPerSecond",
+        "processCurrentRssBytes",
         "processPeakRssBytes",
         "processPeakRssScope",
     }
@@ -108,6 +109,9 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
     )
     assert generation["nodesPerSecond"] == pytest.approx(
         generation["nodeCount"] / generation["acceptedWebGenerationSeconds"]
+    )
+    assert generation["processCurrentRssBytes"] is None or (
+        generation["processCurrentRssBytes"] > 0
     )
     assert generation["processPeakRssBytes"] is None or (
         generation["processPeakRssBytes"] > 0
@@ -789,6 +793,18 @@ def test_session_store_serializes_duplicate_concurrent_choices(
 ) -> None:
     install_fast_session_config(monkeypatch)
     monkeypatch.setattr(session_module, "_process_peak_rss_bytes", lambda: None)
+    current_rss_calls = 0
+
+    def controlled_current_rss() -> int:
+        nonlocal current_rss_calls
+        current_rss_calls += 1
+        return current_rss_calls * 1024 * 1024
+
+    monkeypatch.setattr(
+        session_module,
+        "_process_current_rss_bytes",
+        controlled_current_rss,
+    )
     store = session_module.SessionStore(seed=414, dev_mode=True)
     assert store.dev_mode is True
     assert store.session.dev_mode is True
@@ -799,7 +815,14 @@ def test_session_store_serializes_duplicate_concurrent_choices(
     assert initial_report.count("[ECHO dev] Decision web generation") == 1
     assert "Accepted seed: 414" in initial_report
     assert "Requested seed mode: explicit" in initial_report
-    assert "Process peak RSS: unavailable (process high-water mark)" in initial_report
+    assert "Process current RSS: 1048576 bytes (1.00 MiB)" in initial_report
+    assert (
+        "Process peak RSS: unavailable "
+        "(lifetime high-water mark; does not decrease)"
+    ) in initial_report
+    assert initial_payload["developer"]["generation"]["processCurrentRssBytes"] == (
+        1024 * 1024
+    )
     assert initial_payload["developer"]["generation"]["processPeakRssBytes"] is None
     store.state_payload()
     assert capsys.readouterr().out == ""
@@ -849,6 +872,10 @@ def test_session_store_serializes_duplicate_concurrent_choices(
     assert store.session.seed == 414
     assert store.session.dev_mode is True
     assert "developer" in replacement
+    assert replacement["developer"]["generation"]["processCurrentRssBytes"] == (
+        3 * 1024 * 1024
+    )
+    assert "Process current RSS: 3145728 bytes (3.00 MiB)" in replacement_report
     store.log_generation_stats()
     assert capsys.readouterr().out == ""
 
