@@ -312,15 +312,6 @@ class PayloadMixin:
             generated_by = self._generated_by_payload(card)
             if generated_by is not None:
                 payload["developer"]["generatedBy"] = generated_by
-        if card.follow_up_source_day is not None:
-            payload["followUpSource"] = {
-                "day": card.follow_up_source_day,
-                "definitionId": card.follow_up_source_definition_id,
-                "title": card.follow_up_source_title,
-                "choiceId": card.follow_up_source_choice_id,
-                "choice": card.follow_up_source_choice_label,
-                "jobId": card.primary_job_id,
-            }
         return payload
 
     def _choice_preference_payload(self, card: DecisionCard) -> dict[str, Any]:
@@ -546,15 +537,6 @@ def _chart_decision_payload(
         "eventId": (card.event_id or card.id) if card else record.card_id,
         "eventScope": card.event_scope if card else "route-specific",
     }
-    if card and card.follow_up_source_day is not None:
-        payload["followUpSource"] = {
-            "day": card.follow_up_source_day,
-            "definitionId": card.follow_up_source_definition_id,
-            "title": card.follow_up_source_title,
-            "choiceId": card.follow_up_source_choice_id,
-            "choice": card.follow_up_source_choice_label,
-            "jobId": card.primary_job_id,
-        }
     if include_echo_preference:
         preferred_choice = (
             next(

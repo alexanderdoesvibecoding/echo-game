@@ -43,7 +43,6 @@ function routeDecisionFromPoint(decisionPoint, actor, index) {
     cumulativeScore: formatScore(nested.cumulativeScore, { signed: false }),
     affectedLabel: nested.affectedLabel || "-",
     eventScope: nested.eventScope || "route-specific",
-    followUpSource: nested.followUpSource || null,
     echoPreferredChoice: nested.echoPreferredChoice || "",
     alignedWithEcho: Boolean(nested.alignedWithEcho),
     echoSituationMatches: Boolean(nested.echoSituationMatches),
@@ -399,9 +398,6 @@ function renderRouteDecision(decision, actor) {
   const comparisonBadge = actor === "player" && decision.echoPreferredChoice
     ? `<span class="chart-shared-badge">${escapeHtml(presentation.badge)}</span>`
     : "";
-  const followUpContext = decision.followUpSource
-    ? `<p class="chart-follow-up-source">Follow-up to Day ${escapeHtml(decision.followUpSource.day)}: ${escapeHtml(decision.followUpSource.title || "earlier decision")}${decision.followUpSource.choice ? ` · ${escapeHtml(decision.followUpSource.choice)}` : ""}</p>`
-    : "";
   const preference = actor === "player" && decision.echoPreferredChoice
     ? `
       <div class="chart-echo-preference ${decision.alignedWithEcho ? "is-aligned" : ""}" data-preference-state="${escapeHtml(presentation.state)}">
@@ -416,7 +412,6 @@ function renderRouteDecision(decision, actor) {
         <strong>Decision ${escapeHtml(decision.position || "-")}: ${escapeHtml(title)}</strong>
         ${comparisonBadge}
       </div>
-      ${followUpContext}
       ${detail}
       <dl class="chart-tooltip-fields">
         <div class="chart-tooltip-field">

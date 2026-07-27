@@ -408,7 +408,7 @@ test("decision queue reveals due choices, tracks selection, and submits the sele
 
   renderDecisionQueue();
   assert.match(body.innerHTML, /Recover &lt;time&gt;/);
-  assert.match(body.innerHTML, /Follow-up to Day 1: Earlier &lt;decision&gt; · Pause &lt;work&gt;/);
+  assert.doesNotMatch(body.innerHTML, /decision-follow-up-source/);
   assert.match(body.innerHTML, /choice-icon/);
   assert.match(body.innerHTML, /Confirm response/);
   assert.match(body.innerHTML, /disabled/);

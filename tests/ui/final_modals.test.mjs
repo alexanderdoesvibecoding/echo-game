@@ -218,7 +218,7 @@ test("decision chart tooltip safely renders, locks, and closes", () => {
   assert.match(tooltip.innerHTML, /Different events · ECHO preferred your response/);
   assert.match(tooltip.innerHTML, /Different events · ECHO preferred another response/);
   assert.doesNotMatch(tooltip.innerHTML, /<small>/);
-  assert.match(tooltip.innerHTML, /Follow-up to Day 1: Earlier inspection · Pause work/);
+  assert.doesNotMatch(tooltip.innerHTML, /chart-follow-up-source/);
   assert.match(tooltip.innerHTML, /data-preference-state="same-context-different-choice"/);
   assert.match(tooltip.innerHTML, /data-preference-state="different-events-different-choice"/);
   assert.doesNotMatch(tooltip.innerHTML, /resulting completion date first, then the overall route score/);

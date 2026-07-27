@@ -196,6 +196,7 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
         follow_up_source_choice_label="Recalibrate <now>",
     )
     source_payload = dev_session._card_payload(source_card)
+    assert "followUpSource" not in source_payload
     generated_by = source_payload["developer"]["generatedBy"]
     assert generated_by == {
         "sourceDay": 1,
@@ -215,7 +216,9 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
         "followUp" in choice["developer"]
         for choice in source_payload["choices"]
     )
-    assert "developer" not in session._card_payload(source_card)
+    standard_source_payload = session._card_payload(source_card)
+    assert "developer" not in standard_source_payload
+    assert "followUpSource" not in standard_source_payload
 
     real_generate_decision_web = session_module.generate_decision_web
     generation_calls: list[tuple[int, float | None]] = []

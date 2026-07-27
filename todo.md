@@ -5,9 +5,9 @@
 
 - [ ] Play test and play test and play test - Everyone
 
-- [ ] Decision queue moves down during the tutorial
+- [x] Decision queue moves down during the tutorial - Matt
 
-- [ ] Remove follow-up text (see image in the Google doc)
+- [ ] Remove follow-up text (see image in the Google doc) - Matt
 
 - [ ] Move the popups on the end of game screen that say lower is better, etc. to be where the user is hovering not in the bottom right weirdly
 
