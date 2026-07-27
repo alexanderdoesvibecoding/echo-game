@@ -512,6 +512,24 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
 
   uiState.state = {
     ...uiState.state,
+    finalAssembly: null,
+    decisions: [{ id: "OVERTIME-1" }],
+    developer: {
+      generation: {},
+      runState: { inDecisionWeb: false, canSkipToEnd: true, canSkipToDay: false },
+    },
+  };
+  renderDevTools();
+  assert.equal(dom.element("devRunPhase").textContent, "Extended play");
+  assert.equal(dom.element("devDiagnosticsRow").classList.contains("hidden"), false);
+  assert.equal(dom.element("devSkipDayRow").classList.contains("hidden"), true);
+  assert.equal(dom.element("devSkipEndRow").classList.contains("hidden"), false);
+  assert.equal(dom.element("devInstantProgression").disabled, false);
+  assert.equal(dom.element("devShowDiagnostics").disabled, false);
+  assert.equal(dom.element("devStrategy").disabled, false);
+
+  uiState.state = {
+    ...uiState.state,
     finalAssembly: { active: true },
     decisions: [{ id: "FINAL-1" }],
     developer: {
@@ -701,7 +719,12 @@ test("developer skip controls filter days and serialize asynchronous requests", 
   dom.element("devSkipToDayBtn").listeners.get("click")[0]();
   dom.element("devSkipToEndBtn").listeners.get("click")[0]();
   assert.equal(uiState.devRequestInFlight, true);
-  assert.equal(dom.element("devSkipToDayBtn").disabled, true);
+  for (const id of [
+    "devInstantProgression", "devShowDiagnostics", "devStrategy", "devTargetDay",
+    "devSkipToDayBtn", "devSkipToEndBtn", "devNewGameBtn",
+  ]) {
+    assert.equal(dom.element(id).disabled, true);
+  }
   assert.deepEqual(requests, [["day", { strategy: "worst", targetDay: 6 }]]);
 
   releaseRequest();

@@ -72,6 +72,7 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
     assert set(payload["timelines"]) == {"player", "echo"}
     assert payload["lastSummary"] is None
     assert "developer" not in payload
+    assert "developer" not in payload["decisions"][0]
     assert all("developer" not in choice for choice in payload["decisions"][0]["choices"])
 
     dev_session = session_module.GameSession(seed=404, dev_mode=True)
@@ -848,6 +849,24 @@ def test_session_store_serializes_duplicate_concurrent_choices(
     assert store.session.seed == 414
     assert store.session.dev_mode is True
     assert "developer" in replacement
+    store.log_generation_stats()
+    assert capsys.readouterr().out == ""
+
+    for edge_seed in (0, -2):
+        edge_replacement = store.new_session_payload(seed=edge_seed)
+        assert capsys.readouterr().out == ""
+        assert store.session.seed == edge_seed
+        assert store.session.dev_mode is True
+        assert edge_replacement["developer"]["generation"]["acceptedSeed"] == edge_seed
+        assert edge_replacement["developer"]["generation"]["requestedSeedMode"] == (
+            "explicit"
+        )
+        store.log_generation_stats()
+        edge_report = capsys.readouterr().out
+        assert edge_report.count("[ECHO dev] Decision web generation") == 1
+        assert f"Accepted seed: {edge_seed}" in edge_report
+        store.log_generation_stats()
+        assert capsys.readouterr().out == ""
 
     standard_store = session_module.SessionStore(seed=415)
     standard_payload = standard_store.state_payload()
@@ -855,7 +874,10 @@ def test_session_store_serializes_duplicate_concurrent_choices(
     assert capsys.readouterr().out == ""
 
 
-@pytest.mark.parametrize("value, expected", [(None, None), ("", None), (" 007 ", 7), (42, 42), (-2, -2)])
+@pytest.mark.parametrize(
+    "value, expected",
+    [(None, None), ("", None), (" 007 ", 7), (0, 0), (42, 42), (-2, -2)],
+)
 def test_parse_optional_seed_accepts_supported_values(value: object, expected: int | None) -> None:
     assert _parse_optional_seed(value) == expected
 
@@ -904,6 +926,8 @@ def dispatch(handler: HandlerHarness) -> None:
 def test_request_handler_routes_state_actions_html_and_not_found(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    generation_report_calls = []
+
     class FakeStore:
         dev_mode = False
 
@@ -911,7 +935,7 @@ def test_request_handler_routes_state_actions_html_and_not_found(
             return {"route": "state"}
 
         def log_generation_stats(self):
-            return None
+            generation_report_calls.append("report")
 
         def new_session_payload(self, seed=None):
             return {"route": "new", "seed": seed}
@@ -935,6 +959,7 @@ def test_request_handler_routes_state_actions_html_and_not_found(
         dispatch(handler)
         assert handler.response_status == status
         assert handler.body_json() == payload
+    assert generation_report_calls == ["report", "report"]
 
     class DevStore(FakeStore):
         dev_mode = True
@@ -983,6 +1008,13 @@ def test_request_handler_routes_state_actions_html_and_not_found(
             "dev_mode": True,
         }
     ]
+    server_module.main([])
+    assert run_calls[-1] == {
+        "seed": None,
+        "host": "127.0.0.1",
+        "port": 8765,
+        "dev_mode": False,
+    }
 
 
 def test_request_handler_reports_bad_input_and_serves_declared_static_assets() -> None:
