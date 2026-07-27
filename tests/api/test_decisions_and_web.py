@@ -561,7 +561,7 @@ def test_decision_web_is_deterministic_and_every_node_is_fully_solved(solved_web
             generate_decision_web(
                 scenario,
                 config,
-                max_generation_seconds=15,
+                max_generation_seconds=10,
             )
     assert _JOB_TARGET_WINDOW_PATTERN == (2, 1)
     assert len(builder.job_target_schedule) == _JOB_TARGET_SCHEDULE_LENGTH

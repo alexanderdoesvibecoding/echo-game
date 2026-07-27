@@ -1,9 +1,14 @@
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 import { installDom } from "./testDom.mjs";
 
 const dom = installDom();
+const styles = await readFile(
+  new URL("../../echo_adventure/ui/styles.css", import.meta.url),
+  "utf8",
+);
 const { uiState } = await import("../../echo_adventure/ui/state.js");
 const {
   configureDevTools,
@@ -73,6 +78,13 @@ beforeEach(() => {
   resetUiState();
   dom.element("decisionChartTooltip");
   hideDecisionChartTooltip();
+});
+
+test("final metric guidance is positioned relative to the hovered metric", () => {
+  const metricRule = styles.match(/\.final-metric-hoverable\s*\{([^}]*)\}/);
+
+  assert.ok(metricRule);
+  assert.match(metricRule[1], /position:\s*relative;/);
 });
 
 test("daily score groups begin at neutral score and aggregate all score events by day", () => {

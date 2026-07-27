@@ -745,6 +745,7 @@ html[data-theme="dark"] .final-outcome-headline {
   overflow: hidden;
 }
 .final-metric-hoverable {
+  position: relative;
   cursor: help;
   overflow: visible;
   outline: none;
