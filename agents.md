@@ -122,7 +122,6 @@
   still pass.
 - Update existing tests when needed to keep them aligned with current game
   behavior.
-- Do not add new tests.
 - Remove an existing test only when the functionality it covers has been
   removed from the game.
 - For code changes, verify that:

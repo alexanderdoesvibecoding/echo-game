@@ -107,7 +107,7 @@ test("daily score groups begin at neutral score and aggregate all score events b
 });
 
 
-test("daily score groups derive missing deltas and normalize sparse decisions", () => {
+test("daily score groups derive missing deltas and keep no-question days flat", () => {
   const groups = buildDailyDecisionGroups([
     {
       day: "not-a-day",
@@ -127,6 +127,12 @@ test("daily score groups derive missing deltas and normalize sparse decisions", 
         questionTitle: "ECHO decision",
       },
     },
+    {
+      day: 3,
+      dateLabel: "July 3",
+      playerDecision: null,
+      echoDecision: null,
+    },
   ]);
 
   assert.equal(groups[1].day, 1);
@@ -140,6 +146,12 @@ test("daily score groups derive missing deltas and normalize sparse decisions", 
   assert.equal(groups[2].playerDecisionCount, 0);
   assert.equal(groups[2].echoDailyDelta, -2.5);
   assert.equal(groups[2].echoDecisions[0].position, 2);
+  assert.equal(groups[3].playerDecisionCount, 0);
+  assert.equal(groups[3].echoDecisionCount, 0);
+  assert.equal(groups[3].playerDailyDelta, 0);
+  assert.equal(groups[3].echoDailyDelta, 0);
+  assert.equal(groups[3].playerCumulativeScore, groups[2].playerCumulativeScore);
+  assert.equal(groups[3].echoCumulativeScore, groups[2].echoCumulativeScore);
 });
 
 test("decision chart tooltip safely renders, locks, and closes", () => {
@@ -295,6 +307,12 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
             playerDecision: { scoreDelta: 1, cumulativeScore: 1, choice: "A" },
             echoDecision: { scoreDelta: 2, cumulativeScore: 2, choice: "B" },
           },
+          {
+            day: 2,
+            dateLabel: "July 2",
+            playerDecision: null,
+            echoDecision: null,
+          },
         ],
       },
       review: {
@@ -330,6 +348,10 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
   assert.doesNotMatch(dom.element("finalMetricsBar").innerHTML, /Day [34]/);
   assert.match(dom.element("finalCompletionChart").innerHTML, /Your score/);
   assert.match(dom.element("finalCompletionChart").innerHTML, /ECHO score/);
+  assert.equal(
+    (dom.element("finalCompletionChart").innerHTML.match(/chart-no-question-dot/g) || []).length,
+    2,
+  );
   assert.equal(dom.element("finalNotesTitle").textContent, "Where It Went Wrong");
   assert.equal((dom.element("finalNotes").innerHTML.match(/<li>/g) || []).length, 5);
   assert.match(dom.element("finalNotes").innerHTML, /ECHO finished &lt;first&gt;\./);
@@ -608,7 +630,8 @@ test("final view hides without a reveal and tooltip tolerates invalid event data
     echoDecisions: "not-json",
   };
   showDecisionChartTooltip({ preventDefault() {}, stopPropagation() {} }, marker);
-  assert.match(dom.element("decisionChartTooltip").innerHTML, /You had no decisions on this day/);
+  assert.match(dom.element("decisionChartTooltip").innerHTML, /You answered no questions on this day/);
+  assert.match(dom.element("decisionChartTooltip").innerHTML, /ECHO answered no questions on this day/);
   assert.equal(dom.element("decisionChartTooltip").classList.contains("active"), true);
 });
 

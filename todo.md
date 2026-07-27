@@ -4,3 +4,11 @@
 - [x] Fix memory leak - Matt
 
 - [ ] Play test and play test and play test - Everyone
+
+- [ ] Decision queue moves down during the tutorial
+
+- [ ] Remove follow-up text (see image in the Google doc)
+
+- [ ] Move the popups on the end of game screen that say lower is better, etc. to be where the user is hovering not in the bottom right weirdly
+
+- [ ] Look again at how we do the dots on the graph at the end of the game

@@ -640,6 +640,12 @@ def test_final_payload_aligns_real_player_and_echo_histories(monkeypatch: pytest
     history = final["completionHistory"]
 
     assert history["decisionPoints"]
+    chart_days = {point["day"] for point in history["decisionPoints"]}
+    final_day = max(
+        session.player_state.completion_day,
+        session.automated_state.completion_day,
+    )
+    assert chart_days == set(range(1, final_day + 1))
     first_point = history["decisionPoints"][0]
     assert first_point["playerDecision"]["choice"] == session.player_state.decision_history[0].choice_label
     assert first_point["echoDecision"]["choice"] == session.automated_state.decision_history[0].choice_label

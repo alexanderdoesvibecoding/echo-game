@@ -204,20 +204,42 @@ function renderDecisionScoreChart(history) {
       data-echo-decisions="${escapeHtml(JSON.stringify(group.echoDecisions))}"
     `;
   };
-  const decisionMarker = (series, index) => {
+  const scoreMarker = (series, index) => {
     const group = dailyGroups[index];
-    if (series === "Player" && group.playerDecisionCount === 0) return "";
-    if (series === "ECHO" && group.echoDecisionCount === 0) return "";
+    if (group.isBaseline) return "";
+    const decisionCount = series === "Player"
+      ? group.playerDecisionCount
+      : group.echoDecisionCount;
+    const hasDecision = decisionCount > 0;
+    const noQuestionClass = hasDecision ? "" : " chart-no-question-dot";
     const values = series === "Player" ? playerScore : echoScore;
     const value = Number(values[index]) || 0;
     const [x, y] = point(value, index);
     if (series === "Player") {
       return `
-        <circle class="chart-dot chart-player-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.8" fill="var(--teal)" stroke="var(--panel)" stroke-width="1.4"></circle>
+        <circle
+          class="chart-dot chart-player-dot${noQuestionClass}"
+          cx="${x.toFixed(1)}"
+          cy="${y.toFixed(1)}"
+          r="${hasDecision ? "4.8" : "4.0"}"
+          fill="${hasDecision ? "var(--teal)" : "var(--panel)"}"
+          stroke="${hasDecision ? "var(--panel)" : "var(--teal)"}"
+          stroke-width="${hasDecision ? "1.4" : "2.0"}"
+          ${hasDecision ? "" : 'opacity="0.78"'}
+        ></circle>
       `;
     }
     return `
-      <circle class="chart-dot chart-echo-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5.6" fill="var(--panel)" stroke="var(--violet)" stroke-width="2.2"></circle>
+      <circle
+        class="chart-dot chart-echo-dot${noQuestionClass}"
+        cx="${x.toFixed(1)}"
+        cy="${y.toFixed(1)}"
+        r="${hasDecision ? "5.6" : "4.0"}"
+        fill="var(--panel)"
+        stroke="var(--violet)"
+        stroke-width="${hasDecision ? "2.2" : "2.0"}"
+        ${hasDecision ? "" : 'opacity="0.78"'}
+      ></circle>
     `;
   };
   const dayHoverZone = (group, index) => {
@@ -253,8 +275,8 @@ function renderDecisionScoreChart(history) {
           ${xLabels}
           <path d="${pathFor(playerScore)}" fill="none" stroke="var(--teal)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
           <path d="${pathFor(echoScore)}" fill="none" stroke="var(--violet)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 6"></path>
-          <g>${dailyGroups.map((group, index) => decisionMarker("Player", index)).join("")}</g>
-          <g>${dailyGroups.map((group, index) => decisionMarker("ECHO", index)).join("")}</g>
+          <g>${dailyGroups.map((group, index) => scoreMarker("Player", index)).join("")}</g>
+          <g>${dailyGroups.map((group, index) => scoreMarker("ECHO", index)).join("")}</g>
           <g>${dailyGroups.map((group, index) => dayHoverZone(group, index)).join("")}</g>
         </svg>
         <div class="chart-tooltip" id="decisionChartTooltip" role="dialog" aria-modal="false" aria-labelledby="decisionChartTooltipTitle"></div>
@@ -418,8 +440,8 @@ function renderRouteDecision(decision, actor) {
 function renderRouteSection(actor, decisions) {
   const label = actor === "player" ? "Your actual route" : "ECHO's actual route";
   const emptyText = actor === "player"
-    ? "You had no decisions on this day."
-    : "ECHO had no decisions on this day.";
+    ? "You answered no questions on this day."
+    : "ECHO answered no questions on this day.";
   const decisionWord = decisions.length === 1 ? "decision" : "decisions";
   return `
     <section class="chart-route chart-route-${actor}">

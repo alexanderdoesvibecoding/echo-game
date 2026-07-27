@@ -155,7 +155,7 @@ class PayloadMixin:
         return {"decisionPoints": self._decision_chart_payload()}
 
     def _decision_chart_payload(self) -> list[dict[str, Any]]:
-        """Align player and ECHO decisions by game day for the score chart."""
+        """Align player and ECHO decisions across every game day through completion."""
         player_by_day: dict[int, list[Any]] = {}
         echo_by_day: dict[int, list[Any]] = {}
         for record in self.player_state.decision_history:
@@ -165,11 +165,25 @@ class PayloadMixin:
             if record.actor == "ECHO":
                 echo_by_day.setdefault(record.day, []).append(record)
 
+        completion_days = [
+            day
+            for day in (
+                self.player_state.completion_day,
+                self.automated_state.completion_day,
+            )
+            if day is not None
+        ]
+        last_day = max(
+            [1, *player_by_day.keys(), *echo_by_day.keys(), *completion_days]
+        )
         points = []
-        for day in sorted(set(player_by_day) | set(echo_by_day)):
+        for day in range(1, last_day + 1):
             player_records = player_by_day.get(day, [])
             echo_records = echo_by_day.get(day, [])
-            for slot in range(max(len(player_records), len(echo_records))):
+            # Keep one selectable, zero-change point when neither route had a
+            # question so the chart still reaches the actual completion dates.
+            slot_count = max(1, len(player_records), len(echo_records))
+            for slot in range(slot_count):
                 player_record = player_records[slot] if slot < len(player_records) else None
                 echo_record = echo_records[slot] if slot < len(echo_records) else None
                 player_card = (
