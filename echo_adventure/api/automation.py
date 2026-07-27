@@ -26,6 +26,15 @@ class AutomationContext:
     start_token: str
 
 
+@dataclass(frozen=True)
+class ChoiceOutcome:
+    """Schedule and score result used by diagnostics and automated ranking."""
+
+    completion_day: int
+    resulting_score: float
+    exact: bool
+
+
 def validate_automation_strategy(strategy: object) -> str:
     if not isinstance(strategy, str) or strategy not in AUTOMATION_STRATEGIES:
         supported = ", ".join(sorted(AUTOMATION_STRATEGIES))
@@ -70,6 +79,44 @@ def select_preplanned_choice(
     raise ValueError(f"Unsupported automated strategy: {strategy}.")
 
 
+def preplanned_choice_outcome(
+    web: DecisionWeb,
+    node_id: str,
+    choice: DecisionChoice,
+    *,
+    max_campaign_day: int,
+) -> ChoiceOutcome:
+    """Return the solved outcome after a choice and optimal continuation."""
+    transition = web.transition(node_id, choice.id)
+    if transition.completion_day is not None:
+        completion_day = transition.completion_day
+        future_score = 0.0
+    elif transition.enters_overtime:
+        completion_day = max_campaign_day
+        future_score = 0.0
+    else:
+        successor = web.node(transition.next_node_id or "")
+        completion_day = successor.optimal_completion_day
+        future_score = successor.optimal_future_score
+    return ChoiceOutcome(
+        completion_day=completion_day,
+        resulting_score=round(choice.score_delta + future_score, 2),
+        exact=not transition.enters_overtime,
+    )
+
+
+def runtime_choice_outcome(
+    state: SimulationState,
+    choice: DecisionChoice,
+) -> ChoiceOutcome:
+    """Return the immediate runtime projection used for local comparison."""
+    return ChoiceOutcome(
+        completion_day=projected_completion_day_after_choice(state, choice),
+        resulting_score=round(state.decision_score + choice.score_delta, 2),
+        exact=False,
+    )
+
+
 def select_runtime_choice(
     state: SimulationState,
     card: DecisionCard,
@@ -109,11 +156,7 @@ def select_runtime_choice(
             candidates = progress_safe
         return min(
             candidates,
-            key=lambda choice: (
-                -projected_completion_day_after_choice(state, choice),
-                round(state.decision_score + choice.score_delta, 2),
-                choice.id,
-            ),
+            key=lambda choice: _runtime_worst_key(state, choice),
         )
     raise ValueError(f"Unsupported automated strategy: {strategy}.")
 
@@ -170,19 +213,21 @@ def _preplanned_worst_key(
     *,
     max_campaign_day: int,
 ) -> tuple[int, float, str]:
-    transition = web.transition(node_id, choice.id)
-    if transition.completion_day is not None:
-        completion_day = transition.completion_day
-        future_score = 0.0
-    elif transition.enters_overtime:
-        completion_day = max_campaign_day
-        future_score = 0.0
-    else:
-        successor = web.node(transition.next_node_id or "")
-        completion_day = successor.optimal_completion_day
-        future_score = successor.optimal_future_score
-    resulting_score = round(choice.score_delta + future_score, 2)
-    return (-completion_day, resulting_score, choice.id)
+    outcome = preplanned_choice_outcome(
+        web,
+        node_id,
+        choice,
+        max_campaign_day=max_campaign_day,
+    )
+    return (-outcome.completion_day, outcome.resulting_score, choice.id)
+
+
+def _runtime_worst_key(
+    state: SimulationState,
+    choice: DecisionChoice,
+) -> tuple[int, float, str]:
+    outcome = runtime_choice_outcome(state, choice)
+    return (-outcome.completion_day, outcome.resulting_score, choice.id)
 
 
 def _deterministic_choice(

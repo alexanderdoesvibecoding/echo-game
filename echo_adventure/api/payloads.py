@@ -4,13 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..decisions import (
-    projected_completion_day_after_choice,
-    select_echo_choice_for_state,
-)
+from ..decisions import select_echo_choice_for_state
 from ..metrics import calculate_snapshot
 from ..models import DecisionCard, DecisionChoice, MetricSnapshot, SimulationState
 from ..scoring import public_score, public_score_delta
+from .automation import preplanned_choice_outcome, runtime_choice_outcome
 from .developer import inspect_preplanned_follow_up, inspect_runtime_follow_up
 
 
@@ -458,36 +456,30 @@ class PayloadMixin:
         choice: DecisionChoice,
     ) -> dict[str, Any]:
         if not self.player_in_overtime and not card.player_only:
-            transition = self.decision_web.transition(
+            outcome = preplanned_choice_outcome(
+                self.decision_web,
                 self.player_node_id,
-                choice.id,
+                choice,
+                max_campaign_day=self.config.max_campaign_day,
             )
-            exact = not transition.enters_overtime
-            if transition.completion_day is not None:
-                day = transition.completion_day
-            elif transition.enters_overtime:
-                day = self.config.max_campaign_day
-            else:
-                successor = self.decision_web.node(
-                    transition.next_node_id or ""
-                )
-                day = successor.optimal_completion_day
+            day = outcome.completion_day
             return {
                 "day": day,
                 "date": self.config.date_label_for_day(day),
-                "exact": exact,
+                "exact": outcome.exact,
                 "label": (
                     self.config.date_label_for_day(day)
-                    if exact
+                    if outcome.exact
                     else f"Day {day}+ (enters overtime)"
                 ),
                 "basis": "solved-optimal-continuation",
             }
 
-        day = projected_completion_day_after_choice(
+        outcome = runtime_choice_outcome(
             self.player_state,
             choice,
         )
+        day = outcome.completion_day
         return {
             "day": day,
             "date": self.config.date_label_for_day(day),

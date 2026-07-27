@@ -7,6 +7,9 @@ import pytest
 
 from echo_adventure.api.automation import (
     AutomationContext,
+    ChoiceOutcome,
+    preplanned_choice_outcome,
+    runtime_choice_outcome,
     select_preplanned_choice,
     select_runtime_choice,
 )
@@ -280,6 +283,16 @@ def test_echo_choice_has_a_stable_tiebreak() -> None:
         ).id
         == "choice-3"
     )
+    assert preplanned_choice_outcome(
+        selection_web,
+        "NODE-ROOT",
+        late_low_score,
+        max_campaign_day=8,
+    ) == ChoiceOutcome(completion_day=5, resulting_score=-1, exact=True)
+    assert runtime_choice_outcome(
+        state,
+        outcome_choices[0],
+    ) == ChoiceOutcome(completion_day=2, resulting_score=-2.0, exact=False)
 
 
 def test_apply_choice_changes_only_unfinished_known_jobs_and_records_score() -> None:
