@@ -1685,7 +1685,6 @@ html[data-theme="dark"] .puzzle-stage {
   background: rgba(16, 20, 24, 0.68);
 }
 .tutorial-highlight {
-  position: relative;
   z-index: 91;
   pointer-events: none;
   box-shadow:
