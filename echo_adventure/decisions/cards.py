@@ -23,7 +23,10 @@ from .definitions import (
 )
 
 
+# Scores inside this band deliberately produce no schedule mutation.
 _NEUTRAL_THRESHOLD = 0.15
+# Curated base/follow-up pools keep the player-only final assembly narratively
+# coherent while preventing arbitrary delayed events from leaking into endgame.
 _FINAL_ASSEMBLY_BASE_DEFINITION_IDS = (
     "weather",
     "worker-off-day",
@@ -68,10 +71,14 @@ def generate_daily_decision_cards(
     if not incomplete:
         return []
 
+    # Runtime overtime generation is a pure function of seed and day, which
+    # keeps retries and developer inspection reproducible.
     rng = random.Random(_stable_seed(state.seed, state.current_day, "daily-questions"))
     count = rng.randint(config.min_decisions_per_day, config.max_decisions_per_day)
     selected: list[tuple[DecisionDefinition, Job, PendingFollowUp | None]] = []
 
+    # Due follow-ups take priority over base questions but never exceed the
+    # configured daily question count.
     due = _eligible_follow_ups(state)
     rng.shuffle(due)
     for pending in due[:count]:
@@ -82,6 +89,8 @@ def generate_daily_decision_cards(
         selected.append((definition, job, pending))
 
     selected_pending = {pending for _, _, pending in selected if pending is not None}
+    # Remove only follow-ups that became cards; future eligible items remain
+    # queued for another day.
     state.pending_follow_ups = [item for item in state.pending_follow_ups if item not in selected_pending]
 
     used_today = {definition.id for definition, _, _ in selected}
@@ -91,6 +100,8 @@ def generate_daily_decision_cards(
         if not pool:
             break
         definition = rng.choice(pool)
+        # Prefer distinct primary jobs within a day, falling back when the
+        # remaining job count is smaller than the question count.
         job_pool = [job for job in incomplete if job.id not in assigned_jobs] or incomplete
         primary = rng.choice(job_pool)
         selected.append((definition, primary, None))
@@ -98,6 +109,7 @@ def generate_daily_decision_cards(
         assigned_jobs.add(primary.id)
 
     cards: list[DecisionCard] = []
+    # With one job left, positive delays could make runtime overtime unbounded.
     prevent_delays = len(incomplete) == 1
     for ordinal, (definition, primary, pending) in enumerate(selected, start=1):
         card = _build_card(
@@ -131,10 +143,14 @@ def generate_final_assembly_cards(
     final_job = incomplete[0]
     rng = random.Random(_stable_seed(state.seed, state.current_day, "final-assembly"))
     count = rng.randint(config.min_decisions_per_day, config.max_decisions_per_day)
+    # Only this many cards may offer a one-day acceleration, preserving the
+    # caller's strict no-tie cap against ECHO.
     accelerating_card_count = min(count, max(0, maximum_total_days_removed))
     selected: list[tuple[DecisionDefinition, PendingFollowUp | None]] = []
     used: set[str] = set()
 
+    # Reuse only curated follow-ups that make narrative sense for the locked
+    # final job, ordered by when they originally became available.
     pending = sorted(
         (
             item
@@ -154,6 +170,8 @@ def generate_final_assembly_cards(
         if len(selected) == count:
             break
 
+    # Final assembly is a terminal phase; unselected runtime follow-ups can
+    # never become cards and must not leak into later state.
     state.pending_follow_ups.clear()
     base_pool = [
         DEFINITIONS_BY_ID[definition_id]
@@ -189,6 +207,8 @@ def generate_final_assembly_cards(
             )
             for index, catalog_choice in enumerate(definition.choices, start=1)
         ]
+        # This recommendation guides the player-only card shape; it is not
+        # recorded as an ECHO action or used to claim route alignment.
         preferred_choice = max(choices, key=lambda choice: (choice.score_delta, choice.id))
         description = (
             f"{_simplify_language(definition.description)} Only {final_job.name} remains "
@@ -249,6 +269,8 @@ def _eligible_follow_ups(state: SimulationState) -> list[PendingFollowUp]:
     for pending in state.pending_follow_ups:
         job = state.jobs.get(pending.job_id)
         definition = DEFINITIONS_BY_ID.get(pending.definition_id)
+        # Invalid definitions, completed origin jobs, and already-shown events
+        # are discarded permanently rather than retained as stale queue entries.
         if (
             not job
             or job.is_complete
@@ -277,6 +299,8 @@ def _available_base_definitions(
     if not pool:
         return []
 
+    # Count previously generated cards so runtime overtime continues rotating
+    # through the full catalog instead of repeatedly favoring early entries.
     appearances = {definition.id: 0 for definition in BASE_DEFINITIONS}
     for card in state.decision_cards.values():
         if card.definition_id in appearances:
@@ -296,6 +320,9 @@ def _build_card(
     pending: PendingFollowUp | None,
     prevent_delays: bool = False,
 ) -> DecisionCard:
+    """Materialize a runtime decision card from a catalog definition."""
+    # Put the semantic primary first, then sample up to four secondary jobs for
+    # bounded multi-job effects and readable context labels.
     others = [job for job in incomplete if job.id != primary.id]
     rng.shuffle(others)
     targets = [primary, *others[:4]]
@@ -360,6 +387,8 @@ def build_preplanned_decision_card(
     follow_up_source_choice_id: str = "",
 ) -> DecisionCard:
     """Build one immutable-web question for an exact precomputed state."""
+    # The preplanned builder receives an already-stable order and must not consume
+    # random state while expanding sibling graph nodes.
     targets = [primary, *(job for job in ordered_targets if job.id != primary.id)][:5]
     definition = _select_preplanned_follow_up_result(
         state,
@@ -369,6 +398,8 @@ def build_preplanned_decision_card(
         trigger_delta,
     )
     deltas = _preplanned_deltas(definition, targets, trigger_delta)
+    # Never let a positive choice delta indefinitely extend the final active job
+    # inside the bounded preplanned campaign.
     if len(targets) == 1:
         deltas = [min(0, delta) for delta in deltas]
     choices = [
@@ -427,6 +458,8 @@ def _select_preplanned_follow_up_result(
     if not definition.alternate_results:
         return definition
 
+    # Hash the complete relevant state so all routes reaching the same graph node
+    # resolve the same alternate follow-up result without a new chance branch.
     remaining = ",".join(
         f"{job_id}:{state.jobs[job_id].remaining_days}"
         for job_id in sorted(state.jobs)
@@ -488,6 +521,8 @@ def _build_final_assembly_choice(
     allow_acceleration: bool,
 ) -> DecisionChoice:
     """Apply a hidden, bounded final adjustment without allowing an ECHO tie."""
+    # Translate only the best/worst catalog tiers, and never remove more than
+    # one day per explicitly permitted accelerating card.
     scores_differ = best_catalog_score != worst_catalog_score
     if not scores_differ:
         delta = 0
@@ -516,6 +551,9 @@ def _build_choice(
     trigger_delta: int = 0,
     prevent_delays: bool = False,
 ) -> DecisionChoice:
+    """Resolve one catalog choice into concrete job-day effects."""
+    # Catalog scores are semantic inputs; concrete schedule effects are derived
+    # here and the stored score is recomputed from those actual effects.
     changes = _day_changes(catalog_choice.score_delta, targets)
     changes = _avoid_exact_cancellation(changes, trigger_delta, targets[0].id if targets else "")
     if prevent_delays:
@@ -560,6 +598,8 @@ def _preplanned_deltas(
             deltas.append(magnitude if net_change > 0 else -magnitude)
         return deltas
 
+    # Follow-ups preserve up to four strength ranks independently for schedule
+    # improvements and delays.
     deltas = [0] * len(scores)
     for direction in (-1, 1):
         indexes = [
@@ -570,6 +610,8 @@ def _preplanned_deltas(
         ]
         strengths = sorted({abs(scores[index]) for index in indexes})
         magnitudes = [1, 2, 3, 4]
+        # Reserve the trigger's exact inverse magnitude so no follow-up option
+        # can erase the earlier decision as though neither event happened.
         if (
             trigger_delta
             and direction == (-1 if trigger_delta > 0 else 1)
@@ -594,6 +636,8 @@ def _avoid_exact_cancellation(
     follow_up_delta = sum(changes.values())
     if not trigger_delta or not follow_up_delta or trigger_delta + follow_up_delta:
         return changes
+    # Move one additional day in the follow-up's existing direction, retaining
+    # its semantic meaning while preventing a zero net effect.
     direction = 1 if follow_up_delta > 0 else -1
     adjusted = dict(changes)
     adjusted[primary_job_id] = adjusted.get(primary_job_id, 0) + direction
@@ -606,6 +650,8 @@ def _day_changes(schedule_score: float, targets: list[Job]) -> dict[str, int]:
         return {}
     direction = -1 if schedule_score > 0 else 1
     strength = abs(schedule_score)
+    # Stronger catalog scores affect more targets; only the strongest single-job
+    # effects receive magnitude two.
     breadth = 1 if strength < 0.75 else 2 if strength < 1.5 else 3
     breadth = min(breadth, len(targets))
     magnitude = 2 if breadth == 1 and strength >= 1.75 else 1
@@ -616,7 +662,10 @@ def _choice_follow_ups(
     definition: DecisionDefinition,
     catalog_choice: CatalogChoice,
 ) -> tuple[DecisionFollowUp, ...]:
+    """Resolve follow-up templates against the card's primary job."""
     edges = (*catalog_choice.follow_up_edges, *definition.unavoidable_follow_up_edges)
+    # De-duplicate choice-specific and unavoidable edges by target definition.
+    # Later entries retain normal dictionary position while replacing metadata.
     unique: dict[str, DecisionFollowUp] = {}
     for edge in edges:
         unique[edge.target_definition_id] = DecisionFollowUp(
@@ -637,6 +686,8 @@ def _event_identity(
     source_definition_id: str = "",
 ) -> tuple[str, str]:
     """Return a semantic event identity independent of a DAG node ID."""
+    # Semantic IDs deliberately exclude node tokens so final charts can compare
+    # equivalent events encountered on different route nodes.
     if definition.is_follow_up:
         source = source_definition_id or "unknown-source"
         source_day_key = source_day if source_day is not None else day
@@ -656,11 +707,13 @@ def _event_identity(
 
 
 def _source_title(definition_id: str) -> str:
+    """Recover the title of the decision that scheduled a follow-up."""
     definition = DEFINITIONS_BY_ID.get(definition_id)
     return _simplify_language(definition.title) if definition else ""
 
 
 def _source_choice_label(definition_id: str, choice_id: str) -> str:
+    """Recover the label of the choice that scheduled a follow-up."""
     definition = DEFINITIONS_BY_ID.get(definition_id)
     if not definition or not choice_id.startswith("choice-"):
         return ""
@@ -678,6 +731,9 @@ def _simplify_language(value: str) -> str:
 
 
 def select_echo_choice_from_choices(choices: list[DecisionChoice]) -> DecisionChoice:
+    """Select the unique optimal choice with a stable identifier tie-break."""
+    # score_delta is the catalog's explicit schedule-quality ordering; choice ID
+    # makes equal scores reproducible across Python versions and processes.
     return max(choices, key=lambda choice: (choice.score_delta, choice.id))
 
 
@@ -694,8 +750,11 @@ def select_echo_choice_for_state(
     """
 
     def outcome(choice: DecisionChoice) -> tuple[int, float, str]:
+        """Rank one choice by projected completion and resulting score."""
         completion_day = projected_completion_day_after_choice(state, choice)
         overall_score = round(state.decision_score + choice.score_delta, 2)
+        # max() should prefer an earlier day, so completion is negated before
+        # score and stable-ID tie-breaks are considered.
         return (-completion_day, overall_score, choice.id)
 
     return max(choices, key=outcome)
@@ -706,6 +765,8 @@ def projected_completion_day_after_choice(
     choice: DecisionChoice,
 ) -> int:
     """Project the finish after one choice, before any later decision effects."""
+    # Work on completed jobs is absent rather than represented by zeros, which
+    # also prevents stale choice effects from influencing the projection.
     remaining = {
         job.id: max(0, job.remaining_days)
         for job in state.incomplete_jobs()
@@ -714,15 +775,18 @@ def projected_completion_day_after_choice(
         if job_id in remaining:
             remaining[job_id] = max(0, remaining[job_id] + delta)
     longest = max(remaining.values(), default=0)
+    # A remaining duration of one completes on the current workday.
     return state.current_day + max(0, longest - 1)
 
 
 def _stable_seed(seed: int, day: int, suffix: str) -> int:
+    """Derive deterministic card-generation entropy from identifying parts."""
     material = f"{seed}|{day}|{suffix}".encode("utf-8")
     return int(hashlib.sha256(material).hexdigest(), 16)
 
 
 def _format_job_list(job_names: list[str]) -> str:
+    """Join job names into natural-language display text."""
     if not job_names:
         return ""
     if len(job_names) == 1:

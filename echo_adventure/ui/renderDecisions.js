@@ -1,3 +1,5 @@
+/** Decision queue rendering, selection, submission, and diagnostics. */
+
 "use strict";
 
 import { uiState } from "./state.js";
@@ -15,6 +17,8 @@ import {
 const callbacks = { choose: async () => null };
 
 const CHOICE_ICONS = {
+  // Inline SVG avoids extra asset requests and keeps every catalog icon styled
+  // through the same currentColor rules.
   echo: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2.5"></circle><path d="M7.8 12a4.2 4.2 0 0 1 8.4 0M4.3 12a7.7 7.7 0 0 1 15.4 0M12 14.5V21"></path></svg>`,
   wait: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l3 2M9 3h6"></path></svg>`,
   merge: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h3c3 0 3 7 7 7h6M4 18h3c3 0 3-5 7-5M17 10l3 3-3 3"></path></svg>`,
@@ -46,15 +50,18 @@ const CHOICE_ICONS = {
   idea: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 15a7 7 0 1 1 8 0c-1 1-1 2-1 3H9c0-1 0-2-1-3M9 21h6"></path></svg>`,
 };
 
+/** Render one validated choice icon with a safe fallback. */
 function renderChoiceIcon(iconKey) {
   const icon = CHOICE_ICONS[iconKey] || CHOICE_ICONS.adjust;
   return `<span class="choice-icon" aria-hidden="true">${icon}</span>`;
 }
 
+/** Override decision submission for application wiring or tests. */
 export function configureDecisionActions(overrides) {
   Object.assign(callbacks, overrides || {});
 }
 
+/** Render the shared day clock inside the inline decision area. */
 export function renderInlineDecisions() {
   const body = $("inlineDecisionBody");
   if (!body || !uiState.state) return;
@@ -70,7 +77,10 @@ export function renderInlineDecisions() {
   updateDayClock(body);
 }
 
+/** Record one local choice selection before explicit submission. */
 export function selectPendingChoice(cardId, choiceId) {
+  // Selection is intentionally local until the player confirms, allowing them
+  // to compare options without mutating the server session.
   uiState.pendingChoice = { cardId, choiceId };
   renderDecisionQueue();
   const selectedButton = Array.from(document.querySelectorAll("#decisionQueueBody [data-choice-id]"))
@@ -78,12 +88,14 @@ export function selectPendingChoice(cardId, choiceId) {
   selectedButton?.focus();
 }
 
+/** Submit the currently selected card and choice. */
 export async function submitDecision() {
   const pending = uiState.pendingChoice;
   if (!pending) return;
   await callbacks.choose(pending.cardId, pending.choiceId);
 }
 
+/** Render due, pending, completed, and diagnostic card states. */
 export function renderDecisionQueue() {
   const section = $("decisionQueueSection");
   const body = $("decisionQueueBody");
@@ -93,12 +105,16 @@ export function renderDecisionQueue() {
   const blocked = decisionInteractionBlocked();
   const due = nextDecisionIsDue();
   updateQueueDayProgress(section, due);
+  // A card may exist in server state before its clock threshold; expose it only
+  // when due and all interaction guards are clear.
   const card = due && !blocked ? currentOpenDecisionCard() : null;
   const finalAssembly = uiState.state.finalAssembly;
   const pendingChoiceId = card && uiState.pendingChoice?.cardId === card.id
     ? uiState.pendingChoice.choiceId
     : "";
   const mode = card ? "active" : blocked ? "blocked" : "idle";
+  // Skip large innerHTML replacements when all inputs affecting queue markup
+  // are unchanged; this preserves focus between frequent clock ticks.
   const renderKey = JSON.stringify([
     uiState.runCycleId,
     uiState.state.seed,
@@ -118,6 +134,8 @@ export function renderDecisionQueue() {
   body.dataset.renderKey = renderKey;
 
   if (!card) {
+    // Final assembly has phase-specific idle copy; ordinary idle/blocked states
+    // intentionally share neutral language.
     let message = "No decision currently requires your attention.";
     if (finalAssembly?.status === "planning") {
       message = `Final Assembly Lock-In is ready for ${finalAssembly.jobName}; the next decision will appear as the workday reaches it.`;
@@ -138,6 +156,8 @@ export function renderDecisionQueue() {
 
       <div class="decision-choice-list">
         ${card.choices.map(choice => {
+          // Server IDs are trusted routing identifiers, while all visible text
+          // and diagnostic values are escaped before interpolation.
           const selected =
             uiState.pendingChoice?.cardId === card.id &&
             uiState.pendingChoice?.choiceId === choice.id;
@@ -171,9 +191,12 @@ export function renderDecisionQueue() {
   `;
 }
 
+/** Render developer-only preference and projection details. */
 function renderChoiceDiagnostics(card, choice) {
   const diagnostics = choice.developer;
   const preference = card.developer?.preference;
+  // Require both the local opt-in and server-provided data so standard mode
+  // cannot infer hidden preferences from empty diagnostic markup.
   if (!uiState.devShowDiagnostics || !diagnostics || !preference) return "";
 
   const publicScore = diagnostics.publicScore || {};
@@ -218,6 +241,7 @@ function renderChoiceDiagnostics(card, choice) {
   `;
 }
 
+/** Render possible follow-up details for one choice. */
 function renderChoiceFollowUpDiagnostics(card, followUp) {
   const source = card.developer?.generatedBy;
   const hasForwardFollowUp = Boolean(followUp?.scheduled);
@@ -230,6 +254,7 @@ function renderChoiceFollowUpDiagnostics(card, followUp) {
   `;
 }
 
+/** Render the provenance of a generated decision card. */
 function renderGeneratedByDetails(source) {
   const job = source.affectedJob || {};
   return `
@@ -242,7 +267,9 @@ function renderGeneratedByDetails(source) {
   `;
 }
 
+/** Render a preplanned follow-up and its reachable variants. */
 function renderForwardFollowUpDetails(followUp) {
+  // Runtime and preplanned diagnostics have different shapes and certainty.
   if (followUp.mode === "runtime") {
     return renderRuntimeFollowUpDetails(followUp);
   }
@@ -277,6 +304,7 @@ function renderForwardFollowUpDetails(followUp) {
   `;
 }
 
+/** Render a runtime follow-up and its scheduling state. */
 function renderRuntimeFollowUpDetails(followUp) {
   const targets = (followUp.targets || []).filter(target => target.scheduled).map(target => `
     <li>
@@ -303,6 +331,7 @@ function renderRuntimeFollowUpDetails(followUp) {
   `;
 }
 
+/** Render job-specific future schedule effects. */
 function renderFutureJobChanges(changes) {
   if (!changes?.length) return "<span>No job-day changes.</span>";
   return (changes || []).map(change => `
@@ -314,6 +343,7 @@ function renderFutureJobChanges(changes) {
   `).join("");
 }
 
+/** Describe whether a choice matches ECHO's preference. */
 function preferenceStatusLabel(preference, isPreferred) {
   if (isPreferred) return preference.label;
   if (preference.kind === "player-only-recommendation") {
@@ -325,22 +355,27 @@ function preferenceStatusLabel(preference, isPreferred) {
   return "Not ECHO preferred";
 }
 
+/** Return a human-readable completion projection basis. */
 function projectionLabel(basis) {
   if (basis === "solved-optimal-continuation") return "Solved optimal continuation";
   if (basis === "player-only-immediate-projection") return "Immediate player projection";
   return "Immediate local projection";
 }
 
+/** Format a numeric value with an explicit sign. */
 function formatSigned(value) {
+  // Invalid/missing diagnostics render as a neutral zero rather than NaN.
   const number = Number(value) || 0;
   return `${number >= 0 ? "+" : ""}${number.toFixed(2)}`;
 }
 
+/** Format a score to two fixed decimal places. */
 function formatScore(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number.toFixed(2) : "—";
 }
 
+/** Update the queue's day-progress bar and pause state. */
 function updateQueueDayProgress(section, paused) {
   const progress = section.querySelector("[data-queue-day-progress]");
   if (!progress) return;

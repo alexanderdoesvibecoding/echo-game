@@ -11,4 +11,4 @@
 
 - [x] Move the popups on the end of game screen that say lower is better, etc. to be where the user is hovering not in the bottom right weirdly - Matt
 
-- [x] Look again at how we do the dots on the graph at the end of the game
+- [x] Look again at how we do the dots on the graph at the end of the game - Matt

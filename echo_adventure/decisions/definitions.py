@@ -16,6 +16,7 @@ class FollowUpEdge:
 
 @dataclass(frozen=True)
 class CatalogChoice:
+    """Define one reusable response template in the decision catalog."""
     label: str
     follow_up_edges: tuple[FollowUpEdge, ...]
     score_delta: float
@@ -33,6 +34,7 @@ class FollowUpResult:
 
 @dataclass(frozen=True)
 class DecisionDefinition:
+    """Define one reusable daily question and its response templates."""
     id: str
     title: str
     description: str
@@ -44,6 +46,7 @@ class DecisionDefinition:
 
 
 def F(target: str, probability: float, delay_days: int = 3) -> FollowUpEdge:
+    """Create a follow-up template with concise catalog syntax."""
     return FollowUpEdge(target, probability, delay_days)
 
 
@@ -53,6 +56,7 @@ def C(
     score: float,
     follow: tuple[FollowUpEdge, ...] = (),
 ) -> CatalogChoice:
+    """Create and validate one catalog choice template."""
     return CatalogChoice(
         label=label,
         follow_up_edges=follow,
@@ -65,6 +69,7 @@ def R(
     description: str,
     *choices: CatalogChoice,
 ) -> FollowUpResult:
+    """Create a conditional alternate result for a catalog choice."""
     return FollowUpResult(title=title, description=description, choices=choices)
 
 
@@ -78,7 +83,10 @@ def D(
     card_follow: tuple[FollowUpEdge, ...] = (),
     alternate_results: tuple[FollowUpResult, ...] = (),
 ) -> DecisionDefinition:
+    """Create and validate one complete decision definition."""
     icon_keys = DECISION_CHOICE_ICON_KEYS.get(definition_id)
+    # Icons are part of the catalog contract rather than presentation defaults:
+    # every choice/result variant must retain a unique, supported visual cue.
     if icon_keys is None or len(icon_keys) != len(choices):
         raise ValueError(f"Decision {definition_id!r} must define one icon key per choice.")
     if len(set(icon_keys)) != len(icon_keys):
@@ -90,6 +98,9 @@ def D(
         raise ValueError(f"Decision {definition_id!r} cannot vary a base-question result.")
 
     def choices_with_icons(result_choices: tuple[CatalogChoice, ...]) -> tuple[CatalogChoice, ...]:
+        """Attach validated icons to raw choice tuples."""
+        # Alternate follow-up results reuse the base choice positions so the
+        # same icon remains semantically stable across generated variants.
         if len(result_choices) != len(icon_keys):
             raise ValueError(
                 f"Decision {definition_id!r} must keep the same choice count in every result."
@@ -115,6 +126,7 @@ def D(
     )
 
 
+# Presentation allowlist enforced while declarative catalog entries are built.
 SUPPORTED_CHOICE_ICON_KEYS = frozenset(
     {
         "accelerate", "adjust", "branch", "calendar", "calibrate", "discard", "document",
@@ -125,6 +137,8 @@ SUPPORTED_CHOICE_ICON_KEYS = frozenset(
 )
 
 
+# Positional icon tuples keep each decision's choices visually distinct across
+# base and alternate follow-up results.
 DECISION_CHOICE_ICON_KEYS = {
     "weather": ("route", "wait"),
     "workstation-breakdown": ("route", "wait"),
@@ -204,6 +218,8 @@ DECISION_CHOICE_ICON_KEYS = {
 }
 
 
+# Ordinary daily questions. Their explicit schedule scores are converted into
+# concrete job-day effects by cards.py.
 BASE_DEFINITIONS = (
     D(
         "weather", "Exposed work areas are closed by weather", "Severe weather has closed exposed work areas, pausing affected jobs.",
@@ -475,6 +491,8 @@ BASE_DEFINITIONS = (
 )
 
 
+# Delayed consequences scheduled by base-choice edges. Some include deterministic
+# alternate results selected from the complete runtime state.
 FOLLOW_UP_DEFINITIONS = (
     D(
         "narrow-drift-found", "The measurement issue is limited", "Recalibration shows the measurement concern was limited to one reference.",
@@ -777,6 +795,7 @@ FOLLOW_UP_DEFINITIONS = (
 )
 
 
+# Canonical lookup used by graph construction, runtime queues, and diagnostics.
 DEFINITIONS_BY_ID = {
     definition.id: definition
     for definition in (*BASE_DEFINITIONS, *FOLLOW_UP_DEFINITIONS)

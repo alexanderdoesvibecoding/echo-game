@@ -22,6 +22,8 @@ def inspect_preplanned_follow_up(
     date_label_for_day: Callable[[int], str],
 ) -> dict[str, Any]:
     """Inspect the realized follow-up subgraph for one immutable-web edge."""
+    # Follow the actual chosen edge rather than estimating from catalog
+    # probability; the immutable web has already resolved this route's roll.
     node = web.node(node_id)
     transition = node.transitions[choice.id]
     if transition.next_node_id is None:
@@ -40,6 +42,8 @@ def inspect_preplanned_follow_up(
     target_definition = DEFINITIONS_BY_ID.get(target_definition_id)
     target_job_id = _pending_job_id(successor.state, jobs)
     target_job = jobs.get(target_job_id)
+    # Traverse all continuations until the source follow-up is shown or canceled.
+    # State identity and visited tracking make this safe across converging DAG paths.
     visited: set[str] = set()
     stack = [transition.next_node_id]
     canceled_on_some_continuations = False
@@ -60,6 +64,8 @@ def inspect_preplanned_follow_up(
             continue
 
         if _card_has_source(current.card, source):
+            # The same semantic variant may be reachable on several days; merge
+            # those occurrences so diagnostics do not repeat identical cards.
             signature = _variant_signature(current.card)
             stored = variants.setdefault(
                 signature,
@@ -84,6 +90,8 @@ def inspect_preplanned_follow_up(
 
     variant_payloads = []
     possible_days: set[int] = set()
+    # Internal sets are convenient while traversing but must become sorted JSON
+    # arrays at the public diagnostic boundary.
     for variant in variants.values():
         days = sorted(variant.pop("_possible_days"))
         possible_days.update(days)
@@ -144,6 +152,8 @@ def inspect_runtime_follow_up(
         }
 
     job = state.jobs.get(card.primary_job_id)
+    # Mirror the runtime scheduler's eligibility and de-duplication rules without
+    # appending to state.pending_follow_ups.
     pending_ids = {item.definition_id for item in state.pending_follow_ups}
     targets = []
     for follow_up in choice.follow_ups:
@@ -185,6 +195,8 @@ def inspect_runtime_follow_up(
         }
         targets.append(target)
         if occurs:
+            # Later edges in the same choice must observe that this definition
+            # would already have been scheduled by an earlier edge.
             pending_ids.add(follow_up.definition_id)
 
     return {
@@ -195,6 +207,7 @@ def inspect_runtime_follow_up(
 
 
 def _unscheduled_follow_up(mode: str) -> dict[str, Any]:
+    """Describe a follow-up definition that has not yet been scheduled."""
     return {
         "mode": mode,
         "scheduled": False,
@@ -208,6 +221,7 @@ def _state_has_source(
     *,
     target_definition_id: str | None = None,
 ) -> bool:
+    """Report whether runtime state still contains a follow-up source."""
     source_day, source_definition_id, source_choice_id = source
     return bool(
         state.pending_definition_id
@@ -225,6 +239,7 @@ def _card_has_source(
     card: DecisionCard,
     source: tuple[int, str, str],
 ) -> bool:
+    """Report whether a card was generated from a specific follow-up source."""
     source_day, source_definition_id, source_choice_id = source
     return bool(
         card.event_scope == "follow-up"
@@ -238,6 +253,7 @@ def _pending_job_id(
     state: DecisionWebState,
     jobs: Mapping[str, Job],
 ) -> str:
+    """Find the runtime job associated with a pending follow-up."""
     job_ids = tuple(sorted(jobs))
     if 0 <= state.pending_job_index < len(job_ids):
         return job_ids[state.pending_job_index]
@@ -245,6 +261,9 @@ def _pending_job_id(
 
 
 def _variant_signature(card: DecisionCard) -> tuple[Any, ...]:
+    """Build a stable identity tuple for one preplanned card variant."""
+    # Exclude node IDs and day numbers: neither changes what the player would
+    # actually see or how the variant affects the schedule.
     return (
         card.definition_id,
         card.title,
@@ -265,7 +284,10 @@ def _preplanned_variant_payload(
     node: DecisionWebNode,
     jobs: Mapping[str, Job],
 ) -> dict[str, Any]:
+    """Serialize one reachable preplanned variant for developer diagnostics."""
     card = node.card
+    # The string signature is exposed for UI/debug identity; the richer tuple
+    # signature above is used internally for exact grouping.
     signature = "|".join(
         (
             card.definition_id,
@@ -313,8 +335,11 @@ def _future_job_day_change_payload(
     job_id: str,
     delta: int,
 ) -> dict[str, Any]:
+    """Describe a choice's future change to one job."""
     job_ids = tuple(sorted(jobs))
     job_index = job_ids.index(job_id)
+    # Use the graph mask instead of template Job status, because templates always
+    # represent the beginning of the run.
     applies = not bool(state.completed_mask & (1 << job_index))
     remaining_before = max(0, state.remaining_days[job_index])
     remaining_after = (
@@ -336,6 +361,7 @@ def _future_job_day_change_payload(
 def _catalog_possibilities(
     definition: DecisionDefinition,
 ) -> list[dict[str, Any]]:
+    """List catalog outcomes that could be generated from a choice."""
     results = [
         ("catalog", definition.title, definition.description, definition.choices),
         *(
@@ -362,6 +388,7 @@ def _catalog_possibilities(
 
 
 def _job_label(job_id: str) -> str:
+    """Return a human-readable job name with a safe identifier fallback."""
     if not job_id:
         return ""
     suffix = job_id.rsplit("-", 1)[-1]

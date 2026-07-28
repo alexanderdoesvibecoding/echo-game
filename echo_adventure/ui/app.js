@@ -1,3 +1,5 @@
+/** Browser entry point and top-level UI orchestration for a game run. */
+
 "use strict";
 
 import { api } from "./api.js";
@@ -43,6 +45,7 @@ import {
   skipTutorial,
 } from "./tutorial.js";
 
+/** Show or hide a message element based on the supplied text. */
 function showMessageBox(box, message) {
   if (!box) return;
   if (!message) {
@@ -54,16 +57,21 @@ function showMessageBox(box, message) {
   box.classList.remove("hidden");
 }
 
+/** Display a top-level gameplay error. */
 function showError(message) {
   showMessageBox($("error"), message);
 }
 
+/** Display an error inside the new-run modal. */
 function showNewRunError(message) {
   showMessageBox($("newRunError"), message);
 }
 
+/** Fetch the initial session state and synchronize the browser UI. */
 async function loadState() {
   try {
+    // Initial state is fetched before starting the tutorial so eligibility uses
+    // real session data rather than an empty shell.
     uiState.state = await api("/api/state");
     showError("");
     render();
@@ -76,9 +84,12 @@ async function loadState() {
   }
 }
 
+/** Request a seeded or random replacement run and reset local UI state. */
 async function startNewRun() {
   if (uiState.newRunLoading) return;
 
+  // Seed selection exists only in developer mode; standard runs always ask the
+  // server for fresh entropy.
   const developerMode = Boolean(uiState.state?.developer);
   const seededRun = developerMode && uiState.devSeededRun;
   const seedValue = $("newRunSeedInput")?.value?.trim() || "";
@@ -99,6 +110,8 @@ async function startNewRun() {
       method: "POST",
       body: JSON.stringify(body)
     });
+    // Incrementing the run identity forces timers and animations to treat day 1
+    // as new even if the replacement run happens to reuse a seed.
     uiState.runCycleId += 1;
     resetDayCycle();
     uiState.pendingChoice = null;
@@ -127,7 +140,10 @@ async function startNewRun() {
   }
 }
 
+/** Submit one decision and merge the returned session payload. */
 async function choose(cardId, choiceId) {
+  // Disable duplicate submissions until the authoritative server response
+  // replaces the local state.
   if (uiState.choiceRequestInFlight) return null;
   uiState.choiceRequestInFlight = true;
   renderDecisionQueue();
@@ -149,6 +165,7 @@ async function choose(cardId, choiceId) {
   return result;
 }
 
+/** Request the next day while retaining the outgoing summary state. */
 async function prepareAdvanceDay() {
   if (uiState.advanceRequestInFlight) return;
   if (!readyToAdvance()) {
@@ -160,6 +177,8 @@ async function prepareAdvanceDay() {
   try {
     const nextState = await api("/api/advance", { method: "POST", body: "{}" });
     showError("");
+    // Normal play retains the outgoing payload beneath a summary modal. Terminal
+    // and instant modes promote the next state immediately.
     if (nextState.finalReveal || instantProgressionEnabled()) {
       uiState.state = nextState;
       uiState.pendingAdvanceState = null;
@@ -178,6 +197,7 @@ async function prepareAdvanceDay() {
   }
 }
 
+/** Run a developer automation request and reset transient UI state. */
 async function runDeveloperSkip({ strategy, targetDay }) {
   try {
     const nextState = await api("/api/dev/skip", {
@@ -185,6 +205,8 @@ async function runDeveloperSkip({ strategy, targetDay }) {
       body: JSON.stringify({ strategy, targetDay }),
     });
     uiState.state = nextState;
+    // Automation may cross many UI phases, so discard every transient browser
+    // cursor before rendering the returned authoritative snapshot.
     uiState.pendingChoice = null;
     uiState.pendingAdvanceState = null;
     uiState.modalVisible = false;
@@ -200,6 +222,7 @@ async function runDeveloperSkip({ strategy, targetDay }) {
   }
 }
 
+/** Promote a prepared next-day payload after summary animation completes. */
 function commitAdvanceDay() {
   if (!uiState.pendingAdvanceState) {
     return;
@@ -210,8 +233,11 @@ function commitAdvanceDay() {
   render();
 }
 
+/** Render every UI region from the current shared state. */
 function render() {
   if (!uiState.state) return;
+  // Synchronize timing first because later renderers derive due/blocked state
+  // from the day-cycle cursor.
   syncDayCycleForState();
   $("dayBadge").textContent = uiState.state.currentDate || "Schedule";
   renderMainSectionVisibility();
@@ -228,17 +254,21 @@ function render() {
   renderDevTools();
 }
 
+/** Toggle primary game sections for active and terminal phases. */
 function renderMainSectionVisibility() {
   const gameOver = Boolean(uiState.state.gameOver);
   $("dailyDecisionSection").classList.toggle("hidden", gameOver);
   $("game-area").classList.toggle("hidden", gameOver);
 }
 
+/** Resynchronize the day clock after a developer timing change. */
 function handleInstantProgressionChanged(enabled) {
   if (!enabled) resetDayCycle();
   render();
 }
 
+// Inject cross-module callbacks once to avoid import cycles between renderers
+// and the top-level mutation functions.
 configureDayClock({
   renderInlineDecisions,
   prepareAdvanceDay,
@@ -261,6 +291,7 @@ $("settingsMenuBtn").addEventListener("click", toggleSettingsMenu);
 $("openNewRunModalBtn").addEventListener("click", openNewRunModal);
 $("themeMenuBtn").addEventListener("click", toggleDarkMode);
 
+// A single document listener handles click-away behavior for all overlays.
 document.addEventListener("click", (event) => {
   const target = event.target instanceof Element ? event.target : null;
   const settingsWrap = document.querySelector(".settings-wrap");
@@ -278,6 +309,7 @@ document.addEventListener("click", (event) => {
   }
 });
 
+// Inline HTML handlers call this deliberately small public action surface.
 Object.assign(window, {
   advanceTutorial,
   closeNewRunModal,
@@ -291,6 +323,8 @@ Object.assign(window, {
   submitDecision,
 });
 
+// Paint local preferences and the welcome shell immediately; loadState replaces
+// only data-dependent regions when the initial request completes.
 initDarkMode();
 uiState.welcomeModalVisible = true;
 renderWelcomeModal();

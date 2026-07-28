@@ -1,3 +1,5 @@
+"""Decision catalog, runtime effect, and solved decision-web tests."""
+
 from __future__ import annotations
 
 import copy
@@ -57,6 +59,7 @@ from .helpers import make_card, make_choice, scenario_from_durations, small_conf
 
 
 def test_catalog_is_large_unique_and_has_valid_choice_icons() -> None:
+    """Verify that catalog is large unique and has valid choice icons."""
     assert len(DEFINITIONS_BY_ID) >= 70
     assert len(DEFINITIONS_BY_ID) == len(BASE_DEFINITIONS) + len(FOLLOW_UP_DEFINITIONS)
     assert all(not definition.is_follow_up for definition in BASE_DEFINITIONS)
@@ -94,6 +97,7 @@ def test_catalog_is_large_unique_and_has_valid_choice_icons() -> None:
 def test_definition_helpers_build_followups_alternate_results_and_icons(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify that definition helpers build followups alternate results and icons."""
     monkeypatch.setitem(
         DECISION_CHOICE_ICON_KEYS,
         "unit-definition",
@@ -133,6 +137,7 @@ def test_definition_helpers_build_followups_alternate_results_and_icons(
 def test_definition_builder_rejects_invalid_icon_and_result_contracts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify that definition builder rejects invalid icon and result contracts."""
     first = C("First", score=1)
     second = C("Second", score=-1)
 
@@ -184,16 +189,19 @@ def test_definition_builder_rejects_invalid_icon_and_result_contracts(
     ],
 )
 def test_schedule_scores_become_bounded_explicit_day_changes(score: float, expected: dict[str, int]) -> None:
+    """Verify that schedule scores become bounded explicit day changes."""
     jobs = list(scenario_from_durations(3, 3, 3).jobs.values())
     assert _day_changes(score, jobs) == expected
 
 
 def test_inverse_follow_up_never_exactly_cancels_the_trigger() -> None:
+    """Verify that inverse follow up never exactly cancels the trigger."""
     assert _avoid_exact_cancellation({"JOB-01": -2}, 2, "JOB-01") == {"JOB-01": -3}
     assert _avoid_exact_cancellation({"JOB-01": -1}, 2, "JOB-01") == {"JOB-01": -1}
 
 
 def test_echo_choice_has_a_stable_tiebreak() -> None:
+    """Verify that echo choice has a stable tiebreak."""
     choices = [
         make_choice("choice-1", score=2),
         make_choice("choice-2", score=2),
@@ -296,6 +304,7 @@ def test_echo_choice_has_a_stable_tiebreak() -> None:
 
 
 def test_apply_choice_changes_only_unfinished_known_jobs_and_records_score() -> None:
+    """Verify that apply choice changes only unfinished known jobs and records score."""
     state = initialize_state(scenario_from_durations(2, 3))
     state.jobs["JOB-02"].remaining_days = 0
     state.jobs["JOB-02"].status = state.jobs["JOB-02"].status.COMPLETE
@@ -323,6 +332,7 @@ def test_apply_choice_changes_only_unfinished_known_jobs_and_records_score() -> 
 
 
 def test_apply_choice_schedules_each_valid_follow_up_at_most_once() -> None:
+    """Verify that apply choice schedules each valid follow up at most once."""
     state = initialize_state(scenario_from_durations(3))
     follow_up_id = FOLLOW_UP_DEFINITIONS[0].id
     follow_up = DecisionFollowUp(follow_up_id, probability=1.0, delay_days=2)
@@ -358,6 +368,7 @@ def test_apply_choice_schedules_each_valid_follow_up_at_most_once() -> None:
 
 
 def test_apply_choice_clamps_follow_up_probabilities_to_never_or_always() -> None:
+    """Verify that apply choice clamps follow up probabilities to never or always."""
     state = initialize_state(scenario_from_durations(3))
     never = DecisionFollowUp("never-follow-up", probability=-10.0, delay_days=1)
     guaranteed = DecisionFollowUp("guaranteed-follow-up", probability=10.0, delay_days=4)
@@ -376,6 +387,7 @@ def test_apply_choice_clamps_follow_up_probabilities_to_never_or_always() -> Non
 
 
 def test_player_only_choice_records_no_echo_comparison_or_follow_up_when_disabled() -> None:
+    """Verify that player only choice records no echo comparison or follow up when disabled."""
     state = initialize_state(scenario_from_durations(3))
     follow_up = DecisionFollowUp("later", probability=1.0, delay_days=1)
     choice = make_choice(
@@ -403,6 +415,7 @@ def test_player_only_choice_records_no_echo_comparison_or_follow_up_when_disable
 
 
 def test_daily_card_generation_is_deterministic_varied_and_free_of_subjob_copy() -> None:
+    """Verify that daily card generation is deterministic varied and free of subjob copy."""
     config = small_config(min_decisions_per_day=3, max_decisions_per_day=3)
     scenario = generate_scenario(config)
     first_state = initialize_state(scenario)
@@ -505,6 +518,7 @@ def test_daily_card_generation_is_deterministic_varied_and_free_of_subjob_copy()
 
 
 def test_due_follow_up_is_prioritized_and_stale_follow_ups_are_discarded() -> None:
+    """Verify that due follow up is prioritized and stale follow ups are discarded."""
     config = small_config()
     state = initialize_state(generate_scenario(config))
     due_id = FOLLOW_UP_DEFINITIONS[0].id
@@ -537,12 +551,14 @@ def test_due_follow_up_is_prioritized_and_stale_follow_ups_are_discarded() -> No
 
 @pytest.fixture(scope="module")
 def solved_web_bundle():
+    """Support the test boundary for solved web bundle."""
     config = small_config(job_count=2, min_job_duration_days=2, max_job_duration_days=3, max_campaign_day=6, seed=818)
     scenario = generate_scenario(config)
     return config, scenario, generate_decision_web(scenario, config)
 
 
 def test_decision_web_is_deterministic_and_every_node_is_fully_solved(solved_web_bundle) -> None:
+    """Verify that decision web is deterministic and every node is fully solved."""
     config, scenario, web = solved_web_bundle
     duplicate = generate_decision_web(scenario, config)
     builder = _DecisionWebBuilder(scenario, config, generation_attempt=0)
@@ -819,6 +835,7 @@ def test_decision_web_is_deterministic_and_every_node_is_fully_solved(solved_web
 
 
 def test_three_day_starter_is_excluded_from_decisions_through_day_three() -> None:
+    """Verify that three day starter is excluded from decisions through day three."""
     config = small_config(
         job_count=4,
         min_job_duration_days=4,
@@ -849,6 +866,7 @@ def test_three_day_starter_is_excluded_from_decisions_through_day_three() -> Non
 
 
 def test_decision_web_accessors_return_current_graph_members(solved_web_bundle) -> None:
+    """Verify that decision web accessors return current graph members."""
     _, _, web = solved_web_bundle
     root = web.node(web.root_node_id)
     choice_id = root.card.choices[0].id
@@ -866,6 +884,7 @@ def test_decision_web_accessors_return_current_graph_members(solved_web_bundle) 
 
 
 def test_decision_web_detects_runtime_drift(solved_web_bundle) -> None:
+    """Verify that decision web detects runtime drift."""
     _, scenario, web = solved_web_bundle
     state = initialize_state(scenario)
     web.assert_runtime_matches(state, web.root_node_id)
@@ -876,6 +895,7 @@ def test_decision_web_detects_runtime_drift(solved_web_bundle) -> None:
 
 
 def test_optimal_route_never_enters_overtime(solved_web_bundle) -> None:
+    """Verify that optimal route never enters overtime."""
     _, _, web = solved_web_bundle
     node_id = web.root_node_id
 
@@ -906,6 +926,7 @@ def test_every_route_through_a_small_web_respects_echo_objective_order(seed: int
         unfinished_job_days: int,
         path: tuple[str, ...],
     ) -> None:
+        """Support the test boundary for visit."""
         node = web.node(node_id)
         choices = {choice.id: choice for choice in node.card.choices}
         for choice_id, transition in node.transitions.items():

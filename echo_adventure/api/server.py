@@ -17,6 +17,8 @@ from .session import GameSession, SessionStore
 from .view import INDEX_HTML, UI_DIR
 
 STATIC_ASSETS = {
+    # An explicit allowlist avoids turning the local HTTP server into a general
+    # filesystem reader and assigns a known content type to every public asset.
     "/ui/api.js": ("application/javascript; charset=utf-8", UI_DIR / "api.js"),
     "/ui/app.js": ("application/javascript; charset=utf-8", UI_DIR / "app.js"),
     "/ui/assets/logos/echo-logo-full.png": (
@@ -51,8 +53,10 @@ def _initialization_status() -> Iterator[None]:
     animation_thread: threading.Thread | None = None
     completed = False
 
+    # TTYs can safely redraw one line; captured logs receive one stable message.
     if interactive:
         def animate() -> None:
+            """Animate terminal startup status until generation completes."""
             dot_count = 1
             while not stop_animation.is_set():
                 dots = "." * dot_count
@@ -75,6 +79,7 @@ def _initialization_status() -> Iterator[None]:
             animation_thread.join()
             stream.write(f"\r{'':<15}\r")
             stream.flush()
+        # Do not print a false success marker if generation raised.
         if completed:
             print("✓ Initialized", file=stream, flush=True)
 
@@ -88,6 +93,7 @@ class GameRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         """Serve the shell HTML or the current JSON state."""
+        # Route on the parsed path only; query parameters never select files.
         parsed = urlparse(self.path)
         if parsed.path == "/":
             self._send_html(INDEX_HTML)
@@ -115,6 +121,8 @@ class GameRequestHandler(BaseHTTPRequestHandler):
             elif parsed.path == "/api/advance":
                 self._send_json(self.session_store.advance_payload())
             elif parsed.path == "/api/dev/skip":
+                # Protect the backend route even when standard-mode UI controls
+                # are absent. A 404 avoids advertising dev-only capabilities.
                 if not self.session_store.dev_mode:
                     self._send_json(
                         {"error": "Not found"},
@@ -130,6 +138,8 @@ class GameRequestHandler(BaseHTTPRequestHandler):
                 )
             else:
                 self._send_json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
+        # User/state validation errors are safe to surface. Unexpected failures
+        # receive a generic local-server prefix and a 500 status.
         except ValueError as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
         except Exception as exc:  # pragma: no cover - defensive local server path
@@ -138,6 +148,7 @@ class GameRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:
         # Suppress noisy per-request logs; the UI is local and stateful, and
         # request spam makes terminal output harder to use while developing.
+        """Suppress the base handler's default per-request stderr logging."""
         return
 
     def _read_json(self) -> dict[str, Any]:
@@ -145,6 +156,8 @@ class GameRequestHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("content-length", "0"))
         if length == 0:
             return {}
+        # Read exactly Content-Length bytes so a keep-alive connection cannot
+        # consume data belonging to a later request.
         raw = self.rfile.read(length)
         return json.loads(raw.decode("utf-8"))
 
@@ -192,6 +205,8 @@ def run_ui_server(
     try:
         with _initialization_status():
             handler.session_store = SessionStore(seed=seed, dev_mode=dev_mode)
+        # Threaded handling keeps rendering/state reads responsive while session
+        # mutations remain serialized by SessionStore.
         server = ThreadingHTTPServer((host, port), handler)
         url = f"http://{host}:{port}"
         print(f"ECHO Adventure UI running at {url}")
@@ -201,6 +216,8 @@ def run_ui_server(
         interrupted = True
         print("\nShutting down...")
     finally:
+        # server_close is required even after KeyboardInterrupt or startup-time
+        # serve_forever failures so verification never leaves the port bound.
         if server is not None:
             server.server_close()
     if interrupted:
@@ -227,6 +244,7 @@ def _parse_optional_seed(value: Any) -> int | None:
     """Return an integer seed from a JSON value, or None for a random run."""
     if value is None:
         return None
+    # bool is an int subclass in Python, so reject it before accepting integers.
     if isinstance(value, bool):
         raise ValueError("Seed must be an integer.")
     if isinstance(value, int):
@@ -241,6 +259,8 @@ def _parse_optional_seed(value: Any) -> int | None:
             raise ValueError("Seed must be an integer.") from exc
     if isinstance(value, float):
         raise ValueError("Seed must be an integer.")
+    # Integer-like objects are supported for programmatic callers, while floats
+    # remain explicitly invalid to avoid silent truncation.
     try:
         return int(value)
     except (TypeError, ValueError, OverflowError) as exc:

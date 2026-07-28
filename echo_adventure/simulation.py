@@ -12,6 +12,7 @@ from .models import MetricSnapshot, Scenario, SimulationState
 
 @dataclass
 class DayResult:
+    """Summarize state and completions produced by one simulated day."""
     day: int
     completed_job_ids: list[str]
     notes: list[str]
@@ -20,6 +21,9 @@ class DayResult:
 
 
 def initialize_state(scenario: Scenario) -> SimulationState:
+    """Deep-copy a scenario into fresh mutable simulation state."""
+    # Player and ECHO states originate from the same scenario, so sharing Job
+    # instances here would allow one actor's progress to mutate the other's.
     state = SimulationState(
         seed=scenario.seed,
         jobs=copy.deepcopy(scenario.jobs),
@@ -29,7 +33,10 @@ def initialize_state(scenario: Scenario) -> SimulationState:
 
 
 def complete_job(state: SimulationState, job_id: str) -> None:
+    """Mark a job complete exactly once and update aggregate state."""
     job = state.jobs[job_id]
+    # Idempotence prevents duplicate notes and completion-day rewrites when
+    # callers encounter an already-zero job through different paths.
     if job.is_complete:
         return
     job.remaining_days = 0
@@ -45,9 +52,12 @@ def advance_day(state: SimulationState) -> DayResult:
     day = state.current_day
     state.daily_notes.clear()
     start_snapshot = calculate_snapshot(state)
+    # This area-under-the-curve metric measures schedule inefficiency: every
+    # unfinished day on every job contributes once per elapsed workday.
     state.cumulative_unfinished_job_days += start_snapshot.total_remaining_days
     completed_before = set(state.completed_jobs)
 
+    # Snapshot the list because complete_job mutates the state's completion set.
     for job in list(state.incomplete_jobs()):
         job.remaining_days = max(0, job.remaining_days - 1)
         if job.remaining_days == 0:
@@ -55,6 +65,8 @@ def advance_day(state: SimulationState) -> DayResult:
 
     update_state_metrics(state)
     completed_today = sorted(state.completed_jobs - completed_before)
+    # Keep the terminal day on the day where completion actually occurred; all
+    # non-terminal days advance to the next decision date.
     if not state.final_item_completed:
         state.current_day += 1
     end_snapshot = calculate_snapshot(state)

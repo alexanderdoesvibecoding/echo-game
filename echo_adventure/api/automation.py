@@ -36,6 +36,7 @@ class ChoiceOutcome:
 
 
 def validate_automation_strategy(strategy: object) -> str:
+    """Validate and normalize a supported developer automation strategy."""
     if not isinstance(strategy, str) or strategy not in AUTOMATION_STRATEGIES:
         supported = ", ".join(sorted(AUTOMATION_STRATEGIES))
         raise ValueError(f"Unknown automated strategy. Choose one of: {supported}.")
@@ -53,6 +54,8 @@ def select_preplanned_choice(
     """Select one immutable-web choice without changing session state."""
     node = web.node(node_id)
     choices = node.card.choices
+    # Keep strategy dispatch explicit: the order-based strategies intentionally
+    # reflect the immutable catalog order exposed in developer mode.
     if strategy == "echo":
         return _choice_by_id(choices, node.optimal_choice_id)
     if strategy == "first":
@@ -67,6 +70,8 @@ def select_preplanned_choice(
             node_id,
         )
     if strategy == "worst":
+        # min() is correct because the key negates completion day, making later
+        # finishes sort before earlier ones and lower scores break ties.
         return min(
             choices,
             key=lambda choice: _preplanned_worst_key(
@@ -88,6 +93,8 @@ def preplanned_choice_outcome(
 ) -> ChoiceOutcome:
     """Return the solved outcome after a choice and optimal continuation."""
     transition = web.transition(node_id, choice.id)
+    # Solved successors carry the exact cost of their own optimal continuation;
+    # terminal and overtime edges have no successor value to add.
     if transition.completion_day is not None:
         completion_day = transition.completion_day
         future_score = 0.0
@@ -110,6 +117,8 @@ def runtime_choice_outcome(
     choice: DecisionChoice,
 ) -> ChoiceOutcome:
     """Return the immediate runtime projection used for local comparison."""
+    # Overtime is generated on demand, so this is deliberately a local
+    # projection rather than an exact solved-web claim.
     return ChoiceOutcome(
         completion_day=projected_completion_day_after_choice(state, choice),
         resulting_score=round(state.decision_score + choice.score_delta, 2),
@@ -145,6 +154,8 @@ def select_runtime_choice(
         candidates = choices
         incomplete = state.incomplete_jobs()
         if len(incomplete) == 1:
+            # Never let an adversarial developer strategy create an endless
+            # loop by repeatedly adding time to the final unfinished job.
             last_job = incomplete[0]
             progress_safe = [
                 choice
@@ -177,8 +188,12 @@ def reachable_preplanned_days(
     seen_nodes: set[str] = set()
     transition = pending_transition
 
+    # This traversal is read-only and mirrors real automation selection, which
+    # lets the UI offer only targets the requested strategy can actually reach.
     while True:
         if transition is None:
+            # The generated web is expected to be acyclic; retaining this guard
+            # converts malformed graph data into a useful diagnostic.
             if node_id in seen_nodes:
                 raise RuntimeError(
                     f"Automated reachability encountered a cycle at {node_id}."
@@ -213,6 +228,7 @@ def _preplanned_worst_key(
     *,
     max_campaign_day: int,
 ) -> tuple[int, float, str]:
+    """Rank a solved-web choice from worst to best for the player."""
     outcome = preplanned_choice_outcome(
         web,
         node_id,
@@ -226,6 +242,7 @@ def _runtime_worst_key(
     state: SimulationState,
     choice: DecisionChoice,
 ) -> tuple[int, float, str]:
+    """Rank a runtime choice from worst to best for the player."""
     outcome = runtime_choice_outcome(state, choice)
     return (-outcome.completion_day, outcome.resulting_score, choice.id)
 
@@ -235,6 +252,9 @@ def _deterministic_choice(
     context: AutomationContext,
     *location: str,
 ) -> DecisionChoice:
+    """Choose reproducibly from a sequence without mutating shared random state."""
+    # Include the automation start token so repeated skips within one run are
+    # stable for the same starting state without sharing global RNG state.
     material = "|".join(
         (
             str(context.seed),
@@ -250,6 +270,7 @@ def _choice_by_id(
     choices: list[DecisionChoice],
     choice_id: str,
 ) -> DecisionChoice:
+    """Return the choice with the requested identifier or fail loudly."""
     choice = next((item for item in choices if item.id == choice_id), None)
     if choice is None:
         raise RuntimeError(f"Automated choice {choice_id!r} is not present on its card.")

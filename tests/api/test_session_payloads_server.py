@@ -1,3 +1,5 @@
+"""Session orchestration, payload contract, and HTTP server integration tests."""
+
 from __future__ import annotations
 
 from dataclasses import replace
@@ -21,13 +23,16 @@ from .helpers import make_card, make_choice, scenario_from_durations, small_conf
 
 
 def install_fast_session_config(monkeypatch: pytest.MonkeyPatch, **overrides: object) -> None:
+    """Support the test boundary for install fast session config."""
     def factory(seed: int | None = None):
+        """Support the test boundary for factory."""
         return small_config(seed=seed, **overrides)
 
     monkeypatch.setattr(session_module, "GameConfig", factory)
 
 
 def play_to_completion(session: session_module.GameSession, first_choice_id: str | None = None) -> dict:
+    """Support the test boundary for play to completion."""
     first = True
     guard = 0
     while not session.player_state.final_item_completed:
@@ -47,6 +52,7 @@ def play_to_completion(session: session_module.GameSession, first_choice_id: str
 
 
 def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that initial session payload matches the modern browser contract."""
     install_fast_session_config(monkeypatch)
     session = session_module.GameSession(seed=404)
 
@@ -224,6 +230,7 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
     generation_calls: list[tuple[int, float | None]] = []
 
     def controlled_generation(scenario, config, *, max_generation_seconds=None):
+        """Support the test boundary for controlled generation."""
         generation_calls.append((scenario.seed, max_generation_seconds))
         if scenario.seed == 111:
             raise session_module.DecisionWebGenerationTimeout("timed out")
@@ -264,6 +271,7 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
 
 
 def test_session_rejects_invalid_or_out_of_sequence_actions(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that session rejects invalid or out of sequence actions."""
     install_fast_session_config(monkeypatch)
     session = session_module.GameSession(seed=405)
     card = session.current_cards[0]
@@ -320,6 +328,7 @@ def test_session_rejects_invalid_or_out_of_sequence_actions(monkeypatch: pytest.
 
 
 def test_choice_and_advance_update_player_and_echo_once_per_slot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that choice and advance update player and echo once per slot."""
     install_fast_session_config(monkeypatch)
     session = session_module.GameSession(seed=406)
     card = session.current_cards[0]
@@ -367,6 +376,7 @@ def test_choice_and_advance_update_player_and_echo_once_per_slot(monkeypatch: py
 def test_multi_question_days_traverse_web_and_end_on_an_early_final_choice(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify that multi question days traverse web and end on an early final choice."""
     install_fast_session_config(
         monkeypatch,
         min_decisions_per_day=2,
@@ -422,6 +432,7 @@ def test_multi_question_days_traverse_web_and_end_on_an_early_final_choice(
 
 
 def test_exact_optimal_path_ties_echo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that exact optimal path ties echo."""
     install_fast_session_config(monkeypatch)
     session = session_module.GameSession(seed=410)
 
@@ -455,6 +466,7 @@ def test_every_first_decision_divergence_loses_to_echo(
     monkeypatch: pytest.MonkeyPatch,
     seed: int,
 ) -> None:
+    """Verify that every first decision divergence loses to echo."""
     install_fast_session_config(monkeypatch)
     reference = session_module.GameSession(seed=seed)
     first_card = reference.current_cards[0]
@@ -493,6 +505,7 @@ def test_multi_seed_exact_paths_tie_and_every_first_divergence_loses(
     monkeypatch: pytest.MonkeyPatch,
     seed: int,
 ) -> None:
+    """Verify that multi seed exact paths tie and every first divergence loses."""
     install_fast_session_config(monkeypatch)
     exact = session_module.GameSession(seed=seed)
     exact_final = play_to_completion(exact)
@@ -510,6 +523,7 @@ def test_multi_seed_exact_paths_tie_and_every_first_divergence_loses(
 def test_slow_route_uses_one_player_only_final_assembly_batch_then_normal_workdays(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify that slow route uses one player only final assembly batch then normal workdays."""
     install_fast_session_config(
         monkeypatch,
         job_count=2,
@@ -634,6 +648,7 @@ def test_slow_route_uses_one_player_only_final_assembly_batch_then_normal_workda
 
 
 def test_final_payload_aligns_real_player_and_echo_histories(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that final payload aligns real player and echo histories."""
     install_fast_session_config(monkeypatch)
     session = session_module.GameSession(seed=412)
     first_card = session.current_cards[0]
@@ -786,6 +801,7 @@ def test_final_payload_aligns_real_player_and_echo_histories(monkeypatch: pytest
 
 
 def test_timeline_stops_rescaling_after_echo_finishes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that timeline stops rescaling after echo finishes."""
     install_fast_session_config(monkeypatch)
     session = session_module.GameSession(seed=413)
     final = play_to_completion(session)
@@ -800,11 +816,13 @@ def test_session_store_serializes_duplicate_concurrent_choices(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """Verify that session store serializes duplicate concurrent choices."""
     install_fast_session_config(monkeypatch)
     monkeypatch.setattr(session_module, "_process_peak_rss_bytes", lambda: None)
     current_rss_calls = 0
 
     def controlled_current_rss() -> int:
+        """Support the test boundary for controlled current rss."""
         nonlocal current_rss_calls
         current_rss_calls += 1
         return current_rss_calls * 1024 * 1024
@@ -842,6 +860,7 @@ def test_session_store_serializes_duplicate_concurrent_choices(
     results: list[tuple[str, object]] = []
 
     def choose_once() -> None:
+        """Support the test boundary for choose once."""
         barrier.wait(timeout=2)
         try:
             results.append(("ok", store.choice_payload(card.id, choice.id)))
@@ -864,6 +883,7 @@ def test_session_store_serializes_duplicate_concurrent_choices(
     real_game_session = session_module.GameSession
 
     def fail_generation(*args, **kwargs):
+        """Support the test boundary for fail generation."""
         raise RuntimeError("generation failed")
 
     monkeypatch.setattr(session_module, "GameSession", fail_generation)
@@ -915,17 +935,21 @@ def test_session_store_serializes_duplicate_concurrent_choices(
     [(None, None), ("", None), (" 007 ", 7), (0, 0), (42, 42), (-2, -2)],
 )
 def test_parse_optional_seed_accepts_supported_values(value: object, expected: int | None) -> None:
+    """Verify that parse optional seed accepts supported values."""
     assert _parse_optional_seed(value) == expected
 
 
 @pytest.mark.parametrize("value", [True, False, 4.2, "4.2", "abc"])
 def test_parse_optional_seed_rejects_non_integers(value: object) -> None:
+    """Verify that parse optional seed rejects non integers."""
     with pytest.raises(ValueError, match="Seed must be an integer"):
         _parse_optional_seed(value)
 
 
 class HandlerHarness:
+    """Provide a lightweight HandlerHarness test fixture."""
     def __init__(self, method: str, path: str, payload: object = None, raw_body: bytes | None = None):
+        """Initialize this test fixture."""
         self.method = method
         self.path = path
         body = raw_body if raw_body is not None else (json.dumps(payload).encode() if payload is not None else b"")
@@ -936,23 +960,29 @@ class HandlerHarness:
         self.response_headers: dict[str, str] = {}
 
     def send_response(self, status: HTTPStatus) -> None:
+        """Support the test boundary for send response."""
         self.response_status = int(status)
 
     def send_header(self, name: str, value: str) -> None:
+        """Support the test boundary for send header."""
         self.response_headers[name.lower()] = value
 
     def end_headers(self) -> None:
+        """Support the test boundary for end headers."""
         return None
 
     def body_json(self) -> dict:
+        """Support the test boundary for body json."""
         return json.loads(self.wfile.getvalue().decode())
 
 
 def handler_type(store: object):
+    """Support the test boundary for handler type."""
     return type("TestHandler", (HandlerHarness, GameRequestHandler), {"session_store": store})
 
 
 def dispatch(handler: HandlerHarness) -> None:
+    """Support the test boundary for dispatch."""
     if handler.method == "GET":
         handler.do_GET()
     else:
@@ -962,24 +992,31 @@ def dispatch(handler: HandlerHarness) -> None:
 def test_request_handler_routes_state_actions_html_and_not_found(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify that request handler routes state actions html and not found."""
     generation_report_calls = []
 
     class FakeStore:
+        """Provide a lightweight FakeStore test fixture."""
         dev_mode = False
 
         def state_payload(self):
+            """Support the test boundary for state payload."""
             return {"route": "state"}
 
         def log_generation_stats(self):
+            """Support the test boundary for log generation stats."""
             generation_report_calls.append("report")
 
         def new_session_payload(self, seed=None):
+            """Support the test boundary for new session payload."""
             return {"route": "new", "seed": seed}
 
         def choice_payload(self, card_id, choice_id):
+            """Support the test boundary for choice payload."""
             return {"route": "choice", "ids": [card_id, choice_id]}
 
         def advance_payload(self):
+            """Support the test boundary for advance payload."""
             return {"route": "advance"}
 
     Handler = handler_type(FakeStore())
@@ -998,9 +1035,11 @@ def test_request_handler_routes_state_actions_html_and_not_found(
     assert generation_report_calls == ["report", "report"]
 
     class DevStore(FakeStore):
+        """Provide a lightweight DevStore test fixture."""
         dev_mode = True
 
         def skip_payload(self, strategy, target_day=None):
+            """Support the test boundary for skip payload."""
             return {
                 "route": "skip",
                 "strategy": strategy,
@@ -1054,10 +1093,13 @@ def test_request_handler_routes_state_actions_html_and_not_found(
 
 
 def test_request_handler_reports_bad_input_and_serves_declared_static_assets() -> None:
+    """Verify that request handler reports bad input and serves declared static assets."""
     class FakeStore:
+        """Provide a lightweight FakeStore test fixture."""
         dev_mode = False
 
         def new_session_payload(self, seed=None):
+            """Support the test boundary for new session payload."""
             return {"seed": seed}
 
     Handler = handler_type(FakeStore())
@@ -1072,9 +1114,11 @@ def test_request_handler_reports_bad_input_and_serves_declared_static_assets() -
     assert bad_seed.body_json() == {"error": "Seed must be an integer."}
 
     class BadSkipStore(FakeStore):
+        """Provide a lightweight BadSkipStore test fixture."""
         dev_mode = True
 
         def skip_payload(self, strategy, target_day=None):
+            """Support the test boundary for skip payload."""
             raise ValueError(f"Unknown automated strategy: {strategy}.")
 
     BadSkipHandler = handler_type(BadSkipStore())
@@ -1100,6 +1144,7 @@ def test_request_handler_reports_bad_input_and_serves_declared_static_assets() -
 def test_live_http_server_supports_a_complete_exact_path_playthrough(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify that live http server supports a complete exact path playthrough."""
     install_fast_session_config(monkeypatch)
     store = session_module.SessionStore(seed=501)
     Handler = type("LiveTestHandler", (GameRequestHandler,), {"session_store": store})
@@ -1109,6 +1154,7 @@ def test_live_http_server_supports_a_complete_exact_path_playthrough(
     base_url = f"http://127.0.0.1:{server.server_address[1]}"
 
     def request_json(path: str, payload: dict | None = None) -> dict:
+        """Support the test boundary for request json."""
         body = json.dumps(payload).encode() if payload is not None else None
         request = Request(
             f"{base_url}{path}",

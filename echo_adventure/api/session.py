@@ -41,17 +41,21 @@ _MAX_WORST_STAGNANT_DAYS = 20
 
 def _process_current_rss_bytes() -> int | None:
     """Return the process's current resident memory using only the standard library."""
+    # Each platform branch is best-effort because diagnostics must never prevent
+    # a game from starting on an unsupported or sandboxed host.
     if sys.platform == "darwin":
         try:
             import ctypes
 
             class TimeValue(ctypes.Structure):
+                """Mirror the Mach time-value structure used by task_info."""
                 _fields_ = [
                     ("seconds", ctypes.c_int32),
                     ("microseconds", ctypes.c_int32),
                 ]
 
             class MachTaskBasicInfo(ctypes.Structure):
+                """Mirror the Mach basic task information structure."""
                 _fields_ = [
                     ("virtual_size", ctypes.c_uint64),
                     ("resident_size", ctypes.c_uint64),
@@ -75,6 +79,8 @@ def _process_current_rss_bytes() -> int | None:
             count = ctypes.c_uint32(
                 ctypes.sizeof(info) // ctypes.sizeof(ctypes.c_uint32)
             )
+            # MACH_TASK_BASIC_INFO is passed numerically to avoid a third-party
+            # binding solely for developer-mode memory reporting.
             status = library.task_info(
                 library.mach_task_self(),
                 20,  # MACH_TASK_BASIC_INFO
@@ -87,6 +93,8 @@ def _process_current_rss_bytes() -> int | None:
 
     if sys.platform.startswith("linux"):
         try:
+            # statm reports pages; sysconf supplies the runtime page size needed
+            # to normalize the value to bytes.
             with open("/proc/self/statm", encoding="ascii") as statm:
                 resident_pages = int(statm.read().split()[1])
             return resident_pages * int(os.sysconf("SC_PAGE_SIZE"))
@@ -99,6 +107,7 @@ def _process_current_rss_bytes() -> int | None:
             from ctypes import wintypes
 
             class ProcessMemoryCounters(ctypes.Structure):
+                """Mirror the Windows process-memory counter structure."""
                 _fields_ = [
                     ("cb", wintypes.DWORD),
                     ("page_fault_count", wintypes.DWORD),
@@ -114,6 +123,8 @@ def _process_current_rss_bytes() -> int | None:
 
             counters = ProcessMemoryCounters()
             counters.cb = ctypes.sizeof(counters)
+            # The Windows API writes directly into the structure and reports
+            # success as a nonzero integer.
             status = ctypes.windll.psapi.GetProcessMemoryInfo(
                 ctypes.windll.kernel32.GetCurrentProcess(),
                 ctypes.byref(counters),
@@ -133,6 +144,8 @@ def _process_peak_rss_bytes() -> int | None:
     except ImportError:
         return None
 
+    # macOS already reports bytes; other supported Unix implementations report
+    # kibibytes, so normalize before exposing a cross-platform payload field.
     peak = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
     if sys.platform != "darwin":
         peak *= 1024
@@ -140,13 +153,18 @@ def _process_peak_rss_bytes() -> int | None:
 
 
 class GameSession(PayloadMixin, ReviewMixin):
+    """Own one real player run and its immutable ECHO comparison route."""
+
     def __init__(self, seed: int | None = None, dev_mode: bool = False) -> None:
+        """Generate and initialize a complete deterministic game session."""
         self.lock = threading.RLock()
         self.dev_mode = dev_mode
         requested_seed_mode = "explicit" if seed is not None else "random"
         generation_started = time.perf_counter()
         timed_out_random_seeds = 0
         accepted_web_seconds = 0.0
+        # Explicit seeds are reproducibility contracts and may build without a
+        # deadline. Random seeds may be discarded until a fast valid web is found.
         while True:
             self.seed = resolve_seed(seed)
             self.config = GameConfig(seed=self.seed)
@@ -171,6 +189,8 @@ class GameSession(PayloadMixin, ReviewMixin):
             break
         total_generation_seconds = time.perf_counter() - generation_started
         node_count = len(self.decision_web.nodes)
+        # Generation metadata is retained for dev payloads and printed only when
+        # developer mode explicitly requests it.
         self.generation_stats: dict[str, Any] = {
             "acceptedSeed": self.seed,
             "requestedSeedMode": requested_seed_mode,
@@ -193,6 +213,8 @@ class GameSession(PayloadMixin, ReviewMixin):
             "processPeakRssScope": "process-high-water-mark",
         }
         self._generation_stats_logged = False
+        # Both actors begin from deep-copied identical jobs. The player may
+        # diverge, while ECHO independently traverses the solved optimal policy.
         self.player_state = initialize_state(self.scenario)
         self.automated_state = initialize_state(self.scenario)
         self.player_node_id = self.decision_web.root_node_id
@@ -200,6 +222,8 @@ class GameSession(PayloadMixin, ReviewMixin):
         self.echo_node_id: str | None = self.decision_web.root_node_id
         self.pending_echo_transition: DecisionWebTransition | None = None
         self.echo_choices_applied_today = 0
+        # Runtime phase fields are mutually coordinated by advance_day:
+        # preplanned web -> optional overtime -> optional final assembly -> done.
         self.player_in_overtime = False
         self.overtime_cards: list[DecisionCard] = []
         self.overtime_card_index = 0
@@ -250,6 +274,8 @@ class GameSession(PayloadMixin, ReviewMixin):
                     f"({peak_rss / (1024 * 1024):.2f} MiB)"
                 )
             )
+            # Assemble one write so concurrent server output cannot interleave
+            # individual report lines.
             report = "\n".join(
                 (
                     "[ECHO dev] Decision web generation",
@@ -291,6 +317,7 @@ class GameSession(PayloadMixin, ReviewMixin):
             print(report, flush=True)
 
     def apply_choice(self, card_id: str, choice_id: str) -> None:
+        """Apply one valid player choice to the active daily decision."""
         with self.lock:
             if self._game_over():
                 raise ValueError("The run has already ended.")
@@ -301,6 +328,8 @@ class GameSession(PayloadMixin, ReviewMixin):
             choice = next((item for item in card.choices if item.id == choice_id), None)
             if not choice:
                 raise ValueError("Choice is not valid for that decision.")
+            # Overtime cards are not solved in the immutable web, so their ECHO
+            # comparison is selected against the live schedule just before use.
             in_final_assembly = self.player_final_assembly_started
             if self.player_in_overtime and not in_final_assembly:
                 card.echo_choice_id = select_echo_choice_for_state(
@@ -315,12 +344,16 @@ class GameSession(PayloadMixin, ReviewMixin):
                 schedule_follow_ups=self.player_in_overtime and not in_final_assembly,
             )
             self.questions_answered_today += 1
+            # Final assembly is player-only; otherwise ECHO consumes exactly the
+            # matching decision slot even after its calendar has finished.
             if not in_final_assembly:
                 self._apply_echo_choice(self.questions_answered_today)
             self.current_cards = []
             if self._game_over():
                 self._finish_automated()
                 return
+            # Runtime card batches advance by local indexes; preplanned cards
+            # instead advance through graph transitions below.
             if in_final_assembly:
                 self.final_assembly_card_index += 1
                 if self.final_assembly_card_index < len(self.final_assembly_cards):
@@ -340,6 +373,8 @@ class GameSession(PayloadMixin, ReviewMixin):
 
             transition = self.decision_web.transition(self.player_node_id, choice.id)
             if transition.advances_day:
+                # Store the edge until the UI explicitly advances after showing
+                # the completed set of daily questions.
                 self.pending_player_transition = transition
             else:
                 if transition.next_node_id is None:
@@ -348,12 +383,15 @@ class GameSession(PayloadMixin, ReviewMixin):
                 self._ensure_cards()
 
     def advance_day(self) -> None:
+        """Advance both actors through one legal simulation day."""
         with self.lock:
             if self._game_over():
                 self._finish_automated()
                 return
             if not self.ready_to_advance():
                 raise ValueError("Select a response for all decisions before advancing the day.")
+            # Final assembly does not advance ECHO: its solved run is already
+            # complete and these cards belong only to the player endgame.
             if self.player_final_assembly_started:
                 self._record_player_day()
                 self._reset_daily_choices()
@@ -363,6 +401,8 @@ class GameSession(PayloadMixin, ReviewMixin):
                     self.questions_answered_today = 0
                     self.decision_total_today = 0
                 return
+            # Overtime work uses live-generated cards, but the normal once-daily
+            # simulation tick and independent ECHO progression still apply.
             if self.player_in_overtime:
                 self._record_player_day()
                 self._advance_echo_day()
@@ -375,6 +415,8 @@ class GameSession(PayloadMixin, ReviewMixin):
                     self._start_overtime_day()
                 return
 
+            # In the preplanned phase the final answered question supplies the
+            # already-built daily transition to the next graph node.
             transition = self.pending_player_transition
             if transition is None:
                 raise RuntimeError("The completed question sequence has no daily web transition.")
@@ -403,6 +445,7 @@ class GameSession(PayloadMixin, ReviewMixin):
                 self._ensure_cards()
 
     def ready_to_advance(self) -> bool:
+        """Report whether all decisions for the current day are complete."""
         if self.player_final_assembly_started:
             return (
                 self.player_final_assembly_locked
@@ -432,6 +475,8 @@ class GameSession(PayloadMixin, ReviewMixin):
             if self._game_over():
                 raise ValueError("The run has already ended.")
 
+            # Capture the starting state once so random automation is repeatable
+            # for dry reachability and the subsequent real traversal.
             context = AutomationContext(
                 seed=self.seed,
                 start_token=self._automation_start_token(),
@@ -458,6 +503,8 @@ class GameSession(PayloadMixin, ReviewMixin):
                 else None
             )
 
+            # Automation intentionally calls the same public mutation methods as
+            # manual play; the safety caps defend against malformed runtime state.
             while not self._game_over():
                 if target is not None and self.player_state.current_day == target:
                     return
@@ -488,6 +535,8 @@ class GameSession(PayloadMixin, ReviewMixin):
                         "decision and no available day advance."
                     )
 
+                # The adversarial "worst" strategy receives an extra progress
+                # watchdog once it leaves the finite preplanned DAG.
                 was_runtime = (
                     self.player_in_overtime
                     or self.player_final_assembly_started
@@ -525,6 +574,7 @@ class GameSession(PayloadMixin, ReviewMixin):
         strategy: str,
         context: AutomationContext,
     ) -> DecisionChoice:
+        """Select the next choice for a developer automation strategy."""
         if not self.player_in_overtime and not self.player_final_assembly_started:
             return select_preplanned_choice(
                 self.decision_web,
@@ -541,6 +591,7 @@ class GameSession(PayloadMixin, ReviewMixin):
         )
 
     def _validate_skip_target(self, target_day: object) -> int | None:
+        """Validate a requested developer skip target against reachable days."""
         if target_day is None:
             return None
         if isinstance(target_day, bool) or not isinstance(target_day, int):
@@ -563,6 +614,8 @@ class GameSession(PayloadMixin, ReviewMixin):
                 seed=self.seed,
                 start_token=self._automation_start_token(),
             )
+            # Compute routes without mutating session state so rendering the
+            # developer panel cannot change the game.
             return {
                 strategy: self._reachable_days(strategy, context)
                 for strategy in AUTOMATION_STRATEGY_ORDER
@@ -573,6 +626,7 @@ class GameSession(PayloadMixin, ReviewMixin):
         strategy: str,
         context: AutomationContext,
     ) -> list[int]:
+        """Return the days reachable from the current real run state."""
         return reachable_preplanned_days(
             self.decision_web,
             self.player_node_id,
@@ -584,6 +638,7 @@ class GameSession(PayloadMixin, ReviewMixin):
         )
 
     def _automation_start_token(self) -> str:
+        """Build stable entropy for deterministic automated choices."""
         remaining = ",".join(
             f"{job.id}:{job.remaining_days}"
             for job in sorted(self.player_state.jobs.values(), key=lambda item: item.id)
@@ -596,6 +651,8 @@ class GameSession(PayloadMixin, ReviewMixin):
             if pending_transition
             else ""
         )
+        # Include every phase cursor that can make the same visible day/job
+        # schedule represent a different automation position.
         return "|".join(
             (
                 str(self.player_state.current_day),
@@ -610,6 +667,7 @@ class GameSession(PayloadMixin, ReviewMixin):
         )
 
     def _maximum_remaining_duration(self) -> int:
+        """Return the longest unfinished player job duration."""
         return max(
             (
                 max(0, job.remaining_days)
@@ -619,6 +677,9 @@ class GameSession(PayloadMixin, ReviewMixin):
         )
 
     def _ensure_cards(self) -> None:
+        """Materialize cards appropriate to the current run phase."""
+        # Phase order matters: final assembly and overtime own runtime batches,
+        # while a pending web transition means the day is waiting to advance.
         if self._game_over():
             self.current_cards = []
         elif self.player_final_assembly_started:
@@ -636,13 +697,18 @@ class GameSession(PayloadMixin, ReviewMixin):
         elif self.pending_player_transition is not None:
             self.current_cards = []
         elif not self.current_cards:
+            # Validate compact-state agreement before exposing the immutable
+            # graph card to the player.
             self.decision_web.assert_runtime_matches(self.player_state, self.player_node_id)
             card = self.decision_web.node(self.player_node_id).card
             self.player_state.decision_cards[card.id] = card
             self.current_cards = [card]
 
     def _record_player_day(self) -> None:
+        """Append the player's end-of-day state to comparison history."""
         self.last_result = simulate_day(self.player_state)
+        # Choice effects may complete jobs before the work tick, so recompute the
+        # full day delta rather than relying only on simulate_day's tick delta.
         self.last_result.completed_job_ids = sorted(
             self.player_state.completed_jobs - self.day_completed_before
         )
@@ -656,6 +722,8 @@ class GameSession(PayloadMixin, ReviewMixin):
         """Apply ECHO's independent optimal answer for the matching daily slot."""
         if self.automated_state.final_item_completed:
             return
+        # Slot synchronization prevents player request retries or phase bugs from
+        # applying ECHO's optimal decision twice.
         expected_slot = self.echo_choices_applied_today + 1
         if player_slot != expected_slot:
             raise RuntimeError(
@@ -688,14 +756,20 @@ class GameSession(PayloadMixin, ReviewMixin):
         if transition is None:
             raise RuntimeError("ECHO's completed question sequence has no daily transition.")
 
+        # ECHO advances only after consuming the same number of daily question
+        # slots the player was offered.
         self.echo_node_id = advance_omniscient_day(self.automated_state, transition)
         self.pending_echo_transition = None
         self.echo_choices_applied_today = 0
 
     def _reset_daily_choices(self) -> None:
+        """Clear per-day decision state before entering a new day."""
         self.current_cards = []
 
     def _start_overtime_day(self) -> None:
+        """Initialize one overtime workday after the solved web ends."""
+        # Overtime cannot use the exhausted immutable web, so it generates cards
+        # directly from the player's real remaining jobs.
         self.overtime_cards = generate_daily_decision_cards(self.player_state, self.config)
         if not self.overtime_cards:
             raise RuntimeError("Decision generation produced no questions for unfinished work.")
@@ -706,6 +780,7 @@ class GameSession(PayloadMixin, ReviewMixin):
         self.current_cards = [self.overtime_cards[0]]
 
     def _should_start_final_assembly(self) -> bool:
+        """Report whether only the player-only assembly batch remains."""
         if (
             self.player_final_assembly_started
             or self.player_state.final_item_completed
@@ -715,6 +790,8 @@ class GameSession(PayloadMixin, ReviewMixin):
         incomplete = self.player_state.incomplete_jobs()
         if len(incomplete) != 1 or self.automated_state.completion_day is None:
             return False
+        # Assembly is offered only when ordinary ticking would still leave the
+        # player strictly behind ECHO; it can never create a winning route.
         projected_completion_day = (
             self.player_state.current_day + max(0, incomplete[0].remaining_days - 1)
         )
@@ -729,6 +806,8 @@ class GameSession(PayloadMixin, ReviewMixin):
         projected_completion_day = (
             self.player_state.current_day + max(0, incomplete[0].remaining_days - 1)
         )
+        # Cap total acceleration one day short of ECHO's completion date. This
+        # preserves the invariant that a divergent player route cannot tie.
         self.final_assembly_cards = generate_final_assembly_cards(
             self.player_state,
             self.config,
@@ -752,10 +831,13 @@ class GameSession(PayloadMixin, ReviewMixin):
         self.current_cards = [self.final_assembly_cards[0]]
 
     def _game_over(self) -> bool:
+        """Report whether both the player and ECHO have completed the run."""
         return self.player_state.final_item_completed
 
     def _finish_automated(self) -> None:
         """Finish ECHO's solved route when the player completes during a question."""
+        # A player choice may finish the run before the UI performs the day's
+        # normal advance, so drain ECHO's already-solved route for final review.
         while not self.automated_state.final_item_completed:
             if self.pending_echo_transition is not None:
                 transition = self.pending_echo_transition
@@ -784,32 +866,42 @@ class GameSession(PayloadMixin, ReviewMixin):
 
 
 class SessionStore:
+    """Serialize access to the single mutable game session shared by HTTP handlers."""
+
     def __init__(self, seed: int | None = None, dev_mode: bool = False) -> None:
+        """Create the initial session and preserve the server-level developer flag."""
         self.lock = threading.RLock()
         self.dev_mode = dev_mode
         self.session = GameSession(seed=seed, dev_mode=self.dev_mode)
 
     def state_payload(self) -> dict[str, Any]:
+        """Return the current browser payload under the session lock."""
         with self.lock:
             return self.session.state_payload()
 
     def new_session_payload(self, seed: int | None = None) -> dict[str, Any]:
+        """Replace the run and return its initial payload atomically."""
         with self.lock:
+            # Construct first, then swap, so generation failure leaves the
+            # previous playable session intact.
             new_session = GameSession(seed=seed, dev_mode=self.dev_mode)
             self.session = new_session
             new_session.refresh_current_rss_stat()
             return self.session.state_payload()
 
     def log_generation_stats(self) -> None:
+        """Emit each session's generation report at most once."""
         with self.lock:
             self.session.log_generation_stats_once()
 
     def choice_payload(self, card_id: str, choice_id: str) -> dict[str, Any]:
+        """Apply one choice and return the updated state atomically."""
         with self.lock:
             self.session.apply_choice(card_id, choice_id)
             return self.session.state_payload()
 
     def advance_payload(self) -> dict[str, Any]:
+        """Advance one day and return the updated state atomically."""
         with self.lock:
             self.session.advance_day()
             return self.session.state_payload()
@@ -819,6 +911,7 @@ class SessionStore:
         strategy: object,
         target_day: object = None,
     ) -> dict[str, Any]:
+        """Run a developer automation request under the session lock."""
         with self.lock:
             if not self.dev_mode:
                 raise ValueError("Developer mode is not enabled.")

@@ -1,3 +1,5 @@
+"""End-to-end campaign tests for exact and divergent player routes."""
+
 from __future__ import annotations
 
 from collections import Counter
@@ -7,6 +9,7 @@ from echo_adventure.api.session import GameSession
 
 
 def finish_campaign(session: GameSession, first_choice_id: str | None = None) -> dict:
+    """Support the test boundary for finish campaign."""
     first = True
     guard = 0
     while not session.player_state.final_item_completed:
@@ -80,6 +83,7 @@ def run_full_campaign_case(seed: int, diverge: bool) -> dict[str, object]:
 
 
 def test_full_default_campaigns_run_exact_and_divergent_paths_in_parallel() -> None:
+    """Verify that full default campaigns run exact and divergent paths in parallel."""
     with ProcessPoolExecutor(max_workers=2) as executor:
         exact_future = executor.submit(run_full_campaign_case, 12345, False)
         divergent_future = executor.submit(run_full_campaign_case, 24680, True)

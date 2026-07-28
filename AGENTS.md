@@ -20,6 +20,19 @@
   for confirmation.
 - Do not make changes outside the scope of the user's request.
 
+## Code comments
+
+- Comment code as it is written or changed so a new maintainer can understand
+  its purpose, important invariants, and non-obvious reasoning.
+- Give new source and test files a file-level purpose comment or module
+  docstring, and document new classes, functions, methods, fixtures, and tests.
+- Add inline comments around tricky algorithms, state transitions, safety
+  bounds, and behavior that would not be obvious from the code alone.
+- Explain why the code works that way instead of merely restating individual
+  statements.
+- Update or remove comments when behavior changes so documentation never
+  contradicts the implementation.
+
 ## Source tools
 
 - If the `code-review-graph` source tool is available, always load and use it.

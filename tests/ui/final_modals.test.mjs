@@ -1,3 +1,5 @@
+/** Final reveal, modal, tooltip, and developer-control UI tests. */
+
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -43,6 +45,7 @@ const {
   skipTutorial,
 } = await import("../../echo_adventure/ui/tutorial.js");
 
+/** Restore shared UI state before each modal-focused test. */
 function resetUiState() {
   Object.assign(uiState, {
     state: null,
@@ -81,6 +84,7 @@ beforeEach(() => {
   hideDecisionChartTooltip();
 });
 
+// Verifies final metric guidance follows the pointer and stays inside the viewport.
 test("final metric guidance follows the pointer and stays inside the viewport", () => {
   const metric = dom.createElement("metric");
   const tooltip = dom.createElement("tooltip");
@@ -121,6 +125,7 @@ test("final metric guidance follows the pointer and stays inside the viewport", 
   assert.match(tooltipRule[1], /pointer-events:\s*none;/);
 });
 
+// Verifies daily score groups begin at neutral score and aggregate all score events by day.
 test("daily score groups begin at neutral score and aggregate all score events by day", () => {
   const groups = buildDailyDecisionGroups([
     {
@@ -153,6 +158,7 @@ test("daily score groups begin at neutral score and aggregate all score events b
 });
 
 
+// Verifies daily score groups derive missing deltas and keep no-question days flat.
 test("daily score groups derive missing deltas and keep no-question days flat", () => {
   const groups = buildDailyDecisionGroups([
     {
@@ -200,6 +206,7 @@ test("daily score groups derive missing deltas and keep no-question days flat", 
   assert.equal(groups[3].echoCumulativeScore, groups[2].echoCumulativeScore);
 });
 
+// Verifies decision chart tooltip safely renders, locks, and closes.
 test("decision chart tooltip safely renders, locks, and closes", () => {
   const tooltip = dom.element("decisionChartTooltip");
   tooltip.offsetWidth = 300;
@@ -274,6 +281,7 @@ test("decision chart tooltip safely renders, locks, and closes", () => {
 });
 
 
+// Verifies decision chart document handlers support mouse, keyboard, escape, and outside close.
 test("decision chart document handlers support mouse, keyboard, escape, and outside close", () => {
   const tooltip = dom.element("decisionChartTooltip");
   const marker = dom.element("interactive-marker");
@@ -339,6 +347,7 @@ test("decision chart document handlers support mouse, keyboard, escape, and outs
   assert.equal(marker.focused, true);
 });
 
+// Verifies final reveal renders comparison metrics, score chart, and escaped review notes.
 test("final reveal renders comparison metrics, score chart, and escaped review notes", () => {
   for (const id of ["finalSection", "finalMetricsBar", "finalCompletionChart", "finalNotesTitle", "finalNotes"]) dom.element(id);
   uiState.state = {
@@ -411,6 +420,7 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
   assert.equal(dom.element("finalNotesTitle").textContent, "Why It Was a Tie");
 });
 
+// Verifies welcome, settings, new-run, and developer controls reflect browser-local state.
 test("welcome, settings, new-run, and developer controls reflect browser-local state", () => {
   for (const id of [
     "welcomeModalOverlay", "welcomeSubmarineVisual", "welcomeBlurb", "settingsPanel", "settingsMenuBtn",
@@ -637,6 +647,7 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
   assert.ok(queueRenders >= 3);
 });
 
+// Verifies new-run loading locks dismissal and theme preference persists.
 test("new-run loading locks dismissal and theme preference persists", () => {
   for (const id of [
     "newRunModalOverlay", "newRunSettings", "newRunLoading", "closeNewRunModalBtn", "cancelNewRunBtn",
@@ -664,6 +675,7 @@ test("new-run loading locks dismissal and theme preference persists", () => {
   assert.equal(dom.element("settingsMenuBtn").getAttribute("aria-expanded"), "false");
 });
 
+// Verifies final view hides without a reveal and tooltip tolerates invalid event data.
 test("final view hides without a reveal and tooltip tolerates invalid event data", () => {
   dom.element("finalSection");
   uiState.state = { finalReveal: null };
@@ -685,6 +697,7 @@ test("final view hides without a reveal and tooltip tolerates invalid event data
 });
 
 
+// Verifies final reveal supplies safe defaults when history and review notes are absent.
 test("final reveal supplies safe defaults when history and review notes are absent", () => {
   for (const id of [
     "finalSection", "finalOutcomeHeadline", "finalMetricsBar", "finalCompletionChart",
@@ -728,6 +741,7 @@ test("final reveal supplies safe defaults when history and review notes are abse
 });
 
 
+// Verifies developer skip controls filter days and serialize asynchronous requests.
 test("developer skip controls filter days and serialize asynchronous requests", async () => {
   for (const id of [
     "devPanel", "devPanelToggle", "devPanelBody", "devRunSeed", "devRunDay",
@@ -812,6 +826,7 @@ test("developer skip controls filter days and serialize asynchronous requests", 
   ]);
 });
 
+// Verifies new-run loading exposes busy state and disables every modal action.
 test("new-run loading exposes busy state and disables every modal action", () => {
   for (const id of [
     "newRunModalOverlay", "newRunSettings", "newRunLoading", "closeNewRunModalBtn",

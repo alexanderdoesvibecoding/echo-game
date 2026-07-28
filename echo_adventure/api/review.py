@@ -9,7 +9,10 @@ from ..scoring import public_score, public_score_delta
 
 
 class ReviewMixin:
+    """Build the narrative explanation of the player's final route."""
+
     def _final_review_payload(self) -> dict[str, Any]:
+        """Classify the outcome and identify the decisive route difference."""
         player_day = self.player_state.completion_day or self.player_state.current_day
         echo_day = self.automated_state.completion_day or self.automated_state.current_day
         player_records = [
@@ -33,6 +36,8 @@ class ReviewMixin:
         echo_records = [
             record for record in self.automated_state.decision_history if record.actor == "ECHO"
         ]
+        # A tie requires the same complete preplanned route, not merely matching
+        # the terminal metrics through a different set of choices.
         identical_optimal_path = (
             not overtime_records
             and preplanned_aligned == len(preplanned_records) == len(echo_records)
@@ -42,6 +47,8 @@ class ReviewMixin:
         player_unfinished_job_days = self.player_state.cumulative_unfinished_job_days
         echo_unfinished_job_days = self.automated_state.cumulative_unfinished_job_days
 
+        # The classification follows the solver's lexicographic objectives.
+        # Any state outside these cases would contradict ECHO's global optimum.
         if identical_optimal_path:
             headline = "You reproduced ECHO's exact optimal path, so the run is tied."
             outcome = "tied"
@@ -114,6 +121,8 @@ class ReviewMixin:
                 comparable_record_count=comparable_record_count,
             )
 
+        # Number player questions independently per day so the explanation
+        # remains understandable when routes contain different events.
         question_number_by_day: dict[int, int] = {}
         drivers: list[tuple[float, float, int, DecisionRecord, int]] = []
         for sequence, record in enumerate(player_records):
@@ -130,6 +139,8 @@ class ReviewMixin:
             )
             if echo_choice is None:
                 continue
+            # Positive cost means the player's local schedule score was worse;
+            # absolute magnitude ranks the strongest visible turning points.
             job_day_cost = round(echo_choice.score_delta - record.score_delta, 2)
             drivers.append(
                 (
@@ -147,6 +158,8 @@ class ReviewMixin:
             for _, _, _, record, question_number in drivers[:2]
         ]
         if not turning_points:
+            # Overtime can explain a loss even when no comparable preplanned card
+            # remains available as a conventional divergence.
             overtime_records = [
                 record for record in player_records if record.day >= self.config.max_campaign_day
             ]
@@ -162,6 +175,7 @@ class ReviewMixin:
             aligned=aligned,
             comparable_record_count=comparable_record_count,
         )
+        # Keep the browser review concise while prioritizing concrete decisions.
         return [*turning_points, *context][:5]
 
     def _outcome_context_reasons(
@@ -172,6 +186,7 @@ class ReviewMixin:
         aligned: int,
         comparable_record_count: int,
     ) -> list[str]:
+        """Explain why the final outcome classification applies."""
         player_score = public_score(self.player_state.decision_score)
         echo_score = public_score(self.automated_state.decision_score)
         return [
@@ -185,11 +200,14 @@ class ReviewMixin:
         record: DecisionRecord,
         question_number: int,
     ) -> str:
+        """Summarize how one turning-point choice affected the route."""
         card = self.player_state.decision_cards[record.card_id]
         echo_choice = next(
             choice for choice in card.choices if choice.id == card.echo_choice_id
         )
         job_day_cost = round(echo_choice.score_delta - record.score_delta, 2)
+        # A locally favorable divergent choice can still leave the globally
+        # optimal route, so negative and neutral costs need distinct wording.
         if job_day_cost > 0:
             comparison = (
                 f"cost {_format_day_count(job_day_cost)} versus ECHO's response"
@@ -219,12 +237,14 @@ class ReviewMixin:
 
 
 def _format_day_count(value: float) -> str:
+    """Format a signed day count for explanatory prose."""
     count = int(value) if float(value).is_integer() else value
     unit = "job-day" if count == 1 else "job-days"
     return f"{count:g} {unit}" if isinstance(count, float) else f"{count} {unit}"
 
 
 def _format_applied_changes(changes: dict[str, int], jobs: dict[str, Any]) -> str:
+    """Summarize recorded job-day changes in stable job order."""
     effects = []
     for job_id, delta in changes.items():
         job = jobs.get(job_id)
@@ -238,6 +258,8 @@ def _format_applied_changes(changes: dict[str, int], jobs: dict[str, Any]) -> st
         return "made no direct job-day change"
     if len(effects) == 1:
         return effects[0]
+    # Natural-language conjunctions keep review prose readable for one, two, or
+    # several affected jobs.
     if len(effects) == 2:
         return " and ".join(effects)
     return f"{', '.join(effects[:-1])}, and {effects[-1]}"

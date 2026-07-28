@@ -1,8 +1,12 @@
+/** Browser bootstrap and global interaction smoke tests. */
+
 import test from "node:test";
 import assert from "node:assert/strict";
 
 import { installDom } from "./testDom.mjs";
 
+// Precreate every shell element touched during module bootstrap; installDom
+// otherwise interns elements lazily by ID.
 const dom = installDom();
 for (const id of [
   "settingsMenuBtn", "openNewRunModalBtn", "themeMenuBtn", "error", "newRunError", "dayBadge",
@@ -20,6 +24,8 @@ for (const id of [
   "devSkipToDayBtn", "devSkipToEndBtn", "devNewGameBtn",
 ]) dom.element(id);
 
+// Minimal standard-mode payload shared by the fetch double and phase-specific
+// test overrides.
 const initialState = {
   seed: 700,
   day: 1,
@@ -37,11 +43,14 @@ const initialState = {
   livePuzzle: null,
   lastSummary: null,
 };
+// Queued payload/error controls let one long smoke test exercise sequential API
+// transitions while retaining a complete request log.
 const calls = [];
 let nextError = null;
 let nextPayload = null;
 let nextPayloads = [];
 let releaseInitialState;
+// Hold the bootstrap fetch until after app.js has exported its window actions.
 const initialStateGate = new Promise(resolve => {
   releaseInitialState = resolve;
 });
@@ -59,6 +68,7 @@ globalThis.fetch = async (path, options = {}) => {
   }
   return {
     ok: true,
+    /** Return the next queued payload or a route-specific default response. */
     async json() {
       const payload = nextPayloads.length ? nextPayloads.shift() : nextPayload;
       nextPayload = null;
@@ -67,6 +77,7 @@ globalThis.fetch = async (path, options = {}) => {
   };
 };
 
+// Importing app.js performs real event wiring and starts the initial state request.
 await import("../../echo_adventure/ui/app.js");
 const { uiState } = await import("../../echo_adventure/ui/state.js");
 const { resetDayCycle, syncDayCycleForState } = await import("../../echo_adventure/ui/dayClock.js");
@@ -74,7 +85,9 @@ window.closeWelcomeModal();
 releaseInitialState();
 await new Promise(resolve => globalThis.setTimeout(resolve, 0));
 
+// Verifies app bootstrap loads state, renders the shell, and exposes working global actions.
 test("app bootstrap loads state, renders the shell, and exposes working global actions", async () => {
+  // Standard bootstrap renders neutral player-facing copy and hides dev controls.
   assert.equal(calls[0].path, "/api/state");
   assert.equal(dom.element("dayBadge").textContent, "July 1");
   assert.equal(dom.element("welcomeModalOverlay").classList.contains("active"), false);
@@ -91,6 +104,7 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(typeof window.startNewRun, "function");
   assert.equal(typeof window.submitDecision, "function");
 
+  // Random new games send an empty body and reset the main shell.
   window.skipTutorial();
   await window.startNewRun();
 
@@ -99,6 +113,7 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(dom.element("error").classList.contains("hidden"), true);
   assert.equal(dom.element("dayBadge").textContent, "July 1");
 
+  // Developer mode exposes seed replay while retaining random mode by default.
   uiState.state = {
     ...initialState,
     developer: {
@@ -106,6 +121,7 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
       runState: { inDecisionWeb: true, canSkipToEnd: true, canSkipToDay: true },
     },
   };
+  // Direct seed-field interaction opts into an explicit deterministic replay.
   dom.element("openNewRunModalBtn").listeners.get("click")[0]();
   assert.equal(dom.element("newRunSeedInput").value, "700");
   assert.equal(dom.element("newRunSeededToggle").checked, false);
@@ -134,6 +150,7 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(uiState.devShowDiagnostics, true);
   assert.equal(calls.length, callsBeforeDiagnosticsToggle);
 
+  // A multi-day developer skip must clear every stale browser-only phase cursor.
   uiState.welcomeModalVisible = false;
   uiState.pendingChoice = { cardId: "STALE", choiceId: "choice-1" };
   uiState.pendingAdvanceState = { ...uiState.state, day: 2 };
@@ -171,7 +188,10 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(uiState.dayCycleProgress, 0);
   assert.equal(uiState.devRequestInFlight, false);
 
+  // Invalid seed syntax is rejected locally without replacing state or calling API.
   dom.element("openNewRunModalBtn").listeners.get("click")[0]();
+  // New-run failures stay in the modal when visible and fall back to global error
+  // presentation when invoked without it.
   dom.element("newRunSeededToggle").listeners.get("change")[0]({
     target: { checked: true },
   });
@@ -206,6 +226,7 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(calls.length, callsBeforeLoadingGuard);
   uiState.newRunLoading = false;
 
+  // Choice failures keep the current card and expose the server message.
   uiState.state = {
     ...initialState,
     decisionProgress: { completed: 0, total: 1 },
@@ -222,6 +243,8 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(dom.element("error").textContent, "choice failed");
   assert.equal(dom.element("error").classList.contains("hidden"), false);
 
+  // Instant progression reveals cards immediately and serializes duplicate
+  // confirmation calls for the same choice.
   uiState.welcomeModalVisible = false;
   uiState.newRunModalVisible = false;
   uiState.modalVisible = false;
@@ -270,6 +293,8 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
     1,
   );
 
+  // Completing the final instant decision automatically consumes the advance
+  // response without opening the normal daily summary modal.
   nextPayloads = [
     {
       ...uiState.state,
@@ -298,6 +323,7 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(uiState.modalVisible, false);
   assert.match(dom.element("decisionQueueBody").innerHTML, /Next day decision/);
 
+  // Turning instant mode off restarts the visible day cycle at zero.
   uiState.dayCycleProgress = 75;
   dom.element("devInstantProgression").listeners.get("change")[0]({
     target: { checked: false },
@@ -306,6 +332,7 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(uiState.dayCycleProgress, 0);
   assert.doesNotMatch(dom.element("decisionQueueBody").innerHTML, /Next day decision/);
 
+  // Normal locked assembly retains the outgoing day beneath a summary modal.
   uiState.welcomeModalVisible = false;
   uiState.newRunModalVisible = false;
   uiState.pendingChoice = null;
@@ -338,6 +365,7 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   assert.equal(uiState.pendingAdvanceState, null);
   assert.equal(uiState.modalVisible, false);
 
+  // Committing a terminal prepared state swaps active sections for final reveal.
   uiState.pendingAdvanceState = {
     ...initialState,
     gameOver: true,
@@ -359,6 +387,7 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
   window.commitAdvanceDay();
   assert.equal(uiState.state, completedState);
 
+  // Failed automatic advancement releases its optimistic latch for retry.
   uiState.state = {
     ...initialState,
     dayCycleDurationMs: 1,
@@ -379,7 +408,9 @@ test("app bootstrap loads state, renders the shell, and exposes working global a
 });
 
 
+// Verifies document clicks close settings and dismissible overlays.
 test("document clicks close settings and dismissible overlays", () => {
+  // Delegated click-away behavior treats each overlay's own backdrop as outside.
   const settingsWrap = dom.element("settingsWrap");
   settingsWrap.classList.add("settings-wrap");
   const outside = dom.element("outside");

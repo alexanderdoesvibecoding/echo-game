@@ -1,3 +1,5 @@
+"""Shared factories for compact deterministic API test fixtures."""
+
 from __future__ import annotations
 
 from echo_adventure.config import GameConfig
@@ -11,6 +13,7 @@ from echo_adventure.models import (
 
 
 def small_config(**overrides: object) -> GameConfig:
+    """Build small config test data."""
     values: dict[str, object] = {
         "start_date": "2026-07-01",
         "job_count": 3,
@@ -28,6 +31,7 @@ def small_config(**overrides: object) -> GameConfig:
 
 
 def scenario_from_durations(*durations: int, seed: int = 123) -> Scenario:
+    """Build scenario from durations test data."""
     jobs = {
         f"JOB-{index:02d}": Job(
             id=f"JOB-{index:02d}",
@@ -48,6 +52,7 @@ def make_choice(
     follow_ups: tuple[DecisionFollowUp, ...] = (),
     icon: str = "adjust",
 ) -> DecisionChoice:
+    """Build make choice test data."""
     return DecisionChoice(
         id=choice_id,
         label=f"Choice {choice_id}",
@@ -64,6 +69,7 @@ def make_card(
     primary_job_id: str = "JOB-01",
     definition_id: str = "unit-decision",
 ) -> DecisionCard:
+    """Build make card test data."""
     card_choices = list(choices or (make_choice("choice-1"),))
     return DecisionCard(
         id="DEC-D001-Q01-UNIT-unit-decision",

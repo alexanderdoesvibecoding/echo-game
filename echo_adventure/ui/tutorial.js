@@ -1,3 +1,5 @@
+/** First-run tutorial progression and target highlighting. */
+
 "use strict";
 
 import { $ } from "./html.js";
@@ -26,19 +28,25 @@ const callbacks = {
   renderDevTools: () => {},
 };
 
+/** Override tutorial callbacks for application wiring or tests. */
 export function configureTutorial(overrides) {
   Object.assign(callbacks, overrides || {});
 }
 
+/** Report whether the tutorial overlay is currently active. */
 export function tutorialVisible() {
   return Number.isInteger(uiState.tutorialStep) && uiState.tutorialStep >= 0;
 }
 
+/** Build the local-storage key that identifies the current run. */
 function currentRunKey() {
   if (!uiState.state) return null;
+  // runCycleId distinguishes consecutive random runs that could theoretically
+  // resolve to the same seed.
   return `${uiState.runCycleId}:${uiState.state.seed ?? "run"}`;
 }
 
+/** Report whether the tutorial can start in the current UI state. */
 function tutorialEligible() {
   return Boolean(
     uiState.state
@@ -47,17 +55,21 @@ function tutorialEligible() {
   );
 }
 
+/** Start or resume the tutorial when the current run is eligible. */
 export function startTutorial() {
   const runKey = currentRunKey();
   if (!tutorialEligible() || !runKey || uiState.tutorialCompletedRunKey === runKey) {
     return false;
   }
+  // Completion is tracked per browser run rather than globally so each new game
+  // can introduce the interface again.
   uiState.tutorialStep = 0;
   renderTutorial();
   notifyTutorialChange();
   return true;
 }
 
+/** Clear tutorial state after a new run starts. */
 export function resetTutorial() {
   clearTutorialHighlight();
   const overlay = $("tutorialOverlay");
@@ -68,6 +80,7 @@ export function resetTutorial() {
   renderTutorial();
 }
 
+/** Move to the next tutorial step or finish the sequence. */
 export function advanceTutorial() {
   if (!tutorialVisible()) return;
   if (uiState.tutorialStep < TUTORIAL_STEPS.length - 1) {
@@ -79,10 +92,12 @@ export function advanceTutorial() {
   finishTutorial();
 }
 
+/** Dismiss the tutorial immediately. */
 export function skipTutorial() {
   if (tutorialVisible()) finishTutorial();
 }
 
+/** Persist completion and remove tutorial highlighting. */
 function finishTutorial() {
   uiState.tutorialCompletedRunKey = currentRunKey();
   uiState.tutorialStep = -1;
@@ -90,22 +105,27 @@ function finishTutorial() {
   notifyTutorialChange();
 }
 
+/** Ask the application to resynchronize timing and rendering. */
 function notifyTutorialChange() {
   callbacks.renderDecisionQueue();
   callbacks.renderDevTools();
 }
 
+/** Remove the active highlight from every target. */
 function clearTutorialHighlight() {
   for (const element of document.querySelectorAll(".tutorial-highlight")) {
     element.classList.remove("tutorial-highlight");
   }
 }
 
+/** Render the active tutorial step and its highlighted target. */
 export function renderTutorial() {
   const overlay = $("tutorialOverlay");
   if (!overlay) return;
 
   clearTutorialHighlight();
+  // The welcome overlay owns the screen first; tutorial state may be prepared
+  // but remains visually inactive until the welcome closes.
   const active = tutorialVisible() && tutorialEligible() && !uiState.welcomeModalVisible;
   overlay.classList.toggle("active", active);
   overlay.setAttribute("aria-hidden", active ? "false" : "true");
@@ -113,6 +133,8 @@ export function renderTutorial() {
 
   const step = TUTORIAL_STEPS[uiState.tutorialStep];
   const target = step ? $(step.targetId) : null;
+  // Missing markup should finish gracefully rather than trapping the player in
+  // a blocking tutorial overlay.
   if (!step || !target) {
     finishTutorial();
     return;
@@ -127,6 +149,7 @@ export function renderTutorial() {
     : "Next";
 
   const renderedStep = String(uiState.tutorialStep);
+  // Scroll and focus only on step transitions, not on every application render.
   if (overlay.dataset.renderedStep !== renderedStep) {
     overlay.dataset.renderedStep = renderedStep;
     target.scrollIntoView({ behavior: "smooth", block: "center" });

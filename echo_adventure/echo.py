@@ -16,9 +16,13 @@ def apply_omniscient_choice(
     """Apply exactly one globally optimal choice without advancing the day."""
     if state.final_item_completed:
         raise RuntimeError("ECHO cannot choose after completing every job.")
+    # Drift would invalidate the solved policy, so fail before applying an edge
+    # computed for a different compact runtime state.
     web.assert_runtime_matches(state, node_id)
     node = web.node(node_id)
     state.decision_cards[node.card.id] = node.card
+    # The builder has already compared every complete continuation; runtime
+    # ECHO therefore follows the stored optimal ID instead of choosing locally.
     choice = next(
         choice for choice in node.card.choices if choice.id == node.optimal_choice_id
     )
@@ -39,6 +43,8 @@ def advance_omniscient_day(
     """Apply ECHO's once-per-day work tick after all choices for the day."""
     if not transition.advances_day:
         raise RuntimeError("ECHO cannot advance before completing its daily choices.")
+    # Overtime cards are generated at runtime for the player only. A solved,
+    # globally optimal ECHO route must always finish inside the immutable web.
     if transition.enters_overtime:
         raise RuntimeError("ECHO's solved route crossed the runtime-generation boundary.")
     advance_day(state)

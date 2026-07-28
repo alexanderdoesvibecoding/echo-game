@@ -1,3 +1,5 @@
+/** State-aware developer controls for inspecting and automating a real run. */
+
 "use strict";
 
 import { $ } from "./html.js";
@@ -11,11 +13,15 @@ const callbacks = {
   skipToEnd: null,
 };
 
+/** Override developer callbacks for application wiring or tests. */
 export function configureDevTools(overrides) {
   Object.assign(callbacks, overrides || {});
 }
 
+/** Bind developer control events exactly once. */
 export function initDevTools() {
+  // Optional chaining keeps standard-mode pages safe even if a future shell
+  // omits developer controls entirely.
   $("devPanelToggle")?.addEventListener("click", () => {
     uiState.devPanelCollapsed = !uiState.devPanelCollapsed;
     renderDevTools();
@@ -45,11 +51,14 @@ export function initDevTools() {
   });
 }
 
+/** Render state-aware developer controls and availability. */
 export function renderDevTools() {
   const panel = $("devPanel");
   const developer = uiState.state?.developer;
   if (!panel) return;
 
+  // Presence of the server payload, not a client flag, is the authority for
+  // exposing developer controls.
   const visible = Boolean(developer);
   panel.classList.toggle("hidden", !visible);
   panel.setAttribute("aria-hidden", visible ? "false" : "true");
@@ -66,6 +75,8 @@ export function renderDevTools() {
       || uiState.modalVisible
   );
   const busy = Boolean(uiState.newRunLoading || uiState.devRequestInFlight);
+  // Busy state disables mutations in place; modal state hides them so controls
+  // cannot be triggered behind a blocking overlay.
   const controlsAvailable = !gameOver && !modalOpen;
 
   $("devPanelBody")?.classList.toggle("hidden", uiState.devPanelCollapsed);
@@ -100,6 +111,8 @@ export function renderDevTools() {
   setChecked("devShowDiagnostics", uiState.devShowDiagnostics);
   if ($("devStrategy")) $("devStrategy").value = uiState.devStrategy;
 
+  // Reachability is strategy-specific because each deterministic route may
+  // finish or enter overtime on a different day.
   const strategyDays = runState.reachableDaysByStrategy?.[uiState.devStrategy];
   const reachableDays = Array.isArray(strategyDays)
     ? strategyDays.filter(day => Number.isInteger(day) && day > uiState.state.day)
@@ -125,7 +138,9 @@ export function renderDevTools() {
   if ($("devNewGameBtn")) $("devNewGameBtn").disabled = busy;
 }
 
+/** Serialize one developer mutation and surface request failures. */
 async function runDeveloperRequest(callback, targetDay) {
+  // One latch serializes all developer mutations, including different buttons.
   if (!callback || uiState.devRequestInFlight || uiState.newRunLoading) return;
   uiState.devRequestInFlight = true;
   renderDevTools();
@@ -137,12 +152,14 @@ async function runDeveloperRequest(callback, targetDay) {
   }
 }
 
+/** Return a concise label for the current run phase. */
 function phaseLabel(gameOver, inDecisionWeb) {
   if (gameOver) return "Game over";
   if (uiState.state.finalAssembly?.active) return "Final assembly";
   return inDecisionWeb ? "Preplanned run" : "Extended play";
 }
 
+/** Populate the reachable-day selector without retaining stale options. */
 function renderTargetDays(days) {
   const select = $("devTargetDay");
   if (!select) return;
@@ -151,17 +168,20 @@ function renderTargetDays(days) {
     select.value = "";
     return;
   }
+  // Days are server-provided integers, so interpolation cannot introduce markup.
   select.innerHTML = days
     .map(day => `<option value="${day}">Day ${day}</option>`)
     .join("");
   select.value = String(days[0]);
 }
 
+/** Set an element's text when the optional control exists. */
 function setText(id, value) {
   const element = $(id);
   if (element) element.textContent = value;
 }
 
+/** Set an element's checkbox state when the optional control exists. */
 function setChecked(id, value) {
   const element = $(id);
   if (element) element.checked = Boolean(value);

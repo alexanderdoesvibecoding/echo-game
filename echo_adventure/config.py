@@ -29,10 +29,12 @@ class GameConfig:
     seed: int | None = None
 
     def __post_init__(self) -> None:
+        """Reject inconsistent or non-positive configuration values immediately."""
         _validate_config(self)
 
     @property
     def schedule_start(self) -> date:
+        """Parse the configured ISO date used as game day one."""
         try:
             return date.fromisoformat(self.start_date)
         except (TypeError, ValueError) as exc:
@@ -40,17 +42,22 @@ class GameConfig:
 
     def date_label_for_day(self, day: int) -> str:
         """Return the calendar label for any one-based game day."""
+        # Defensive coercion keeps API display code stable for missing or zero
+        # day values while preserving normal one-based calendar arithmetic.
         value = self.schedule_start + timedelta(days=max(1, int(day or 1)) - 1)
         return f"{_MONTH_NAMES[value.month - 1]} {value.day}"
 
 
 def resolve_seed(seed: int | None) -> int:
+    """Preserve an explicit seed or generate one with system entropy."""
     if seed is not None:
         return seed
     return random.SystemRandom().randint(100_000, 999_999_999)
 
 
 def _validate_config(config: GameConfig) -> None:
+    """Enforce cross-field invariants for a playable game configuration."""
+    # Timing and count fields share the same strictly-positive contract.
     for field in (
         "job_count",
         "min_job_duration_days",
@@ -69,4 +76,5 @@ def _validate_config(config: GameConfig) -> None:
         raise ValueError("Minimum daily decisions cannot exceed maximum daily decisions.")
     if config.max_campaign_day < config.max_job_duration_days:
         raise ValueError("Campaign horizon cannot be shorter than the longest initial job.")
+    # Accessing the property deliberately performs final date-format validation.
     config.schedule_start

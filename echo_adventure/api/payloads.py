@@ -17,11 +17,16 @@ _FINAL_ASSEMBLY_SUMMARY_COUNTER_DURATION_MS = 500
 
 
 class PayloadMixin:
+    """Serialize a live game session into the browser-facing API contract."""
+
     def state_payload(self) -> dict[str, Any]:
+        """Build the complete state payload for the current session phase."""
         with self.lock:
             self._ensure_cards()
             snapshot = calculate_snapshot(self.player_state)
             automated_snapshot = calculate_snapshot(self.automated_state)
+            # Build the standard-mode contract first. Developer-only data is
+            # appended below so it cannot leak through nested public helpers.
             payload: dict[str, Any] = {
                 "seed": self.seed,
                 "gameOver": self._game_over(),
@@ -29,6 +34,8 @@ class PayloadMixin:
                 "currentDate": self.config.date_label_for_day(self.player_state.current_day),
                 "scheduleStartDate": self.config.date_label_for_day(1),
                 "jobCount": len(self.player_state.jobs),
+                # Locked final assembly is an automatic resolution beat, so its
+                # display timings are intentionally shorter than normal days.
                 "dayCycleDurationMs": (
                     _FINAL_ASSEMBLY_DAY_CYCLE_DURATION_MS
                     if self.player_final_assembly_locked
@@ -55,9 +62,13 @@ class PayloadMixin:
                 "lastSummary": self._summary_payload(),
             }
             if self._game_over():
+                # Ensure ECHO's solved history is complete before comparing the
+                # two final routes.
                 self._finish_automated()
                 payload["finalReveal"] = self._final_payload()
             if self.dev_mode:
+                # This is the only top-level developer branch; standard mode
+                # omits the key entirely rather than returning empty metadata.
                 in_decision_web = (
                     not self._game_over()
                     and not self.player_in_overtime
@@ -79,6 +90,7 @@ class PayloadMixin:
             return payload
 
     def _final_assembly_payload(self) -> dict[str, Any] | None:
+        """Describe the player-only final assembly phase when active."""
         if not self.player_final_assembly_started:
             return None
         job_name = (
@@ -93,10 +105,13 @@ class PayloadMixin:
         }
 
     def _summary_payload(self) -> dict[str, Any] | None:
+        """Serialize the most recent day summary and metric changes."""
         if not self.last_result:
             return None
         snapshot = self.last_result.end_snapshot
         job_count = len(self.player_state.jobs)
+        # Start/end fields allow the browser to animate deltas without retaining
+        # a second copy of the previous session payload.
         return {
             "date": self.config.date_label_for_day(self.last_result.day),
             "completedToday": len(self.last_result.completed_job_ids),
@@ -113,6 +128,7 @@ class PayloadMixin:
         }
 
     def _build_remaining_jobs_payload(self) -> list[dict[str, Any]]:
+        """Serialize unfinished jobs in stable display order."""
         remaining_jobs = sorted(
             self.player_state.incomplete_jobs(),
             key=lambda job: job.id,
@@ -126,7 +142,10 @@ class PayloadMixin:
         ]
 
     def _build_puzzle_payload(self, completed_before: set[str]) -> dict[str, Any]:
+        """Build puzzle-piece placement data from completed jobs."""
         tiles = []
+        # Stable job order maps each job to the same image slice for the entire
+        # run, independent of completion order.
         for job in sorted(self.player_state.jobs.values(), key=lambda item: item.id):
             tiles.append(
                 {
@@ -144,6 +163,7 @@ class PayloadMixin:
         return {"tiles": tiles}
 
     def _final_payload(self) -> dict[str, Any]:
+        """Build the terminal comparison payload once the run is over."""
         return {
             "player": self._final_actor_payload(self.player_state),
             "automated": self._final_actor_payload(self.automated_state),
@@ -152,12 +172,15 @@ class PayloadMixin:
         }
 
     def _completion_history_payload(self) -> dict[str, Any]:
+        """Build a day-by-day completion series for the final chart."""
         return {"decisionPoints": self._decision_chart_payload()}
 
     def _decision_chart_payload(self) -> list[dict[str, Any]]:
         """Align player and ECHO decisions across every game day through completion."""
         player_by_day: dict[int, list[Any]] = {}
         echo_by_day: dict[int, list[Any]] = {}
+        # Index each actor independently because divergent routes may see
+        # different events or question counts on the same calendar day.
         for record in self.player_state.decision_history:
             if record.actor == "player":
                 player_by_day.setdefault(record.day, []).append(record)
@@ -173,6 +196,7 @@ class PayloadMixin:
             )
             if day is not None
         ]
+        # Include completion dates even when the last days contain no questions.
         last_day = max(
             [1, *player_by_day.keys(), *echo_by_day.keys(), *completion_days]
         )
@@ -196,6 +220,8 @@ class PayloadMixin:
                     if echo_record
                     else None
                 )
+                # Missing actor slots remain null rather than borrowing the other
+                # route's question context.
                 player_decision = (
                     _chart_decision_payload(
                         player_record,
@@ -234,6 +260,7 @@ class PayloadMixin:
         return points
 
     def _final_actor_payload(self, state: SimulationState) -> dict[str, Any]:
+        """Serialize one actor's final metrics and decision route."""
         return {
             "completionDay": state.completion_day,
             "completion": (
@@ -252,6 +279,8 @@ class PayloadMixin:
     ) -> dict[str, Any]:
         """Return an actor projection positioned against the shared story date."""
         start_day = 1
+        # Both timelines advance against the player's current story date, while
+        # a completed actor retains its own fixed endpoint below.
         story_day = max(start_day, self.player_state.current_day)
         if snapshot.final_item_completed and state.completion_day is not None:
             # A finished actor's endpoint is its actual completion day. Using the
@@ -284,6 +313,9 @@ class PayloadMixin:
         }
 
     def _card_payload(self, card: DecisionCard) -> dict[str, Any]:
+        """Serialize one decision card and its available choices."""
+        # Compute preference only in developer mode; standard payloads must not
+        # expose information that would bias a manual player.
         preference = self._choice_preference_payload(card) if self.dev_mode else None
         payload = {
             "id": card.id,
@@ -315,6 +347,9 @@ class PayloadMixin:
         return payload
 
     def _choice_preference_payload(self, card: DecisionCard) -> dict[str, Any]:
+        """Explain which choice ECHO prefers on this card."""
+        # Preference semantics differ by phase, so the payload names both the
+        # chosen ID and the reasoning basis used to derive it.
         if card.player_only:
             choice_id = card.echo_choice_id
             kind = "player-only-recommendation"
@@ -366,6 +401,9 @@ class PayloadMixin:
         choice: DecisionChoice,
         preference: dict[str, Any],
     ) -> dict[str, Any]:
+        """Build developer-only projections for one choice."""
+        # Report raw and public score spaces together: raw values drive solving,
+        # while the bounded public values are what the player sees.
         raw_before = self.player_state.decision_score
         raw_after = round(raw_before + choice.score_delta, 2)
         return {
@@ -391,6 +429,7 @@ class PayloadMixin:
         self,
         card: DecisionCard,
     ) -> dict[str, Any] | None:
+        """Describe the catalog or follow-up source of a generated card."""
         if card.follow_up_source_day is None:
             return None
         job = self.player_state.jobs.get(card.primary_job_id)
@@ -412,6 +451,9 @@ class PayloadMixin:
         card: DecisionCard,
         choice: DecisionChoice,
     ) -> dict[str, Any]:
+        """Serialize a choice's possible follow-up events."""
+        # Runtime phases inspect live pending state. Preplanned inspection walks
+        # immutable graph branches and is safe to cache by node/choice.
         if self.player_in_overtime or card.player_only:
             return inspect_runtime_follow_up(
                 self.player_state,
@@ -437,7 +479,10 @@ class PayloadMixin:
         job_id: str,
         delta: int,
     ) -> dict[str, Any]:
+        """Describe one job-duration mutation for diagnostics."""
         job = self.player_state.jobs.get(job_id)
+        # Keep stale effects visible to diagnostics but mark them non-applying,
+        # matching the runtime effect guard.
         applies = bool(job and not job.is_complete)
         remaining_before = max(0, job.remaining_days) if job else None
         remaining_after = (
@@ -460,6 +505,9 @@ class PayloadMixin:
         card: DecisionCard,
         choice: DecisionChoice,
     ) -> dict[str, Any]:
+        """Project completion after a choice in the current phase."""
+        # Only immutable-web outcomes are exact; runtime and player-only cards
+        # can describe the immediate schedule but not all later choices.
         if not self.player_in_overtime and not card.player_only:
             outcome = preplanned_choice_outcome(
                 self.decision_web,
@@ -503,11 +551,13 @@ def _choice_payload(
     *,
     developer: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Build the public, behavior-neutral fields for one decision choice."""
     payload = {
         "id": choice.id,
         "label": choice.label,
         "icon": choice.icon_key,
     }
+    # Omitting rather than nulling this key preserves strict standard isolation.
     if developer is not None:
         payload["developer"] = developer
     return payload
@@ -538,6 +588,8 @@ def _chart_decision_payload(
         "eventScope": card.event_scope if card else "route-specific",
     }
     if include_echo_preference:
+        # Recompute alignment from the card when possible so the final chart
+        # reflects the exact solved preference stored with that event.
         preferred_choice = (
             next(
                 (
@@ -570,10 +622,13 @@ def _echo_comparison_state(
     player_card: DecisionCard | None,
     echo_card: DecisionCard | None,
 ) -> str:
+    """Classify a recorded choice relative to ECHO's preferred choice."""
     if not player_card or not echo_card:
         return "different-events"
     player_event_id = player_card.event_id or player_card.id
     echo_event_id = echo_card.event_id or echo_card.id
+    # Semantic event IDs can match across distinct DAG nodes; primary-job
+    # context distinguishes seeing the same event in a different situation.
     if player_event_id != echo_event_id:
         return "different-events"
     if player_card.primary_job_id == echo_card.primary_job_id:
@@ -582,5 +637,6 @@ def _echo_comparison_state(
 
 
 def _job_label(job_id: str) -> str:
+    """Return a display label for a job identifier."""
     suffix = job_id.rsplit("-", 1)[-1]
     return f"Job {int(suffix)}"

@@ -1,3 +1,5 @@
+/** Summary, puzzle, decision queue, and day-clock UI tests. */
+
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
@@ -31,6 +33,7 @@ const {
   updateDayClock,
 } = await import("../../echo_adventure/ui/dayClock.js");
 
+/** Restore shared UI state before each summary or clock test. */
 function resetUiState() {
   Object.assign(uiState, {
     state: null,
@@ -59,6 +62,7 @@ function resetUiState() {
   });
 }
 
+/** Build a minimal browser payload with caller-supplied overrides. */
 function statePayload(overrides = {}) {
   return {
     seed: 123,
@@ -101,6 +105,7 @@ beforeEach(() => {
   resetUiState();
 });
 
+// Verifies submarine puzzle renders assembled, waiting, and accessible image slices.
 test("submarine puzzle renders assembled, waiting, and accessible image slices", () => {
   const markup = renderSubmarinePuzzle(puzzle, { showCaption: true });
 
@@ -113,6 +118,7 @@ test("submarine puzzle renders assembled, waiting, and accessible image slices",
 });
 
 
+// Verifies submarine puzzle handles empty data and assembled-only animation options.
 test("submarine puzzle handles empty data and assembled-only animation options", () => {
   assert.equal(renderSubmarinePuzzle(null), "");
   assert.equal(renderSubmarinePuzzle({ tiles: [] }), "");
@@ -132,6 +138,7 @@ test("submarine puzzle handles empty data and assembled-only animation options",
 });
 
 
+// Verifies waiting puzzle sections use a deterministic scrambled order.
 test("waiting puzzle sections use a deterministic scrambled order", () => {
   const waitingPuzzle = {
     tiles: [
@@ -150,6 +157,7 @@ test("waiting puzzle sections use a deterministic scrambled order", () => {
   assert.match(first, /--slice-count:4/);
 });
 
+// Verifies summary renders the live assembly and current daily metrics.
 test("summary renders the live assembly and current daily metrics", () => {
   dom.element("summarySection");
   dom.element("summaryGrid");
@@ -199,10 +207,12 @@ test("summary renders the live assembly and current daily metrics", () => {
   assert.doesNotMatch(body, /Subjobs/);
 });
 
+// Verifies summary counters support integers, ratios, and descending values.
 test("summary counters support integers, ratios, and descending values", () => {
   const integer = { dataset: { summaryCountFrom: "0", summaryCountTo: "7", summaryCountDecimals: "0", summaryCountSuffix: "" }, textContent: "" };
   const ratio = { dataset: { summaryCountFrom: "5", summaryCountTo: "3", summaryCountDecimals: "0", summaryCountSuffix: "/6" }, textContent: "" };
   const container = {
+    /** Implement the querySelectorAll operation for this module. */
     querySelectorAll(selector) {
       assert.equal(selector, "[data-summary-count-to]");
       return [integer, ratio];
@@ -215,6 +225,7 @@ test("summary counters support integers, ratios, and descending values", () => {
 });
 
 
+// Verifies summary counters ignore invalid entries and modal resets when hidden.
 test("summary counters ignore invalid entries and modal resets when hidden", () => {
   const invalid = {
     dataset: {
@@ -226,6 +237,7 @@ test("summary counters ignore invalid entries and modal resets when hidden", () 
     textContent: "unchanged",
   };
   animateSummaryCounters({
+    /** Implement the querySelectorAll operation for this module. */
     querySelectorAll() {
       return [invalid];
     },
@@ -246,6 +258,7 @@ test("summary counters ignore invalid entries and modal resets when hidden", () 
 });
 
 
+// Verifies summary counters animate through intermediate and final values.
 test("summary counters animate through intermediate and final values", () => {
   const counter = {
     dataset: {
@@ -261,6 +274,7 @@ test("summary counters animate through intermediate and final values", () => {
   globalThis.requestAnimationFrame = callback => callback(timestamps.shift());
   try {
     animateSummaryCounters({
+      /** Implement the querySelectorAll operation for this module. */
       querySelectorAll() {
         return [counter];
       },
@@ -273,6 +287,7 @@ test("summary counters animate through intermediate and final values", () => {
   assert.equal(timestamps.length, 0);
 });
 
+// Verifies day clock creates deterministic decision thresholds and blocks at the right states.
 test("day clock creates deterministic decision thresholds and blocks at the right states", () => {
   uiState.runCycleId = 2;
   uiState.state = statePayload({
@@ -308,6 +323,7 @@ test("day clock creates deterministic decision thresholds and blocks at the righ
   assert.equal(decisionInteractionBlocked(), true);
 });
 
+// Verifies day clock markup and timeline updates expose both player and ECHO progress.
 test("day clock markup and timeline updates expose both player and ECHO progress", () => {
   uiState.state = statePayload();
   const markup = renderDayClock();
@@ -339,6 +355,7 @@ test("day clock markup and timeline updates expose both player and ECHO progress
 });
 
 
+// Verifies timeline clamps invalid progress and updates an existing completion label.
 test("timeline clamps invalid progress and updates an existing completion label", () => {
   uiState.state = statePayload({
     currentDate: "",
@@ -390,6 +407,7 @@ test("timeline clamps invalid progress and updates an existing completion label"
   );
 });
 
+// Verifies decision queue reveals due choices, tracks selection, and submits the selected pair.
 test("decision queue reveals due choices, tracks selection, and submits the selected pair", async () => {
   const section = dom.element("decisionQueueSection");
   const body = dom.element("decisionQueueBody");
@@ -663,6 +681,7 @@ test("decision queue reveals due choices, tracks selection, and submits the sele
   assert.match(body.innerHTML, /Sonar &lt;Final&gt;/);
 });
 
+// Verifies inline decision area contains the shared player and ECHO clock.
 test("inline decision area contains the shared player and ECHO clock", () => {
   dom.element("inlineDecisionBody");
   uiState.state = statePayload();
@@ -673,6 +692,7 @@ test("inline decision area contains the shared player and ECHO clock", () => {
   assert.match(dom.element("inlineDecisionBody").innerHTML, /data-timeline-actor="echo"/);
 });
 
+// Verifies automatic clock advances at 100 percent and stops cleanly at game over.
 test("automatic clock advances at 100 percent and stops cleanly at game over", () => {
   let prepareCalls = 0;
   let inlineRenders = 0;
@@ -719,6 +739,7 @@ test("automatic clock advances at 100 percent and stops cleanly at game over", (
   assert.equal(uiState.dayCycleProgress, 0);
 });
 
+// Verifies automatic clock pauses at a due decision and while overlays are active.
 test("automatic clock pauses at a due decision and while overlays are active", () => {
   let prepareCalls = 0;
   let inlineRenders = 0;
@@ -767,6 +788,7 @@ test("automatic clock pauses at a due decision and while overlays are active", (
   assert.equal(prepareCalls, 1);
 });
 
+// Verifies summary and decision queue hide or idle safely when content is unavailable.
 test("summary and decision queue hide or idle safely when content is unavailable", () => {
   dom.element("summarySection");
   dom.element("summaryGrid");

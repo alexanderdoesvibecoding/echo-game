@@ -21,6 +21,7 @@ class Job:
 
     @property
     def is_complete(self) -> bool:
+        """Report whether this job has reached its terminal state."""
         return self.status == JobStatus.COMPLETE
 
 
@@ -82,6 +83,7 @@ class PendingFollowUp:
 
 @dataclass
 class DecisionRecord:
+    """Record one actor's choice and its resulting schedule and score effects."""
     day: int
     card_id: str
     card_title: str
@@ -96,6 +98,7 @@ class DecisionRecord:
 
 @dataclass(frozen=True)
 class MetricSnapshot:
+    """Capture the aggregate schedule metrics at one point in time."""
     jobs_remaining: int
     total_remaining_days: int
     projected_completion_day: int
@@ -104,12 +107,14 @@ class MetricSnapshot:
 
 @dataclass
 class Scenario:
+    """Bundle a resolved seed with its generated starting jobs."""
     seed: int
     jobs: dict[str, Job]
 
 
 @dataclass
 class SimulationState:
+    """Hold all mutable simulation and decision state for one actor."""
     seed: int
     jobs: dict[str, Job]
     current_day: int = 1
@@ -125,4 +130,5 @@ class SimulationState:
     pending_follow_ups: list[PendingFollowUp] = field(default_factory=list)
 
     def incomplete_jobs(self) -> list[Job]:
+        """Return unfinished jobs in their stable scenario order."""
         return [job for job in self.jobs.values() if not job.is_complete]

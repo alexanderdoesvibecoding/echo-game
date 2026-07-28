@@ -1,3 +1,5 @@
+"""Focused boundary tests for internal helpers and defensive branches."""
+
 from __future__ import annotations
 
 import builtins
@@ -98,6 +100,7 @@ def _web_node(
     state: DecisionWebState | None = None,
     card: DecisionCard | None = None,
 ) -> tuple[str, DecisionWebNode]:
+    """Support the test boundary for web node."""
     node_choices = choices or [make_choice("choice-1")]
     node_card = card or make_card(
         *node_choices,
@@ -117,6 +120,7 @@ def _web_node(
 
 
 def _automation_web() -> tuple[DecisionWeb, dict[str, DecisionChoice]]:
+    """Support the test boundary for automation web."""
     choices = {
         "continue": make_choice("continue", score=1.25),
         "overtime": make_choice("overtime", score=-2),
@@ -172,6 +176,7 @@ def _automation_web() -> tuple[DecisionWeb, dict[str, DecisionChoice]]:
 def test_automation_strategy_validation_accepts_every_supported_value(
     strategy: str,
 ) -> None:
+    """Verify that automation strategy validation accepts every supported value."""
     assert validate_automation_strategy(strategy) == strategy
 
 
@@ -182,11 +187,13 @@ def test_automation_strategy_validation_accepts_every_supported_value(
 def test_automation_strategy_validation_rejects_every_other_shape(
     strategy: object,
 ) -> None:
+    """Verify that automation strategy validation rejects every other shape."""
     with pytest.raises(ValueError, match="Unknown automated strategy"):
         validate_automation_strategy(strategy)
 
 
 def test_preplanned_choice_selection_and_outcomes_cover_all_edge_types() -> None:
+    """Verify that preplanned choice selection and outcomes cover all edge types."""
     web, choices = _automation_web()
     context = AutomationContext(seed=19, start_token="unit-start")
 
@@ -267,6 +274,7 @@ def test_preplanned_choice_selection_and_outcomes_cover_all_edge_types() -> None
 
 
 def test_runtime_choice_selection_handles_player_only_and_last_job_safety() -> None:
+    """Verify that runtime choice selection handles player only and last job safety."""
     state = initialize_state(scenario_from_durations(4))
     context = AutomationContext(seed=7, start_token="runtime")
     delay_one = make_choice("delay-one", changes={"JOB-01": 1}, score=10)
@@ -289,6 +297,7 @@ def test_runtime_choice_selection_handles_player_only_and_last_job_safety() -> N
 
 
 def test_reachable_preplanned_days_supports_pending_edges_and_detects_cycles() -> None:
+    """Verify that reachable preplanned days supports pending edges and detects cycles."""
     web, _ = _automation_web()
     context = AutomationContext(seed=5, start_token="walk")
 
@@ -349,6 +358,7 @@ def _scheduled_follow_up_web(
     *,
     target_definition_id: str = "narrow-drift-found",
 ) -> tuple[DecisionWeb, DecisionChoice]:
+    """Support the test boundary for scheduled follow up web."""
     trigger = make_choice("choice-1")
     trigger_card = make_card(trigger, definition_id="calibration-drift")
     root_id, root = _web_node(
@@ -418,6 +428,7 @@ def _scheduled_follow_up_web(
 
 
 def test_preplanned_follow_up_inspection_reports_variants_and_cancellation() -> None:
+    """Verify that preplanned follow up inspection reports variants and cancellation."""
     web, trigger = _scheduled_follow_up_web()
     jobs = scenario_from_durations(4).jobs
 
@@ -453,6 +464,7 @@ def test_preplanned_follow_up_inspection_reports_variants_and_cancellation() -> 
 
 
 def test_preplanned_and_runtime_follow_up_inspection_handles_unscheduled_edges() -> None:
+    """Verify that preplanned and runtime follow up inspection handles unscheduled edges."""
     web, choices = _automation_web()
     jobs = scenario_from_durations(3).jobs
     assert inspect_preplanned_follow_up(
@@ -490,6 +502,7 @@ def test_preplanned_and_runtime_follow_up_inspection_handles_unscheduled_edges()
 
 
 def test_developer_inspection_helpers_cover_source_and_completed_job_boundaries() -> None:
+    """Verify that developer inspection helpers cover source and completed job boundaries."""
     state = DecisionWebState(
         3,
         0,
@@ -545,6 +558,7 @@ def test_developer_inspection_helpers_cover_source_and_completed_job_boundaries(
 
 
 class _ReviewHarness(ReviewMixin):
+    """Provide a lightweight ReviewHarness test fixture."""
     pass
 
 
@@ -558,6 +572,7 @@ def _review_harness(
     echo_unfinished: int,
     aligned: bool,
 ) -> _ReviewHarness:
+    """Support the test boundary for review harness."""
     player_choice = make_choice("player-choice", score=-1)
     echo_choice = make_choice("echo-choice", score=1)
     card = make_card(
@@ -648,6 +663,7 @@ def test_final_review_classifies_every_permitted_outcome(
     expected_outcome: str,
     headline_fragment: str,
 ) -> None:
+    """Verify that final review classifies every permitted outcome."""
     review = _review_harness(
         player_day=values[0],
         echo_day=values[1],
@@ -664,6 +680,7 @@ def test_final_review_classifies_every_permitted_outcome(
 
 
 def test_final_review_rejects_a_route_that_would_surpass_echo() -> None:
+    """Verify that final review rejects a route that would surpass echo."""
     harness = _review_harness(
         player_day=3,
         echo_day=4,
@@ -689,6 +706,7 @@ def test_review_turning_point_explains_positive_negative_and_neutral_deltas(
     player_choice_score: float,
     expected: str,
 ) -> None:
+    """Verify that review turning point explains positive negative and neutral deltas."""
     harness = _review_harness(
         player_day=5,
         echo_day=4,
@@ -714,6 +732,7 @@ def test_review_turning_point_explains_positive_negative_and_neutral_deltas(
 
 
 def test_review_helpers_format_counts_changes_and_overtime_fallback() -> None:
+    """Verify that review helpers format counts changes and overtime fallback."""
     jobs = scenario_from_durations(2, 3, 4).jobs
     assert _format_day_count(1) == "1 job-day"
     assert _format_day_count(1.5) == "1.5 job-days"
@@ -760,6 +779,7 @@ def test_review_helpers_format_counts_changes_and_overtime_fallback() -> None:
 
 
 def test_payload_helpers_preserve_fallback_context_and_optional_diagnostics() -> None:
+    """Verify that payload helpers preserve fallback context and optional diagnostics."""
     choice = make_choice("choice-1")
     assert _choice_payload(choice) == {
         "id": "choice-1",
@@ -814,6 +834,7 @@ def test_payload_helpers_preserve_fallback_context_and_optional_diagnostics() ->
 
 
 def test_decision_card_helpers_cover_empty_final_and_follow_up_boundaries() -> None:
+    """Verify that decision card helpers cover empty final and follow up boundaries."""
     completed = initialize_state(scenario_from_durations(1))
     completed.jobs["JOB-01"].status = JobStatus.COMPLETE
     completed.completed_jobs.add("JOB-01")
@@ -859,6 +880,7 @@ def test_decision_card_helpers_cover_empty_final_and_follow_up_boundaries() -> N
 
 
 def test_decision_definition_helpers_preserve_semantics_and_safe_labels() -> None:
+    """Verify that decision definition helpers preserve semantics and safe labels."""
     base = next(
         item for item in BASE_DEFINITIONS if not item.shared_across_routes
     )
@@ -916,6 +938,7 @@ def test_decision_definition_helpers_preserve_semantics_and_safe_labels() -> Non
 
 
 def test_follow_up_rolls_are_deterministic_and_clamp_probability_bounds() -> None:
+    """Verify that follow up rolls are deterministic and clamp probability bounds."""
     state = initialize_state(scenario_from_durations(3))
     choice = make_choice("choice-1")
     card = make_card(choice)
@@ -947,17 +970,21 @@ def test_follow_up_rolls_are_deterministic_and_clamp_probability_bounds() -> Non
 
 
 class _Output(StringIO):
+    """Provide a lightweight Output test fixture."""
     def __init__(self, *, interactive: bool = False) -> None:
+        """Initialize this test fixture."""
         super().__init__()
         self.interactive = interactive
 
     def isatty(self) -> bool:
+        """Support the test boundary for isatty."""
         return self.interactive
 
 
 def test_initialization_status_reports_success_but_not_false_success(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify that initialization status reports success but not false success."""
     output = _Output()
     monkeypatch.setattr(server_module.sys, "stdout", output)
     with _initialization_status():
@@ -975,18 +1002,23 @@ def test_initialization_status_reports_success_but_not_false_success(
 def test_interactive_initialization_status_starts_and_joins_animation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify that interactive initialization status starts and joins animation."""
     output = _Output(interactive=True)
     events: list[str] = []
 
     class FakeThread:
+        """Provide a lightweight FakeThread test fixture."""
         def __init__(self, *, target, daemon):
+            """Initialize this test fixture."""
             assert callable(target)
             assert daemon is True
 
         def start(self) -> None:
+            """Support the test boundary for start."""
             events.append("start")
 
         def join(self) -> None:
+            """Support the test boundary for join."""
             events.append("join")
 
     monkeypatch.setattr(server_module.sys, "stdout", output)
@@ -1004,20 +1036,25 @@ def test_run_ui_server_owns_and_closes_its_server(
     capsys: pytest.CaptureFixture[str],
     interrupt: bool,
 ) -> None:
+    """Verify that run ui server owns and closes its server."""
     created: list[object] = []
 
     class FakeServer:
+        """Provide a lightweight FakeServer test fixture."""
         def __init__(self, address, handler):
+            """Initialize this test fixture."""
             self.address = address
             self.handler = handler
             self.closed = False
             created.append(self)
 
         def serve_forever(self) -> None:
+            """Support the test boundary for serve forever."""
             if interrupt:
                 raise KeyboardInterrupt
 
         def server_close(self) -> None:
+            """Support the test boundary for server close."""
             self.closed = True
 
     fake_store = SimpleNamespace(dev_mode=True)
@@ -1042,12 +1079,15 @@ def test_run_ui_server_owns_and_closes_its_server(
 
 
 def test_request_handler_defensive_paths_and_seed_conversion() -> None:
+    """Verify that request handler defensive paths and seed conversion."""
     from .test_session_payloads_server import HandlerHarness, dispatch, handler_type
 
     class Store:
+        """Provide a lightweight Store test fixture."""
         dev_mode = False
 
         def advance_payload(self):
+            """Support the test boundary for advance payload."""
             raise RuntimeError("boom")
 
     Handler = handler_type(Store())
@@ -1065,11 +1105,15 @@ def test_request_handler_defensive_paths_and_seed_conversion() -> None:
     assert failed.body_json() == {"error": "Server error: boom"}
 
     class IntegerLike:
+        """Provide a lightweight IntegerLike test fixture."""
         def __int__(self) -> int:
+            """Implement the int protocol for this test double."""
             return 17
 
     class BadInteger:
+        """Provide a lightweight BadInteger test fixture."""
         def __int__(self) -> int:
+            """Implement the int protocol for this test double."""
             raise OverflowError
 
     assert _parse_optional_seed(IntegerLike()) == 17
@@ -1080,6 +1124,7 @@ def test_request_handler_defensive_paths_and_seed_conversion() -> None:
 def test_process_memory_probes_cover_linux_unknown_and_peak_units(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify that process memory probes cover linux unknown and peak units."""
     monkeypatch.setattr(session_module.sys, "platform", "linux")
     monkeypatch.setattr(
         builtins,
@@ -1115,6 +1160,7 @@ def _fast_session(
     *,
     dev_mode: bool = True,
 ) -> session_module.GameSession:
+    """Support the test boundary for fast session."""
     monkeypatch.setattr(
         session_module,
         "GameConfig",
@@ -1128,6 +1174,7 @@ def test_session_skip_target_rejects_non_integer_values(
     monkeypatch: pytest.MonkeyPatch,
     target: object,
 ) -> None:
+    """Verify that session skip target rejects non integer values."""
     session = _fast_session(monkeypatch)
     with pytest.raises(ValueError, match="integer or null"):
         session._validate_skip_target(target)
@@ -1136,6 +1183,7 @@ def test_session_skip_target_rejects_non_integer_values(
 def test_session_skip_target_and_reachability_respect_run_phase(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify that session skip target and reachability respect run phase."""
     session = _fast_session(monkeypatch)
     assert session._validate_skip_target(None) is None
     assert session._validate_skip_target(2) == 2
@@ -1156,6 +1204,7 @@ def test_session_skip_target_and_reachability_respect_run_phase(
 def test_session_ready_to_advance_covers_each_phase(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify that session ready to advance covers each phase."""
     session = _fast_session(monkeypatch)
     assert session.ready_to_advance() is False
     session.questions_answered_today = session.decision_total_today
@@ -1179,6 +1228,7 @@ def test_session_ready_to_advance_covers_each_phase(
 def test_session_internal_guards_fail_loudly_on_impossible_states(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify that session internal guards fail loudly on impossible states."""
     session = _fast_session(monkeypatch)
     with pytest.raises(RuntimeError, match="slot mismatch"):
         session._apply_echo_choice(2)
@@ -1218,16 +1268,21 @@ def test_session_internal_guards_fail_loudly_on_impossible_states(
 
 
 def test_session_store_delegates_advance_and_protects_skip() -> None:
+    """Verify that session store delegates advance and protects skip."""
     calls: list[object] = []
 
     class FakeSession:
+        """Provide a lightweight FakeSession test fixture."""
         def advance_day(self) -> None:
+            """Support the test boundary for advance day."""
             calls.append("advance")
 
         def skip(self, strategy, target_day) -> None:
+            """Support the test boundary for skip."""
             calls.append(("skip", strategy, target_day))
 
         def state_payload(self) -> dict[str, object]:
+            """Support the test boundary for state payload."""
             return {"calls": list(calls)}
 
     store = session_module.SessionStore.__new__(session_module.SessionStore)

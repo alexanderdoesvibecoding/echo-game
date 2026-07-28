@@ -1,3 +1,5 @@
+/** Welcome, settings, new-run, and theme modal state management. */
+
 "use strict";
 
 import { uiState } from "./state.js";
@@ -11,10 +13,12 @@ const callbacks = {
   showNewRunError: () => {},
 };
 
+/** Override modal callbacks for application wiring or tests. */
 export function configureModals(overrides) {
   Object.assign(callbacks, overrides || {});
 }
 
+/** Show or hide the welcome overlay and refresh its content. */
 export function renderWelcomeModal() {
   const overlay = document.getElementById("welcomeModalOverlay");
   if (!overlay) return;
@@ -22,6 +26,7 @@ export function renderWelcomeModal() {
   overlay.classList.toggle("active", uiState.welcomeModalVisible);
 }
 
+/** Render run-specific welcome copy and puzzle artwork. */
 function renderWelcomeContent() {
   const visual = $("welcomeSubmarineVisual");
   const blurb = $("welcomeBlurb");
@@ -32,6 +37,8 @@ function renderWelcomeContent() {
 
   if (!blurb) return;
 
+  // The shell can render before initial state arrives, so copy has a generic
+  // fallback rather than flashing an invalid zero-job run.
   const jobCount = Number(uiState.state?.jobCount) || 0;
   const jobText = jobCount ? `${jobCount} job${jobCount === 1 ? "" : "s"}` : "jobs";
   blurb.innerHTML = `
@@ -41,7 +48,9 @@ function renderWelcomeContent() {
   `;
 }
 
+/** Dismiss the welcome overlay unless new-run loading locks it. */
 export function closeWelcomeModal() {
+  // Tutorial timing begins only after the welcome explanation is dismissed.
   uiState.welcomeModalVisible = false;
   renderWelcomeModal();
   startTutorial();
@@ -49,16 +58,19 @@ export function closeWelcomeModal() {
   callbacks.renderDevTools?.();
 }
 
+/** Toggle the settings menu and update its accessibility state. */
 export function toggleSettingsMenu() {
   uiState.settingsMenuOpen = !uiState.settingsMenuOpen;
   renderSettingsMenu();
 }
 
+/** Close the settings menu and update its accessibility state. */
 export function closeSettingsMenu() {
   uiState.settingsMenuOpen = false;
   renderSettingsMenu();
 }
 
+/** Synchronize settings menu visibility with browser state. */
 export function renderSettingsMenu() {
   const panel = $("settingsPanel");
   const button = $("settingsMenuBtn");
@@ -67,11 +79,15 @@ export function renderSettingsMenu() {
   button.setAttribute("aria-expanded", uiState.settingsMenuOpen ? "true" : "false");
 }
 
+/** Bind new-run modal events exactly once. */
 export function initNewRunModal() {
   $("newRunSeededToggle")?.addEventListener("change", event => {
     uiState.devSeededRun = Boolean(event.target.checked);
     renderNewRunModal();
   });
+  /** Opt into seeded mode when the user interacts directly with the seed field. */
+  // Interacting directly with the seed field opts into seeded mode, avoiding a
+  // second required toggle while still keeping random mode the default.
   const enableSeededRun = () => {
     if (
       !uiState.state?.developer
@@ -88,9 +104,12 @@ export function initNewRunModal() {
   $("newRunSeedInput")?.addEventListener("input", enableSeededRun);
 }
 
+/** Populate and display the new-run form. */
 export function openNewRunModal() {
   closeSettingsMenu();
   const developerMode = Boolean(uiState.state?.developer);
+  // Every open starts in random mode even though developer mode pre-fills the
+  // current seed as a convenient replay reference.
   uiState.devSeededRun = false;
   if ($("newRunSeedInput")) {
     $("newRunSeedInput").value = (
@@ -106,6 +125,7 @@ export function openNewRunModal() {
   callbacks.renderDevTools?.();
 }
 
+/** Dismiss the new-run modal when no request is in flight. */
 export function closeNewRunModal() {
   if (uiState.newRunLoading) return;
   uiState.newRunModalVisible = false;
@@ -115,6 +135,7 @@ export function closeNewRunModal() {
   callbacks.renderDevTools?.();
 }
 
+/** Render new-run form, loading, and disabled states. */
 export function renderNewRunModal() {
   const overlay = $("newRunModalOverlay");
   if (!overlay) return;
@@ -122,6 +143,8 @@ export function renderNewRunModal() {
   overlay.classList.toggle("active", uiState.newRunModalVisible);
   overlay.setAttribute("aria-busy", uiState.newRunLoading ? "true" : "false");
 
+  // Loading swaps form content for a locked status panel; all dismissal buttons
+  // are also disabled below to protect the in-flight replacement.
   $("newRunSettings")?.classList.toggle("hidden", uiState.newRunLoading);
   $("newRunLoading")?.classList.toggle("hidden", !uiState.newRunLoading);
   $("devSeedField")?.classList.toggle("hidden", !developerMode);
@@ -153,17 +176,21 @@ export function renderNewRunModal() {
   }
 }
 
+/** Restore the saved theme preference. */
 export function initDarkMode() {
+  // Theme is a browser-local presentation preference and never enters game state.
   const saved = localStorage.getItem("theme") || "light";
   document.documentElement.setAttribute("data-theme", saved);
   updateThemeButton(saved);
 }
 
+/** Update the theme button label for the active theme. */
 function updateThemeButton(theme) {
   const btn = $("themeMenuBtn");
   if (btn) btn.textContent = theme === "dark" ? "Light Mode" : "Dark Mode";
 }
 
+/** Toggle and persist the browser theme preference. */
 export function toggleDarkMode() {
   const current = document.documentElement.getAttribute("data-theme") || "light";
   const next = current === "dark" ? "light" : "dark";

@@ -1,3 +1,5 @@
+"""Catalog-wide contract and ECHO guardrail regression tests."""
+
 from __future__ import annotations
 
 import pytest
@@ -30,6 +32,7 @@ from .helpers import scenario_from_durations, small_config
     ids=DEFINITIONS_BY_ID,
 )
 def test_every_catalog_definition_builds_a_truthful_preplanned_card(definition) -> None:
+    """Verify that every catalog definition builds a truthful preplanned card."""
     state = initialize_state(scenario_from_durations(4, 5, 6))
     targets = list(state.jobs.values())
     trigger_delta = 2 if definition.is_follow_up else 0
@@ -119,6 +122,7 @@ def test_every_catalog_definition_builds_a_truthful_preplanned_card(definition) 
     ids=DEFINITIONS_BY_ID,
 )
 def test_every_catalog_choice_builds_bounded_runtime_job_day_effects(definition) -> None:
+    """Verify that every catalog choice builds bounded runtime job day effects."""
     targets = list(scenario_from_durations(5, 5, 5).jobs.values())
     trigger_delta = -2 if definition.is_follow_up else 0
 
@@ -140,6 +144,7 @@ def test_every_catalog_choice_builds_bounded_runtime_job_day_effects(definition)
 
 
 def test_daily_generation_handles_completed_work_and_exhausted_definition_pool() -> None:
+    """Verify that daily generation handles completed work and exhausted definition pool."""
     config = small_config()
     state = initialize_state(generate_scenario(config))
     for job_id in state.jobs:
@@ -154,6 +159,7 @@ def test_daily_generation_handles_completed_work_and_exhausted_definition_pool()
 
 
 def test_echo_applies_and_advances_one_optimal_daily_step() -> None:
+    """Verify that echo applies and advances one optimal daily step."""
     config = small_config(
         job_count=2,
         min_job_duration_days=3,
@@ -185,6 +191,7 @@ def test_echo_applies_and_advances_one_optimal_daily_step() -> None:
 
 
 def test_echo_guardrails_reject_completed_non_daily_overtime_and_early_terminal_states() -> None:
+    """Verify that echo guardrails reject completed non daily overtime and early terminal states."""
     config = small_config(job_count=2, min_job_duration_days=2, max_job_duration_days=3, max_campaign_day=6)
     scenario = generate_scenario(config)
     web = generate_decision_web(scenario, config)

@@ -18,6 +18,8 @@ from typing import Any, Sequence, TextIO
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# Direct script execution places scripts/ on sys.path; add the repository root
+# before importing the package without requiring an editable install.
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -25,27 +27,33 @@ from echo_adventure.config import GameConfig  # noqa: E402
 from echo_adventure.decision_web import DecisionWeb, generate_decision_web  # noqa: E402
 from echo_adventure.scenario_generator import generate_scenario  # noqa: E402
 
-"""First ten possible seeds in the app's range of possible randomly-selected seeds (100,000 - 999,999,999)"""
+# Use the first ten seeds inside the application's random-seed range as a stable
+# default benchmark sample.
 DEFAULT_SEEDS = tuple(range(100001, 100011))
 MIB = 1024 * 1024
 LOG_DIRECTORY = PROJECT_ROOT / "log"
 
 
 class _Tee:
+    """Mirror benchmark output to both the terminal and a persistent log."""
     def __init__(self, *streams: TextIO) -> None:
+        """Capture the terminal stream and benchmark log stream."""
         self._streams = streams
 
     def write(self, value: str) -> int:
+        """Write the same text to both output streams."""
         for stream in self._streams:
             stream.write(value)
         return len(value)
 
     def flush(self) -> None:
+        """Flush both output streams."""
         for stream in self._streams:
             stream.flush()
 
 
 def _positive_int(value: str) -> int:
+    """Parse a strictly positive integer command-line value."""
     parsed = int(value)
     if parsed < 1:
         raise argparse.ArgumentTypeError("value must be at least 1")
@@ -53,6 +61,7 @@ def _positive_int(value: str) -> int:
 
 
 def _nonnegative_float(value: str) -> float:
+    """Parse a non-negative floating-point command-line value."""
     parsed = float(value)
     if not math.isfinite(parsed) or parsed < 0:
         raise argparse.ArgumentTypeError("value must be a finite nonnegative number")
@@ -60,6 +69,7 @@ def _nonnegative_float(value: str) -> float:
 
 
 def _parser() -> argparse.ArgumentParser:
+    """Build the benchmark command-line argument parser."""
     parser = argparse.ArgumentParser(
         description=(
             "Benchmark decision-web generation in isolated child processes. "
@@ -108,11 +118,13 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _peak_rss_bytes() -> int | None:
+    """Return the platform-adjusted peak resident-set size in bytes."""
     try:
         import resource
     except ImportError:
         return None
 
+    # macOS reports bytes while other Unix platforms report kibibytes.
     peak = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
     if sys.platform != "darwin":
         peak *= 1024
@@ -120,10 +132,13 @@ def _peak_rss_bytes() -> int | None:
 
 
 def _optimal_route_metrics(web: DecisionWeb) -> dict[str, int | bool]:
+    """Traverse the solved optimal route and count its days and questions."""
     ordinary_targets: set[str] = set()
     all_targets: set[str] = set()
     enters_overtime = False
     node_id: str | None = web.root_node_id
+    # Follow only the stored optimal edge at each node; this measures the route
+    # a real ECHO session traverses rather than the full graph.
     while node_id is not None:
         node = web.node(node_id)
         all_targets.add(node.card.primary_job_id)
@@ -140,8 +155,11 @@ def _optimal_route_metrics(web: DecisionWeb) -> dict[str, int | bool]:
 
 
 def _worker_result(seed: int, run: int) -> dict[str, Any]:
+    """Build one decision web and collect timing, memory, and graph metrics."""
     config = GameConfig(seed=seed)
 
+    # Time scenario and web construction separately so graph changes are not
+    # obscured by comparatively small job-generation costs.
     scenario_started = time.perf_counter()
     scenario = generate_scenario(config)
     scenario_seconds = time.perf_counter() - scenario_started
@@ -170,6 +188,7 @@ def _worker_result(seed: int, run: int) -> dict[str, Any]:
 
 
 def _run_isolated(seed: int, run: int) -> tuple[dict[str, Any] | None, str | None]:
+    """Run one benchmark sample in an isolated child process."""
     command = [
         sys.executable,
         str(Path(__file__).resolve()),
@@ -178,6 +197,8 @@ def _run_isolated(seed: int, run: int) -> tuple[dict[str, Any] | None, str | Non
         "--_worker-run",
         str(run),
     ]
+    # A fresh interpreter makes peak RSS and retained graph memory comparable
+    # between samples and excludes accumulation from prior runs.
     completed = subprocess.run(
         command,
         cwd=PROJECT_ROOT,
@@ -195,6 +216,7 @@ def _run_isolated(seed: int, run: int) -> tuple[dict[str, Any] | None, str | Non
 
 
 def _percentile(values: Sequence[float], percentile: float) -> float:
+    """Calculate a linearly interpolated percentile from numeric samples."""
     ordered = sorted(values)
     if len(ordered) == 1:
         return ordered[0]
@@ -203,11 +225,14 @@ def _percentile(values: Sequence[float], percentile: float) -> float:
     upper = math.ceil(position)
     if lower == upper:
         return ordered[lower]
+    # Linear interpolation gives useful p95 values even for the small default
+    # sample set.
     fraction = position - lower
     return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
 
 
 def _describe(values: Sequence[float]) -> dict[str, float]:
+    """Summarize a sample set with median, tail, and range statistics."""
     return {
         "min": min(values),
         "median": statistics.median(values),
@@ -218,6 +243,7 @@ def _describe(values: Sequence[float]) -> dict[str, float]:
 
 
 def _summary(results: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate successful benchmark samples for one job count."""
     if not results:
         return {}
 
@@ -225,6 +251,8 @@ def _summary(results: Sequence[dict[str, Any]]) -> dict[str, Any]:
     scenario_seconds = [float(result["scenario_seconds"]) for result in results]
     nodes = [float(result["nodes"]) for result in results]
     edges = [float(result["edges"]) for result in results]
+    # Some platforms lack resource reporting; omit those values without
+    # discarding otherwise valid timing samples.
     memory = [
         float(result["peak_rss_bytes"])
         for result in results
@@ -242,6 +270,7 @@ def _summary(results: Sequence[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _environment() -> dict[str, str]:
+    """Describe the runtime and host metadata attached to benchmark output."""
     return {
         "python_version": platform.python_version(),
         "python_executable": sys.executable,
@@ -251,18 +280,23 @@ def _environment() -> dict[str, str]:
 
 
 def _new_log_path() -> Path:
+    """Choose a timestamped path without overwriting an existing log."""
     LOG_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    # Microseconds and timezone make collisions unlikely while exclusive open in
+    # main still guarantees no existing log is overwritten.
     timestamp = datetime.now().astimezone().strftime("%Y-%m-%d_%H-%M-%S_%f%z")
     return LOG_DIRECTORY / f"{timestamp}.log"
 
 
 def _format_memory(value: int | float | None) -> str:
+    """Format a byte count as mebibytes for terminal output."""
     if value is None:
         return "n/a"
     return f"{value / MIB:.1f} MiB"
 
 
 def _print_header(environment: dict[str, str], seeds: Sequence[int], runs: int) -> None:
+    """Print benchmark configuration and environment metadata."""
     print("Decision-web startup benchmark")
     print(
         f"Python {environment['python_version']} ({environment['machine']}); "
@@ -278,6 +312,7 @@ def _print_header(environment: dict[str, str], seeds: Sequence[int], runs: int) 
 
 
 def _print_result(result: dict[str, Any]) -> None:
+    """Print one benchmark sample in a compact human-readable format."""
     throughput = result["nodes_per_second"]
     throughput_text = f"{throughput:,.0f}" if throughput is not None else "n/a"
     overtime_text = "Y" if result["optimal_route_enters_overtime"] else "N"
@@ -295,6 +330,7 @@ def _print_result(result: dict[str, Any]) -> None:
 
 
 def _print_summary(summary: dict[str, Any], failures: Sequence[dict[str, Any]]) -> None:
+    """Print aggregate statistics for each configured job count."""
     print()
     if summary:
         web = summary["web_seconds"]
@@ -325,6 +361,7 @@ def _threshold_failures(
     args: argparse.Namespace,
     summary: dict[str, Any],
 ) -> list[str]:
+    """Return human-readable performance threshold violations."""
     failures: list[str] = []
     if not summary:
         return failures
@@ -346,12 +383,15 @@ def _threshold_failures(
 
 
 def _run_benchmark(args: argparse.Namespace) -> int:
+    """Execute warmups and measured benchmark runs for all job counts."""
     environment = _environment()
     results: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
     if not args.json:
         _print_header(environment, args.seeds, args.runs)
 
+    # Preserve requested seed/run order in raw output while aggregating only
+    # successful samples below.
     for seed in args.seeds:
         for run in range(1, args.runs + 1):
             result, error = _run_isolated(seed, run)
@@ -388,6 +428,8 @@ def _run_benchmark(args: argparse.Namespace) -> int:
         for failure in threshold_failures:
             print(f"Threshold failure: {failure}")
 
+    # Distinct exit codes let CI distinguish generation failures from breached
+    # performance budgets.
     if failures:
         return 1
     if threshold_failures:
@@ -396,13 +438,18 @@ def _run_benchmark(args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Parse command-line arguments, persist output, and return an exit status."""
     args = _parser().parse_args(argv)
+    # Private worker flags bypass logging and emit exactly one JSON document for
+    # the parent process.
     if args._worker_seed is not None:
         run = args._worker_run if args._worker_run is not None else 1
         print(json.dumps(_worker_result(args._worker_seed, run)))
         return 0
 
     log_path = _new_log_path()
+    # Exclusive creation enforces the repository rule that benchmark logs are
+    # never overwritten or removed.
     with log_path.open("x", encoding="utf-8", buffering=1) as log_file:
         output = (
             log_file

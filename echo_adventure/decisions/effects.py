@@ -15,9 +15,12 @@ def apply_choice(
     actor: str,
     schedule_follow_ups: bool = True,
 ) -> None:
+    """Apply bounded job-day changes and schedule valid follow-ups."""
     applied_day_changes: dict[str, int] = {}
     for job_id, delta in choice.day_changes.items():
         job = state.jobs.get(job_id)
+        # Generated cards may outlive a job they referenced; stale or unknown
+        # targets must not resurrect completed work.
         if not job or job.is_complete:
             continue
         applied_day_changes[job_id] = delta
@@ -26,6 +29,8 @@ def apply_choice(
             complete_job(state, job.id)
     if schedule_follow_ups:
         _schedule_follow_ups(state, card, choice)
+    # Player-only assembly cards have no meaningful comparison choice, so their
+    # history records null alignment instead of implying agreement.
     echo_choice = (
         None
         if card.player_only
@@ -57,6 +62,8 @@ def _schedule_follow_ups(
     job = state.jobs.get(card.primary_job_id)
     if not job or job.is_complete:
         return
+    # A definition can appear at most once across shown and pending follow-ups,
+    # even when several edges on the same route point to it.
     pending_ids = {item.definition_id for item in state.pending_follow_ups}
     for follow_up in choice.follow_ups:
         if (
@@ -71,6 +78,8 @@ def _schedule_follow_ups(
             )
         ):
             continue
+        # Preserve source metadata so later cards and developer diagnostics can
+        # explain exactly which earlier player choice scheduled this event.
         state.pending_follow_ups.append(
             PendingFollowUp(
                 definition_id=follow_up.definition_id,
@@ -92,6 +101,9 @@ def follow_up_occurs(
     definition_id: str,
     probability: float,
 ) -> bool:
+    """Resolve a follow-up probability deterministically for a route."""
+    # Route identity, not call order, determines the roll. Diagnostics and real
+    # play therefore agree without consuming mutable random state.
     material = "|".join(
         (
             str(state.seed),
@@ -103,6 +115,8 @@ def follow_up_occurs(
         )
     ).encode("utf-8")
     roll = int(hashlib.sha256(material).hexdigest(), 16) / float(1 << 256)
+    # Clamp catalog inputs defensively so malformed probabilities still behave
+    # as conventional never/always boundaries.
     return roll < max(0.0, min(1.0, probability))
 
 

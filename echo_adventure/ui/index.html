@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- Static application shell; JavaScript fills all run-specific content. -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -8,6 +9,7 @@
   <link rel="stylesheet" href="/ui/styles.css">
 </head>
 <body>
+  <!-- Sticky application identity, date badge, settings menu, and global errors. -->
   <header>
     <div class="topbar">
       <div class="settings-wrap">
@@ -36,6 +38,7 @@
 
   <main>
     <div class="grid">
+      <!-- Terminal comparison view; hidden until finalReveal is present. -->
       <section id="finalSection" class="hidden">
         <div class="section-head">
           <div>
@@ -50,6 +53,7 @@
         </div>
       </section>
 
+      <!-- Shared player/ECHO estimated-completion timelines. -->
       <section id="dailyDecisionSection">
         <div class="section-head">
           <div>
@@ -60,6 +64,7 @@
       </section>
 
       <div id="game-area" class="game-area">
+        <!-- Clock-gated decision card and explicit response confirmation. -->
         <section id="decisionQueueSection" class="decision-queue-section" aria-labelledby="decisionQueueTitle">
           <div class="section-head">
             <div class="decision-queue-heading">
@@ -78,6 +83,7 @@
           <div id="decisionQueueBody" class="decision-queue-body" aria-live="polite"></div>
         </section>
 
+        <!-- Persistent assembled submarine; daily deltas appear in the modal below. -->
         <section id="summarySection" class="hidden">
           <div class="section-head"><h2>Submarine Assembly</h2></div>
           <div class="summary-grid" id="summaryGrid"></div>
@@ -86,6 +92,7 @@
     </div>
   </main>
 
+  <!-- Server-authorized developer panel; client rendering keeps it hidden in standard mode. -->
   <aside id="devPanel" class="dev-panel hidden" aria-label="Developer tools" aria-hidden="true">
     <div class="dev-panel-titlebar">
       <strong>DEV MODE</strong>
@@ -137,6 +144,7 @@
     </div>
   </aside>
 
+  <!-- Introductory overlay shown before the first interactive game state. -->
   <div id="welcomeModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="welcomeModalTitle">
     <div class="modal welcome-modal">
       <h1 id="welcomeModalTitle" class="welcome-title">
@@ -157,6 +165,7 @@
     </div>
   </div>
 
+  <!-- New-run form; seed controls are visible only when developer data exists. -->
   <div id="newRunModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="newRunModalTitle">
     <div class="modal">
       <div class="modal-titlebar">
@@ -196,6 +205,7 @@
     </div>
   </div>
 
+  <!-- Three-step, browser-local onboarding overlay. -->
   <div id="tutorialOverlay" class="tutorial-overlay" aria-hidden="true">
     <div class="tutorial-backdrop" aria-hidden="true"></div>
     <div class="tutorial-card" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle" aria-describedby="tutorialDescription">
@@ -209,9 +219,10 @@
     </div>
   </div>
 
+  <!-- Module entry point wires renderers, events, and the initial state request. -->
   <script type="module" src="/ui/app.js"></script>
 
-  <!-- End-of-day modal (centered) -->
+  <!-- End-of-day modal retains the outgoing screen until Advance Day is confirmed. -->
   <div id="summaryModalOverlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="summaryModalTitle">
     <div class="modal summary-modal">
       <h1 id="summaryModalTitle">Daily Summary</h1>

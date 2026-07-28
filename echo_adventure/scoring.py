@@ -11,6 +11,8 @@ _RAW_POINTS_FOR_HALF_SWING = 10.0
 def public_score(raw_score: float) -> float:
     """Map unbounded raw schedule points onto a monotonic 0-100 scale."""
     raw = float(raw_score)
+    # This rational curve is symmetric around neutral and approaches the bounds
+    # asymptotically, so even extreme raw scores remain display-safe.
     scaled = NEUTRAL_PUBLIC_SCORE + (
         _PUBLIC_SCORE_HALF_RANGE * raw / (abs(raw) + _RAW_POINTS_FOR_HALF_SWING)
     )
@@ -19,12 +21,15 @@ def public_score(raw_score: float) -> float:
 
 def public_score_delta(previous_raw_score: float, raw_score: float) -> float:
     """Return the public score change between two raw cumulative scores."""
+    # Subtract before rounding so consecutive displayed deltas do not compound
+    # two independent rounding errors.
     previous = _public_score_unrounded(previous_raw_score)
     current = _public_score_unrounded(raw_score)
     return round(current - previous, 2)
 
 
 def _public_score_unrounded(raw_score: float) -> float:
+    """Map an unbounded route score smoothly onto the public 0–100 scale."""
     raw = float(raw_score)
     scaled = NEUTRAL_PUBLIC_SCORE + (
         _PUBLIC_SCORE_HALF_RANGE * raw / (abs(raw) + _RAW_POINTS_FOR_HALF_SWING)

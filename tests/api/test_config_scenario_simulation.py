@@ -1,3 +1,5 @@
+"""Unit tests for configuration, scenario generation, scoring, and simulation."""
+
 from __future__ import annotations
 
 import random
@@ -16,6 +18,7 @@ from .helpers import scenario_from_durations, small_config
 
 
 def test_config_defaults_describe_the_twenty_job_game() -> None:
+    """Verify that config defaults describe the twenty job game."""
     config = GameConfig(seed=7)
 
     assert config.job_count == 20
@@ -26,6 +29,7 @@ def test_config_defaults_describe_the_twenty_job_game() -> None:
 
 
 def test_calendar_labels_are_one_based_and_cross_month_boundaries() -> None:
+    """Verify that calendar labels are one based and cross month boundaries."""
     config = small_config(start_date="2026-07-31")
 
     assert config.date_label_for_day(0) == "July 31"
@@ -54,11 +58,13 @@ def test_calendar_labels_are_one_based_and_cross_month_boundaries() -> None:
     ],
 )
 def test_config_rejects_invalid_values(overrides: dict[str, object], message: str) -> None:
+    """Verify that config rejects invalid values."""
     with pytest.raises(ValueError, match=message):
         small_config(**overrides)
 
 
 def test_resolve_seed_preserves_explicit_values_and_uses_system_random() -> None:
+    """Verify that resolve seed preserves explicit values and uses system random."""
     assert resolve_seed(0) == 0
     assert resolve_seed(-15) == -15
 
@@ -69,6 +75,7 @@ def test_resolve_seed_preserves_explicit_values_and_uses_system_random() -> None
 
 
 def test_public_score_is_bounded_monotonic_symmetric_and_reports_exact_deltas() -> None:
+    """Verify that public score is bounded monotonic symmetric and reports exact deltas."""
     raw_scores = [-1_000_000, -10, -2, 0, 2, 10, 1_000_000]
     scores = [public_score(raw_score) for raw_score in raw_scores]
 
@@ -85,6 +92,7 @@ def test_public_score_is_bounded_monotonic_symmetric_and_reports_exact_deltas() 
 
 
 def test_scenario_generation_is_deterministic_and_within_bounds() -> None:
+    """Verify that scenario generation is deterministic and within bounds."""
     config = small_config(
         job_count=8,
         min_job_duration_days=4,
@@ -109,6 +117,7 @@ def test_scenario_generation_is_deterministic_and_within_bounds() -> None:
 
 
 def test_weighted_generation_favors_shorter_values_without_excluding_the_range() -> None:
+    """Verify that weighted generation favors shorter values without excluding the range."""
     config = small_config(min_job_duration_days=2, max_job_duration_days=6, max_campaign_day=8)
     rng = random.Random(12)
     values = [_weighted_duration(rng, config) for _ in range(5_000)]
@@ -118,6 +127,7 @@ def test_weighted_generation_favors_shorter_values_without_excluding_the_range()
 
 
 def test_scenario_validation_rejects_wrong_count_and_out_of_range_duration() -> None:
+    """Verify that scenario validation rejects wrong count and out of range duration."""
     config = small_config(job_count=2)
     wrong_count = scenario_from_durations(2)
     with pytest.raises(ValueError, match="exactly 2 jobs"):
@@ -129,6 +139,7 @@ def test_scenario_validation_rejects_wrong_count_and_out_of_range_duration() -> 
 
 
 def test_scenario_validation_allows_one_three_day_starter_below_the_ordinary_range() -> None:
+    """Verify that scenario validation allows one three day starter below the ordinary range."""
     config = small_config(
         job_count=2,
         min_job_duration_days=4,
@@ -145,6 +156,7 @@ def test_scenario_validation_allows_one_three_day_starter_below_the_ordinary_ran
 
 
 def test_two_job_scenario_keeps_the_ordinary_duration_range() -> None:
+    """Verify that two job scenario keeps the ordinary duration range."""
     config = small_config(
         job_count=2,
         min_job_duration_days=4,
@@ -158,6 +170,7 @@ def test_two_job_scenario_keeps_the_ordinary_duration_range() -> None:
 
 
 def test_initialization_deep_copies_jobs_and_builds_initial_metrics() -> None:
+    """Verify that initialization deep copies jobs and builds initial metrics."""
     scenario = scenario_from_durations(1, 2, 3)
 
     state = initialize_state(scenario)
@@ -173,6 +186,7 @@ def test_initialization_deep_copies_jobs_and_builds_initial_metrics() -> None:
 
 
 def test_job_completion_property_and_incomplete_job_filter_follow_status() -> None:
+    """Verify that job completion property and incomplete job filter follow status."""
     state = initialize_state(scenario_from_durations(1, 2))
 
     assert state.jobs["JOB-01"].is_complete is False
@@ -185,6 +199,7 @@ def test_job_completion_property_and_incomplete_job_filter_follow_status() -> No
 
 
 def test_advance_day_ticks_every_unfinished_job_once_and_records_summary() -> None:
+    """Verify that advance day ticks every unfinished job once and records summary."""
     state = initialize_state(scenario_from_durations(1, 2, 3))
 
     result = advance_day(state)
@@ -206,6 +221,7 @@ def test_advance_day_ticks_every_unfinished_job_once_and_records_summary() -> No
 
 
 def test_complete_job_is_idempotent_and_final_job_advances_one_day_at_a_time() -> None:
+    """Verify that complete job is idempotent and final job advances one day at a time."""
     state = initialize_state(scenario_from_durations(1, 9))
 
     complete_job(state, "JOB-01")
@@ -224,6 +240,7 @@ def test_complete_job_is_idempotent_and_final_job_advances_one_day_at_a_time() -
 
 
 def test_snapshot_projection_uses_the_longest_unfinished_duration() -> None:
+    """Verify that snapshot projection uses the longest unfinished duration."""
     state = initialize_state(scenario_from_durations(2, 5))
     state.current_day = 4
 
@@ -239,6 +256,7 @@ def test_snapshot_projection_uses_the_longest_unfinished_duration() -> None:
 
 
 def test_completed_snapshot_keeps_the_original_completion_day() -> None:
+    """Verify that completed snapshot keeps the original completion day."""
     state = initialize_state(scenario_from_durations(1))
     complete_job(state, "JOB-01")
     state.current_day = 9

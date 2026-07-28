@@ -1,3 +1,5 @@
+/** Final comparison charts, route review, and interactive tooltips. */
+
 "use strict";
 
 import { uiState } from "./state.js";
@@ -9,18 +11,21 @@ const SCORE_BASELINE = 50;
 const METRIC_TOOLTIP_GAP = 14;
 const METRIC_TOOLTIP_MARGIN = 12;
 
+/** Format a score consistently while allowing caller-specific fallbacks. */
 const formatScore = (value, options = {}) => {
   const number = Number(value) || 0;
   const signed = options.signed !== false;
   return `${signed && number >= 0 ? "+" : ""}${number.toFixed(2)}`;
 };
 
+/** Convert finite numeric input while preserving invalid values as null. */
 function numberOrNull(value) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
 
+/** Render and position guidance for a final comparison metric. */
 export function positionFinalMetricTooltip(event, metric) {
   const tooltip = metric?.querySelector(".final-metric-tooltip");
   if (!tooltip) return;
@@ -33,6 +38,8 @@ export function positionFinalMetricTooltip(event, metric) {
   let left;
   let top;
 
+  // Pointer interactions anchor beside the cursor; keyboard focus anchors to the
+  // metric card so the same guidance remains accessible without a mouse.
   if (hasPointerCoordinates) {
     left = event.clientX + METRIC_TOOLTIP_GAP;
     top = event.clientY + METRIC_TOOLTIP_GAP;
@@ -54,6 +61,7 @@ export function positionFinalMetricTooltip(event, metric) {
     }
   }
 
+  // Final clamping handles tiny viewports where neither preferred side fits.
   const maxLeft = Math.max(
     METRIC_TOOLTIP_MARGIN,
     viewportWidth - tooltipWidth - METRIC_TOOLTIP_MARGIN,
@@ -66,10 +74,12 @@ export function positionFinalMetricTooltip(event, metric) {
   tooltip.style.top = `${Math.min(maxTop, Math.max(METRIC_TOOLTIP_MARGIN, top))}px`;
 }
 
+/** Round a score to the precision used by final charts. */
 function roundScore(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
 
+/** Split a display date into month and day components. */
 function dateLabelParts(label) {
   const safeLabel = String(label || "").trim();
   const match = safeLabel.match(/^(.+?)\s+(\d{1,2})$/);
@@ -77,9 +87,12 @@ function dateLabelParts(label) {
   return { month: match[1], day: match[2] };
 }
 
+/** Normalize one actor's decision from a shared comparison point. */
 function routeDecisionFromPoint(decisionPoint, actor, index) {
   const nested = actor === "player" ? decisionPoint.playerDecision : decisionPoint.echoDecision;
   if (!nested || typeof nested !== "object") return null;
+  // Normalize optional server fields here so downstream tooltip rendering can
+  // use one stable actor-decision shape.
   return {
     position: numberOrNull(nested.position) ?? index + 1,
     questionId: nested.questionId || "",
@@ -100,18 +113,23 @@ function routeDecisionFromPoint(decisionPoint, actor, index) {
   };
 }
 
+/** Aggregate route score changes into continuous daily chart groups. */
 export function buildDailyDecisionGroups(decisionPoints) {
   const groups = [];
   const groupsByKey = new Map();
   let previousPlayerCumulative = SCORE_BASELINE;
   let previousEchoCumulative = SCORE_BASELINE;
 
+  // Input contains one point per decision slot. Group them by calendar day while
+  // independently carrying each actor's cumulative score through missing slots.
   decisionPoints.forEach((decisionPoint, index) => {
     const day = numberOrNull(decisionPoint.day) ?? index + 1;
     const dateLabel = decisionPoint.dateLabel || `Day ${day}`;
     const key = `${day}|${dateLabel}`;
     const playerCumulative = numberOrNull(decisionPoint.playerDecision?.cumulativeScore);
     const echoCumulative = numberOrNull(decisionPoint.echoDecision?.cumulativeScore);
+    // Older/minimal payloads may omit deltas; derive them from cumulative values
+    // without treating a real zero as missing.
     const playerDelta = numberOrNull(decisionPoint.playerDecision?.scoreDelta)
       ?? (playerCumulative !== null ? playerCumulative - previousPlayerCumulative : 0);
     const echoDelta = numberOrNull(decisionPoint.echoDecision?.scoreDelta)
@@ -149,6 +167,8 @@ export function buildDailyDecisionGroups(decisionPoints) {
       : previousEchoCumulative + echoDelta;
   });
 
+  // Rebuild cumulative series from daily deltas so rounding is consistent at the
+  // exact granularity the chart displays.
   let playerRunning = SCORE_BASELINE;
   let echoRunning = SCORE_BASELINE;
   groups.forEach((group) => {
@@ -160,6 +180,7 @@ export function buildDailyDecisionGroups(decisionPoints) {
     group.echoCumulativeScore = echoRunning;
   });
 
+  // A neutral baseline gives both paths a visible common origin before day one.
   return [
     {
       day: 0,
@@ -178,6 +199,7 @@ export function buildDailyDecisionGroups(decisionPoints) {
   ];
 }
 
+/** Render the player's and ECHO's cumulative decision-score chart. */
 function renderDecisionScoreChart(history) {
   const decisionPoints = Array.isArray(history?.decisionPoints) ? history.decisionPoints : [];
   if (!decisionPoints.length) return `<div class="subtle">No decision score history recorded.</div>`;
@@ -193,11 +215,13 @@ function renderDecisionScoreChart(history) {
   const maxScore = 100;
   const plotWidth = width - pad.left - pad.right;
   const plotHeight = height - pad.top - pad.bottom;
+  /** Convert one score/index pair into SVG plot coordinates. */
   const point = (value, index) => {
     const x = count === 1 ? pad.left + plotWidth / 2 : pad.left + (index / (count - 1)) * plotWidth;
     const y = pad.top + ((maxScore - value) / (maxScore - minScore)) * plotHeight;
     return [x, y];
   };
+  /** Build an SVG path command sequence for one score series. */
   const pathFor = (series) => series.slice(0, count).map((value, index) => {
     const [x, y] = point(Number(value) || 0, index);
     return `${index ? "L" : "M"} ${x.toFixed(1)} ${y.toFixed(1)}`;
@@ -222,6 +246,7 @@ function renderDecisionScoreChart(history) {
       </text>
     `;
   }).join("");
+  /** Serialize one day's accessible metadata onto its interaction target. */
   const dayAttrs = (group) => {
     const ariaLabel = [
       `${group.dateLabel}.`,
@@ -250,6 +275,7 @@ function renderDecisionScoreChart(history) {
       data-echo-decisions="${escapeHtml(JSON.stringify(group.echoDecisions))}"
     `;
   };
+  /** Render a visible score marker when the actor had a decision that day. */
   const scoreMarker = (series, index) => {
     const group = dailyGroups[index];
     if (group.isBaseline) return "";
@@ -257,6 +283,8 @@ function renderDecisionScoreChart(history) {
       ? group.playerDecisionCount
       : group.echoDecisionCount;
     const hasDecision = decisionCount > 0;
+    // Player days remain selectable even with no questions so completion-only
+    // days can still open a route review; empty ECHO dots would add no signal.
     if (series === "ECHO" && !hasDecision) return "";
     const values = series === "Player" ? playerScore : echoScore;
     const value = Number(values[index]) || 0;
@@ -286,10 +314,12 @@ function renderDecisionScoreChart(history) {
       ></circle>
     `;
   };
+  /** Render a full-height transparent interaction target for one day. */
   const dayHoverZone = (group, index) => {
     if (group.isBaseline) return "";
     const [x] = point(0, index);
     const step = count === 1 ? plotWidth : plotWidth / (count - 1);
+    // Split the plot halfway between adjacent markers to avoid interaction gaps.
     const x1 = count === 1 ? pad.left : Math.max(pad.left, x - step / 2);
     const x2 = count === 1 ? width - pad.right : Math.min(width - pad.right, x + step / 2);
     return `
@@ -329,9 +359,12 @@ function renderDecisionScoreChart(history) {
   `;
 }
 
+/** Render the terminal completion and score comparison bars. */
 function renderFinalMetricBar(player, automated) {
   const playerCompletionDay = numberOrNull(player.completionDay);
   const echoCompletionDay = numberOrNull(automated.completionDay);
+  // A divergent route cannot beat ECHO; equal dates still warn because lower
+  // solver tie-breaks may decide the outcome.
   const completionTone = playerCompletionDay === echoCompletionDay ? "warn" : "danger";
   const metricCards = [
     {
@@ -387,7 +420,10 @@ function renderFinalMetricBar(player, automated) {
   `).join("");
 }
 
+/** Normalize optional route-decision arrays. */
 function parseDecisionList(value) {
+  // JSON is stored in escaped data attributes; malformed legacy markup should
+  // degrade to an empty route rather than breaking tooltip interaction.
   try {
     const parsed = JSON.parse(value || "[]");
     return Array.isArray(parsed) ? parsed : [];
@@ -396,6 +432,7 @@ function parseDecisionList(value) {
   }
 }
 
+/** Classify a route decision relative to ECHO's preferred choice. */
 function preferencePresentation(decision) {
   const state = decision.echoPreferenceState || [
     decision.echoSituationMatches
@@ -405,6 +442,8 @@ function preferencePresentation(decision) {
         : "different-events",
     decision.alignedWithEcho ? "same-choice" : "different-choice",
   ].join("-");
+  // The six combinations distinguish event identity, job context, and response
+  // alignment without implying ECHO saw the player's exact situation.
   const presentations = {
     "same-context-same-choice": {
       badge: "Same context",
@@ -434,6 +473,7 @@ function preferencePresentation(decision) {
   return { state, ...(presentations[state] || presentations["different-events-different-choice"]) };
 }
 
+/** Render one decision and its applied schedule effects. */
 function renderRouteDecision(decision, actor) {
   const title = decision.questionTitle || "Decision";
   const detail = decision.questionText && decision.questionText !== title
@@ -477,6 +517,7 @@ function renderRouteDecision(decision, actor) {
   `;
 }
 
+/** Render one actor's complete decision route. */
 function renderRouteSection(actor, decisions) {
   const label = actor === "player" ? "Your actual route" : "ECHO's actual route";
   const emptyText = actor === "player"
@@ -496,6 +537,7 @@ function renderRouteSection(actor, decisions) {
   `;
 }
 
+/** Synchronize selected chart markers across both actor rows. */
 function updateSelectedDayMarker(dayKey) {
   document.querySelectorAll(".chart-hover-zone").forEach((marker) => {
     const selected = Boolean(dayKey && marker.dataset.dayKey === dayKey);
@@ -504,11 +546,13 @@ function updateSelectedDayMarker(dayKey) {
   });
 }
 
+/** Find the chart marker associated with a day key. */
 function findDecisionChartMarker(dayKey) {
   return [...document.querySelectorAll(".chart-hover-zone")]
     .find(marker => marker.dataset.dayKey === dayKey) || null;
 }
 
+/** Open and populate the interactive day-level decision tooltip. */
 export function showDecisionChartTooltip(event, marker) {
   const tooltip = $("decisionChartTooltip");
   if (!tooltip || !marker) return;
@@ -518,6 +562,8 @@ export function showDecisionChartTooltip(event, marker) {
   const playerDecisions = parseDecisionList(data.playerDecisions);
   const echoDecisions = parseDecisionList(data.echoDecisions);
   const dateLabel = data.dateLabel || data.label || "Day";
+  // Store selection outside the DOM so rerenders and keyboard focus restoration
+  // can address the same semantic day.
   selectedDecisionChartDayKey = data.dayKey || data.day || dateLabel;
   updateSelectedDayMarker(selectedDecisionChartDayKey);
   tooltip.innerHTML = `
@@ -543,6 +589,7 @@ export function showDecisionChartTooltip(event, marker) {
   positionDecisionChartTooltip(marker, tooltip);
 }
 
+/** Keep the decision tooltip inside the viewport. */
 function positionDecisionChartTooltip(marker, tooltip) {
   const markerRect = marker.getBoundingClientRect();
   const anchorX = markerRect.left + markerRect.width / 2;
@@ -554,6 +601,7 @@ function positionDecisionChartTooltip(marker, tooltip) {
   let left = anchorX + 16;
   let top = anchorY - tooltipHeight - 12;
 
+  // Prefer above/right of the marker, then flip and clamp inside the viewport.
   if (left + tooltipWidth > viewportWidth - 16) {
     left = Math.max(16, viewportWidth - tooltipWidth - 16);
   }
@@ -566,6 +614,7 @@ function positionDecisionChartTooltip(marker, tooltip) {
   tooltip.style.top = `${top}px`;
 }
 
+/** Close the decision tooltip unless its lock state forbids it. */
 export function hideDecisionChartTooltip(options = {}) {
   const tooltip = $("decisionChartTooltip");
   const marker = selectedDecisionChartDayKey
@@ -579,6 +628,7 @@ export function hideDecisionChartTooltip(options = {}) {
   if (options.restoreFocus && marker && typeof marker.focus === "function") marker.focus();
 }
 
+// Delegated listeners support chart markup that is replaced on each final render.
 document.addEventListener("click", (event) => {
   const target = event.target instanceof Element ? event.target : null;
   if (target?.closest("[data-chart-tooltip-close]")) {
@@ -597,6 +647,7 @@ document.addEventListener("click", (event) => {
   }
 });
 
+// Keyboard activation mirrors click behavior and restores focus on Escape.
 document.addEventListener("keydown", (event) => {
   const target = event.target instanceof Element ? event.target : null;
   const marker = target?.closest(".chart-hover-zone");
@@ -610,6 +661,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+// Metric guidance follows pointer input but anchors to the card on focus.
 document.addEventListener("pointermove", (event) => {
   const target = event.target instanceof Element ? event.target : null;
   const metric = target?.closest(".final-metric-hoverable");
@@ -622,6 +674,7 @@ document.addEventListener("focusin", (event) => {
   if (metric) positionFinalMetricTooltip(null, metric);
 });
 
+/** Render or hide the complete final comparison view. */
 export function renderFinal() {
   const final = uiState.state.finalReveal;
   if (!final) {
@@ -630,6 +683,7 @@ export function renderFinal() {
     return;
   }
 
+  // Final markup replacement invalidates old marker references and selection.
   hideDecisionChartTooltip();
   $("finalSection").classList.remove("hidden");
 
@@ -646,6 +700,7 @@ export function renderFinal() {
   $("finalMetricsBar").innerHTML = renderFinalMetricBar(p, a);
   $("finalCompletionChart").innerHTML = renderDecisionScoreChart(final.completionHistory);
 
+  // Escape every backend-authored explanation before rendering it as a list.
   $("finalNotes").innerHTML = (review.reasons || final.explanation || [])
     .slice(0, 5)
     .map(note => `<li>${escapeHtml(note)}</li>`)
