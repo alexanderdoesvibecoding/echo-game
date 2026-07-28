@@ -16,6 +16,7 @@ from .models import DecisionCard, DecisionChoice, Job, Scenario, SimulationState
 
 _JOB_TARGET_SCHEDULE_LENGTH = 200
 _JOB_TARGET_WINDOW_PATTERN = (2, 1)
+_STARTER_JOB_DECISION_PROTECTION_THROUGH_DAY = 3
 _DEADLINE_CHECK_INTERVAL = 256
 
 
@@ -232,9 +233,17 @@ class _DecisionWebBuilder:
         )
         if not incomplete:
             raise RuntimeError("A completed planning state cannot contain another question node.")
+        decision_targets = [
+            job
+            for job in incomplete
+            if not (
+                job.is_starter_job
+                and state.day <= _STARTER_JOB_DECISION_PROTECTION_THROUGH_DAY
+            )
+        ] or incomplete
 
         definition = self.base_schedule[(state.day, state.question_index)]
-        primary = self._select_scheduled_job(state.day, incomplete)
+        primary = self._select_scheduled_job(state.day, decision_targets)
         showing_pending = bool(
             state.pending_definition_id
             and state.pending_available_day <= state.day
@@ -251,7 +260,7 @@ class _DecisionWebBuilder:
             runtime_state,
             definition,
             primary,
-            incomplete,
+            decision_targets,
             question_number=state.question_index + 1,
             node_token=node_id.rsplit("-", 1)[-1],
             trigger_delta=state.pending_trigger_delta if showing_pending else 0,
@@ -277,6 +286,7 @@ class _DecisionWebBuilder:
                 name=template.name,
                 initial_duration_days=template.initial_duration_days,
                 remaining_days=state.remaining_days[index],
+                is_starter_job=template.is_starter_job,
                 status=JobStatus.COMPLETE if is_complete else JobStatus.IN_PROGRESS,
             )
             if is_complete:

@@ -818,6 +818,36 @@ def test_decision_web_is_deterministic_and_every_node_is_fully_solved(solved_web
         )
 
 
+def test_three_day_starter_is_excluded_from_decisions_through_day_three() -> None:
+    config = small_config(
+        job_count=4,
+        min_job_duration_days=4,
+        max_job_duration_days=6,
+        min_decisions_per_day=1,
+        max_decisions_per_day=1,
+        max_campaign_day=9,
+        seed=100007,
+    )
+    scenario = generate_scenario(config)
+    starter = next(job for job in scenario.jobs.values() if job.is_starter_job)
+    web = generate_decision_web(scenario, config)
+
+    early_nodes = [node for node in web.nodes.values() if node.state.day <= 3]
+    assert early_nodes
+    assert all(node.card.primary_job_id != starter.id for node in early_nodes)
+    assert all(
+        starter.id not in choice.day_changes
+        for node in early_nodes
+        for choice in node.card.choices
+    )
+    assert all(starter.name not in node.card.context_label for node in early_nodes)
+
+    starter_mask = 1 << sorted(scenario.jobs).index(starter.id)
+    day_four_nodes = [node for node in web.nodes.values() if node.state.day == 4]
+    assert day_four_nodes
+    assert all(node.state.completed_mask & starter_mask for node in day_four_nodes)
+
+
 def test_decision_web_accessors_return_current_graph_members(solved_web_bundle) -> None:
     _, _, web = solved_web_bundle
     root = web.node(web.root_node_id)

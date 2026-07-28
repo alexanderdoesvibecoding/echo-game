@@ -19,7 +19,7 @@ class GameConfig:
 
     start_date: str = "2026-07-01"
     job_count: int = 20
-    min_job_duration_days: int = 5
+    min_job_duration_days: int = 4
     max_job_duration_days: int = 15
     min_decisions_per_day: int = 2
     max_decisions_per_day: int = 3

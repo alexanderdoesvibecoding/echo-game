@@ -6,6 +6,8 @@ import { $, escapeHtml } from "./html.js";
 let selectedDecisionChartDayKey = null;
 
 const SCORE_BASELINE = 50;
+const METRIC_TOOLTIP_GAP = 14;
+const METRIC_TOOLTIP_MARGIN = 12;
 
 const formatScore = (value, options = {}) => {
   const number = Number(value) || 0;
@@ -17,6 +19,51 @@ function numberOrNull(value) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+export function positionFinalMetricTooltip(event, metric) {
+  const tooltip = metric?.querySelector(".final-metric-tooltip");
+  if (!tooltip) return;
+
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1024;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 768;
+  const tooltipWidth = tooltip.offsetWidth || 160;
+  const tooltipHeight = tooltip.offsetHeight || 34;
+  const hasPointerCoordinates = Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY);
+  let left;
+  let top;
+
+  if (hasPointerCoordinates) {
+    left = event.clientX + METRIC_TOOLTIP_GAP;
+    top = event.clientY + METRIC_TOOLTIP_GAP;
+    if (left + tooltipWidth > viewportWidth - METRIC_TOOLTIP_MARGIN) {
+      left = event.clientX - tooltipWidth - METRIC_TOOLTIP_GAP;
+    }
+    if (top + tooltipHeight > viewportHeight - METRIC_TOOLTIP_MARGIN) {
+      top = event.clientY - tooltipHeight - METRIC_TOOLTIP_GAP;
+    }
+  } else {
+    const metricRect = metric.getBoundingClientRect();
+    const metricBottom = Number.isFinite(metricRect.bottom)
+      ? metricRect.bottom
+      : metricRect.top + metricRect.height;
+    left = metricRect.left + (metricRect.width - tooltipWidth) / 2;
+    top = metricBottom + 8;
+    if (top + tooltipHeight > viewportHeight - METRIC_TOOLTIP_MARGIN) {
+      top = metricRect.top - tooltipHeight - 8;
+    }
+  }
+
+  const maxLeft = Math.max(
+    METRIC_TOOLTIP_MARGIN,
+    viewportWidth - tooltipWidth - METRIC_TOOLTIP_MARGIN,
+  );
+  const maxTop = Math.max(
+    METRIC_TOOLTIP_MARGIN,
+    viewportHeight - tooltipHeight - METRIC_TOOLTIP_MARGIN,
+  );
+  tooltip.style.left = `${Math.min(maxLeft, Math.max(METRIC_TOOLTIP_MARGIN, left))}px`;
+  tooltip.style.top = `${Math.min(maxTop, Math.max(METRIC_TOOLTIP_MARGIN, top))}px`;
 }
 
 function roundScore(value) {
@@ -210,34 +257,32 @@ function renderDecisionScoreChart(history) {
       ? group.playerDecisionCount
       : group.echoDecisionCount;
     const hasDecision = decisionCount > 0;
-    const noQuestionClass = hasDecision ? "" : " chart-no-question-dot";
+    if (series === "ECHO" && !hasDecision) return "";
     const values = series === "Player" ? playerScore : echoScore;
     const value = Number(values[index]) || 0;
     const [x, y] = point(value, index);
     if (series === "Player") {
       return `
         <circle
-          class="chart-dot chart-player-dot${noQuestionClass}"
+          class="chart-dot chart-player-dot"
           cx="${x.toFixed(1)}"
           cy="${y.toFixed(1)}"
-          r="${hasDecision ? "4.8" : "4.0"}"
-          fill="${hasDecision ? "var(--teal)" : "var(--panel)"}"
-          stroke="${hasDecision ? "var(--panel)" : "var(--teal)"}"
-          stroke-width="${hasDecision ? "1.4" : "2.0"}"
-          ${hasDecision ? "" : 'opacity="0.78"'}
+          r="4.8"
+          fill="var(--teal)"
+          stroke="var(--panel)"
+          stroke-width="1.4"
         ></circle>
       `;
     }
     return `
       <circle
-        class="chart-dot chart-echo-dot${noQuestionClass}"
+        class="chart-dot chart-echo-dot"
         cx="${x.toFixed(1)}"
         cy="${y.toFixed(1)}"
-        r="${hasDecision ? "5.6" : "4.0"}"
+        r="5.6"
         fill="var(--panel)"
         stroke="var(--violet)"
-        stroke-width="${hasDecision ? "2.2" : "2.0"}"
-        ${hasDecision ? "" : 'opacity="0.78"'}
+        stroke-width="2.2"
       ></circle>
     `;
   };
@@ -563,6 +608,18 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     hideDecisionChartTooltip({ restoreFocus: true });
   }
+});
+
+document.addEventListener("pointermove", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  const metric = target?.closest(".final-metric-hoverable");
+  if (metric) positionFinalMetricTooltip(event, metric);
+});
+
+document.addEventListener("focusin", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  const metric = target?.closest(".final-metric-hoverable");
+  if (metric) positionFinalMetricTooltip(null, metric);
 });
 
 export function renderFinal() {

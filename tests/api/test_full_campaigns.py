@@ -29,7 +29,14 @@ def run_full_campaign_case(seed: int, diverge: bool) -> dict[str, object]:
     """Run one real default campaign inside a process-pool worker."""
     session = GameSession(seed=seed)
     assert len(session.scenario.jobs) == 20
-    assert all(5 <= job.initial_duration_days <= 15 for job in session.scenario.jobs.values())
+    starter_jobs = [job for job in session.scenario.jobs.values() if job.is_starter_job]
+    assert len(starter_jobs) == 1
+    assert starter_jobs[0].initial_duration_days == 3
+    assert all(
+        4 <= job.initial_duration_days <= 15
+        for job in session.scenario.jobs.values()
+        if not job.is_starter_job
+    )
     assert session.decision_web.optimal_completion_day < session.config.max_campaign_day
     assert all(2 <= count <= 3 for count in session.decision_web.question_counts.values())
 

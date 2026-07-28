@@ -5,6 +5,12 @@
 - Never modify `todo.md`.
 - Preserve unrelated user changes already present in the working tree.
 
+## Log file preservation
+
+- Never remove any log file.
+- This applies to all log files, including tracked, ignored, and uncommitted
+  files.
+
 ## Before changing code
 
 - Ask clarifying questions before modifying code if the request is ambiguous,

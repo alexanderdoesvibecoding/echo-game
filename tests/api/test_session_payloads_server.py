@@ -254,7 +254,7 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
     generation_calls.clear()
     random_session = session_module.GameSession()
     assert random_session.seed == random_session.scenario.seed == 222
-    assert generation_calls == [(111, 15.0), (222, 15.0)]
+    assert generation_calls == [(111, 10.0), (222, 10.0)]
     assert random_session.generation_stats["acceptedSeed"] == 222
     assert random_session.generation_stats["requestedSeedMode"] == "random"
     assert random_session.generation_stats["timedOutRandomSeedsDiscarded"] == 1

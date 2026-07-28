@@ -18,6 +18,7 @@ const {
 const {
   buildDailyDecisionGroups,
   hideDecisionChartTooltip,
+  positionFinalMetricTooltip,
   renderFinal,
   showDecisionChartTooltip,
 } = await import("../../echo_adventure/ui/renderFinal.js");
@@ -80,11 +81,44 @@ beforeEach(() => {
   hideDecisionChartTooltip();
 });
 
-test("final metric guidance is positioned relative to the hovered metric", () => {
-  const metricRule = styles.match(/\.final-metric-hoverable\s*\{([^}]*)\}/);
+test("final metric guidance follows the pointer and stays inside the viewport", () => {
+  const metric = dom.createElement("metric");
+  const tooltip = dom.createElement("tooltip");
+  const pointerTarget = dom.createElement("metric-value");
+  tooltip.offsetWidth = 120;
+  tooltip.offsetHeight = 34;
+  metric.classList.add("final-metric-hoverable");
+  metric.setQuery(".final-metric-tooltip", tooltip);
+  pointerTarget.parentElement = metric;
 
-  assert.ok(metricRule);
-  assert.match(metricRule[1], /position:\s*relative;/);
+  dom.dispatchDocument("pointermove", {
+    target: pointerTarget,
+    clientX: 100,
+    clientY: 150,
+  });
+  assert.equal(tooltip.style.left, "114px");
+  assert.equal(tooltip.style.top, "164px");
+
+  positionFinalMetricTooltip({ clientX: 1015, clientY: 760 }, metric);
+  assert.equal(tooltip.style.left, "881px");
+  assert.equal(tooltip.style.top, "712px");
+
+  metric.getBoundingClientRect = () => ({
+    left: 200,
+    top: 100,
+    width: 300,
+    height: 90,
+    right: 500,
+    bottom: 190,
+  });
+  dom.dispatchDocument("focusin", { target: metric });
+  assert.equal(tooltip.style.left, "290px");
+  assert.equal(tooltip.style.top, "198px");
+
+  const tooltipRule = styles.match(/\.final-metric-tooltip\s*\{([^}]*)\}/);
+  assert.ok(tooltipRule);
+  assert.match(tooltipRule[1], /position:\s*fixed;/);
+  assert.match(tooltipRule[1], /pointer-events:\s*none;/);
 });
 
 test("daily score groups begin at neutral score and aggregate all score events by day", () => {
@@ -360,10 +394,13 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
   assert.doesNotMatch(dom.element("finalMetricsBar").innerHTML, /Day [34]/);
   assert.match(dom.element("finalCompletionChart").innerHTML, /Your score/);
   assert.match(dom.element("finalCompletionChart").innerHTML, /ECHO score/);
+  const completionChart = dom.element("finalCompletionChart").innerHTML;
   assert.equal(
-    (dom.element("finalCompletionChart").innerHTML.match(/chart-no-question-dot/g) || []).length,
+    (completionChart.match(/chart-player-dot/g) || []).length,
     2,
   );
+  assert.equal((completionChart.match(/chart-echo-dot/g) || []).length, 1);
+  assert.doesNotMatch(completionChart, /chart-no-question-dot/);
   assert.equal(dom.element("finalNotesTitle").textContent, "Where It Went Wrong");
   assert.equal((dom.element("finalNotes").innerHTML.match(/<li>/g) || []).length, 5);
   assert.match(dom.element("finalNotes").innerHTML, /ECHO finished &lt;first&gt;\./);

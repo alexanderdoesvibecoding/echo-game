@@ -17,6 +17,7 @@ class Job:
     remaining_days: int
     status: JobStatus = JobStatus.IN_PROGRESS
     completed_day: int | None = None
+    is_starter_job: bool = False
 
     @property
     def is_complete(self) -> bool:

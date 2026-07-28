@@ -107,6 +107,7 @@ ECHO still optimizes completion day first. Among routes that finish on the same 
 | Incident scope    | Weather, safety, access, network, cleanliness, air-pressure, waste, vendor, shift-overlap, and off-peak-utility incidents are shared day-level events. Other questions and all follow-ups may differ by route. |
 | Choice effects    | A choice only adds or removes stated job-days; narrative context creates no hidden state.                                                                                                                 |
 | Daily progress    | Every unfinished job loses exactly one remaining day when the day advances.                                                                                                                               |
+| Starter job       | In games with at least three jobs, one deterministic job starts at three days and is excluded from decision targets through day 3, guaranteeing the first submarine piece completes at the end of day 3.     |
 | Follow-ups        | Eligible follow-ups are rolled during web generation and stored in one bounded pending slot per route. They become eligible on their configured future day, defer around shared incidents, and are discarded if their originating job finishes first. Multiple possible results are selected during startup. Follow-ups may amplify, reverse, or preserve an earlier effect, but never exactly cancel its job-day change. |
 | Decision web      | Equivalent future states reconverge, forming a directed acyclic graph instead of a duplicated history tree.                                                                                               |
 | Solved horizon    | The complete web covers days 1–24. If ECHO's route would reach day 25, the web is regenerated around the same job scenario so ECHO always finishes inside the solved region.                              |
@@ -123,7 +124,7 @@ The game is configured through `GameConfig` in `echo_adventure/config.py`.
 |-------------------------------------|-------------:|---------------------------------------------------------------|
 | `start_date`                        | `2026-07-01` | Calendar date displayed for game day 1.                       |
 | `job_count`                         |         `20` | Number of jobs and submarine pieces.                          |
-| `min_job_duration_days`             |          `5` | Shortest generated starting duration.                         |
+| `min_job_duration_days`             |          `4` | Shortest ordinary generated duration; the starter is 3 days.  |
 | `max_job_duration_days`             |         `15` | Longest generated starting duration.                          |
 | `min_decisions_per_day`             |          `2` | Minimum daily question count.                                 |
 | `max_decisions_per_day`             |          `3` | Maximum daily question count.                                 |

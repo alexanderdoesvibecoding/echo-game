@@ -19,7 +19,7 @@ def test_config_defaults_describe_the_twenty_job_game() -> None:
     config = GameConfig(seed=7)
 
     assert config.job_count == 20
-    assert (config.min_job_duration_days, config.max_job_duration_days) == (5, 15)
+    assert (config.min_job_duration_days, config.max_job_duration_days) == (4, 15)
     assert (config.min_decisions_per_day, config.max_decisions_per_day) == (2, 3)
     assert config.max_campaign_day == 25
     assert config.day_cycle_duration_ms == 6000
@@ -85,7 +85,12 @@ def test_public_score_is_bounded_monotonic_symmetric_and_reports_exact_deltas() 
 
 
 def test_scenario_generation_is_deterministic_and_within_bounds() -> None:
-    config = small_config(job_count=8, seed=2026)
+    config = small_config(
+        job_count=8,
+        min_job_duration_days=4,
+        max_job_duration_days=8,
+        seed=2026,
+    )
 
     first = generate_scenario(config)
     second = generate_scenario(config)
@@ -93,7 +98,14 @@ def test_scenario_generation_is_deterministic_and_within_bounds() -> None:
     assert first == second
     assert list(first.jobs) == [f"JOB-{index:02d}" for index in range(1, 9)]
     assert all(job.name == f"Job {index}" for index, job in enumerate(first.jobs.values(), start=1))
-    assert all(config.min_job_duration_days <= job.remaining_days <= config.max_job_duration_days for job in first.jobs.values())
+    starter_jobs = [job for job in first.jobs.values() if job.is_starter_job]
+    assert len(starter_jobs) == 1
+    assert starter_jobs[0].initial_duration_days == starter_jobs[0].remaining_days == 3
+    assert all(
+        config.min_job_duration_days <= job.remaining_days <= config.max_job_duration_days
+        for job in first.jobs.values()
+        if not job.is_starter_job
+    )
 
 
 def test_weighted_generation_favors_shorter_values_without_excluding_the_range() -> None:
@@ -114,6 +126,35 @@ def test_scenario_validation_rejects_wrong_count_and_out_of_range_duration() -> 
     wrong_duration = scenario_from_durations(2, 7)
     with pytest.raises(ValueError, match="outside the configured range"):
         validate_scenario(wrong_duration, config)
+
+
+def test_scenario_validation_allows_one_three_day_starter_below_the_ordinary_range() -> None:
+    config = small_config(
+        job_count=2,
+        min_job_duration_days=4,
+        max_job_duration_days=6,
+    )
+    scenario = scenario_from_durations(3, 4)
+    scenario.jobs["JOB-01"].is_starter_job = True
+
+    validate_scenario(scenario, config)
+
+    scenario.jobs["JOB-02"].is_starter_job = True
+    with pytest.raises(ValueError, match="more than one starter"):
+        validate_scenario(scenario, config)
+
+
+def test_two_job_scenario_keeps_the_ordinary_duration_range() -> None:
+    config = small_config(
+        job_count=2,
+        min_job_duration_days=4,
+        max_job_duration_days=4,
+    )
+
+    scenario = generate_scenario(config)
+
+    assert all(not job.is_starter_job for job in scenario.jobs.values())
+    assert all(job.initial_duration_days == 4 for job in scenario.jobs.values())
 
 
 def test_initialization_deep_copies_jobs_and_builds_initial_metrics() -> None:
