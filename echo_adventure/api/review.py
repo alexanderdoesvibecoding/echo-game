@@ -192,7 +192,7 @@ class ReviewMixin:
         return [
             f"Completion timing — you finished on day {player_day}; ECHO finished on day {echo_day}.",
             f"Choice alignment — you matched ECHO's preferred response on {aligned} of {comparable_record_count} shared questions.",
-            f"Final totals — your decision score was {player_score:.2f}/100 versus ECHO's {echo_score:.2f}/100; your cumulative unfinished work was {self.player_state.cumulative_unfinished_job_days} job-days versus ECHO's {self.automated_state.cumulative_unfinished_job_days}.",
+            f"Final totals — your decision score was {player_score:.2f}/100 versus ECHO's {echo_score:.2f}/100; your cumulative remaining workload was {self.player_state.cumulative_unfinished_job_days} job-days versus ECHO's {self.automated_state.cumulative_unfinished_job_days}.",
         ]
 
     def _decision_driver_sentence(

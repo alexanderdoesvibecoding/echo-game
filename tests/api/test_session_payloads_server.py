@@ -157,7 +157,7 @@ def test_initial_session_payload_matches_the_modern_browser_contract(monkeypatch
         "label": "ECHO preferred",
         "basis": (
             "Exact backward-solved choice for this preplanned node: completion day, "
-            "then route score, then cumulative unfinished work."
+            "then route score, then cumulative remaining workload."
         ),
     }
     for choice, choice_payload in zip(node.card.choices, dev_card["choices"], strict=True):

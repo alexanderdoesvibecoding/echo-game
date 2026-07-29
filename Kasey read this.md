@@ -58,7 +58,7 @@ ECHO chooses by this order:
 
 1. earliest completion day;
 2. highest decision score;
-3. lowest cumulative unfinished job-days;
+3. lowest cumulative remaining workload;
 4. stable choice ID as the final tie-break.
 
 The ordinary web covers play before day 25. If an attempted web would make

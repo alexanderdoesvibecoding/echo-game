@@ -502,7 +502,7 @@ class _DecisionWebBuilder:
         )
 
     def _solve(self) -> None:
-        """Solve backward by finish, score, unfinished work, then stable choice ID."""
+        """Solve backward by finish, score, remaining workload, then stable choice ID."""
         solved_nodes = 0
         for step in sorted(self.nodes_by_step, reverse=True):
             for node_id in self.nodes_by_step[step]:
@@ -545,8 +545,8 @@ class _DecisionWebBuilder:
                     )
 
                 # Primary objective: earliest finish. Equal finishes prefer the
-                # highest score, then least accumulated unfinished work, then a
-                # stable ID. This exact ordering defines ECHO's optimal path.
+                # highest score, then the lowest cumulative remaining workload,
+                # then a stable ID. This exact ordering defines ECHO's optimal path.
                 completion_day, total_score, unfinished_job_days, choice_id = min(
                     candidates,
                     key=lambda candidate: (

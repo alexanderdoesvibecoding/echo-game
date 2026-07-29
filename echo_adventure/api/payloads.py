@@ -377,7 +377,7 @@ class PayloadMixin:
             label = "ECHO preferred"
             basis = (
                 "Exact backward-solved choice for this preplanned node: completion day, "
-                "then route score, then cumulative unfinished work."
+                "then route score, then cumulative remaining workload."
             )
         choice_label = next(
             (

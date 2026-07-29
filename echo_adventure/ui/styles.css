@@ -754,22 +754,12 @@ html[data-theme="dark"] .final-outcome-headline {
 /* Final metric cards and viewport-positioned guidance tooltips. */
 .final-metric {
   min-height: 82px;
-  overflow: hidden;
-}
-.final-metric-hoverable {
-  cursor: help;
   overflow: visible;
-  outline: none;
 }
-.final-metric-hoverable:focus-visible {
-  outline: 3px solid rgba(0, 114, 178, 0.28);
-  outline-offset: 1px;
-}
-.final-metric-hoverable-label {
+.final-metric-label {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  border-bottom: 1px dashed currentColor;
 }
 .final-metric-info {
   display: inline-flex;
@@ -777,12 +767,21 @@ html[data-theme="dark"] .final-outcome-headline {
   height: 16px;
   align-items: center;
   justify-content: center;
+  padding: 0;
   border: 1px solid currentColor;
   border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
   font-size: 10px;
   font-style: normal;
   font-weight: 850;
   line-height: 1;
+  cursor: help;
+}
+.final-metric-info:focus-visible {
+  outline: 3px solid rgba(0, 114, 178, 0.28);
+  outline-offset: 2px;
 }
 .final-metric-tooltip {
   position: fixed;
@@ -804,9 +803,8 @@ html[data-theme="dark"] .final-outcome-headline {
   pointer-events: none;
   white-space: normal;
 }
-.final-metric-hoverable:hover .final-metric-tooltip,
-.final-metric-hoverable:focus .final-metric-tooltip,
-.final-metric-hoverable:focus-within .final-metric-tooltip {
+.final-metric-info:hover + .final-metric-tooltip,
+.final-metric-info:focus + .final-metric-tooltip {
   display: block;
 }
 .final-metric-value-row strong {

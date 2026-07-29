@@ -52,8 +52,8 @@ def advance_day(state: SimulationState) -> DayResult:
     day = state.current_day
     state.daily_notes.clear()
     start_snapshot = calculate_snapshot(state)
-    # This area-under-the-curve metric measures schedule inefficiency: every
-    # unfinished day on every job contributes once per elapsed workday.
+    # This cumulative remaining workload metric measures schedule inefficiency:
+    # every remaining job-day contributes once per elapsed workday.
     state.cumulative_unfinished_job_days += start_snapshot.total_remaining_days
     completed_before = set(state.completed_jobs)
 

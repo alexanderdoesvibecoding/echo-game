@@ -26,7 +26,7 @@ function numberOrNull(value) {
 }
 
 /** Render and position guidance for a final comparison metric. */
-export function positionFinalMetricTooltip(event, metric) {
+export function positionFinalMetricTooltip(event, metric, anchor = metric) {
   const tooltip = metric?.querySelector(".final-metric-tooltip");
   if (!tooltip) return;
 
@@ -38,8 +38,8 @@ export function positionFinalMetricTooltip(event, metric) {
   let left;
   let top;
 
-  // Pointer interactions anchor beside the cursor; keyboard focus anchors to the
-  // metric card so the same guidance remains accessible without a mouse.
+  // Pointer interactions anchor beside the cursor; keyboard focus anchors to
+  // the info trigger so guidance remains accessible without activating the card.
   if (hasPointerCoordinates) {
     left = event.clientX + METRIC_TOOLTIP_GAP;
     top = event.clientY + METRIC_TOOLTIP_GAP;
@@ -50,14 +50,14 @@ export function positionFinalMetricTooltip(event, metric) {
       top = event.clientY - tooltipHeight - METRIC_TOOLTIP_GAP;
     }
   } else {
-    const metricRect = metric.getBoundingClientRect();
-    const metricBottom = Number.isFinite(metricRect.bottom)
-      ? metricRect.bottom
-      : metricRect.top + metricRect.height;
-    left = metricRect.left + (metricRect.width - tooltipWidth) / 2;
-    top = metricBottom + 8;
+    const anchorRect = anchor.getBoundingClientRect();
+    const anchorBottom = Number.isFinite(anchorRect.bottom)
+      ? anchorRect.bottom
+      : anchorRect.top + anchorRect.height;
+    left = anchorRect.left + (anchorRect.width - tooltipWidth) / 2;
+    top = anchorBottom + 8;
     if (top + tooltipHeight > viewportHeight - METRIC_TOOLTIP_MARGIN) {
-      top = metricRect.top - tooltipHeight - 8;
+      top = anchorRect.top - tooltipHeight - 8;
     }
   }
 
@@ -373,7 +373,7 @@ function renderFinalMetricBar(player, automated) {
       echoValue: automated.completion || "-",
       echoLabel: "ECHO:",
       tone: completionTone,
-      guidance: "Earlier is better.",
+      guidance: "Completion Date is when all jobs are finished. Earlier is better, and this is the first result used when comparing your route with ECHO.",
       tooltipId: "finalCompletionDateTooltip",
     },
     {
@@ -381,30 +381,35 @@ function renderFinalMetricBar(player, automated) {
       playerValue: Number(player.finalScore || 0).toFixed(2),
       echoValue: Number(automated.finalScore || 0).toFixed(2),
       tone: Number(player.finalScore || 0) >= Number(automated.finalScore || 0) ? "good" : "warn",
-      guidance: "Higher is better.",
+      guidance: "Decision Score is a general estimate of how well your choices reduced the remaining workload. Choices that save time raise the score, while choices that add time lower it.",
       tooltipId: "finalDecisionScoreTooltip",
     },
     {
-      label: "Cumulative Unfinished Work",
+      label: "Cumulative Workload",
       playerValue: `${Number(player.unfinishedJobDays || 0)} job-days`,
       echoValue: `${Number(automated.unfinishedJobDays || 0)} job-days`,
       tone: Number(player.unfinishedJobDays || 0) <= Number(automated.unfinishedJobDays || 0) ? "good" : "warn",
-      guidance: "Lower is better.",
+      guidance: "Cumulative Workload adds the remaining job-days after daily decisions to a running total. Carrying more unfinished work for longer raises the total. Lower is better.",
       tooltipId: "finalUnfinishedWorkTooltip",
     },
   ];
 
   return metricCards.map(metric => `
     <div
-      class="metric final-metric final-metric-${metric.tone} final-metric-hoverable"
-      tabindex="0"
-      aria-label="${escapeHtml(metric.label)}: ${escapeHtml(metric.playerValue)}. ${escapeHtml(metric.echoLabel || "ECHO")} ${escapeHtml(metric.echoValue)}."
-      aria-describedby="${escapeHtml(metric.tooltipId)}"
+      class="metric final-metric final-metric-${metric.tone}"
     >
       <div class="metric-title-row">
-        <span class="subtle metric-label final-metric-hoverable-label">
+        <span class="subtle metric-label final-metric-label">
           ${escapeHtml(metric.label)}
-          <span class="final-metric-info" aria-hidden="true">i</span>
+          <button
+            type="button"
+            class="final-metric-info"
+            aria-label="About ${escapeHtml(metric.label)}"
+            aria-describedby="${escapeHtml(metric.tooltipId)}"
+          >i</button>
+          <span class="final-metric-tooltip" id="${escapeHtml(metric.tooltipId)}" role="tooltip">
+            ${escapeHtml(metric.guidance)}
+          </span>
         </span>
       </div>
       <div class="metric-value-row final-metric-value-row">
@@ -412,9 +417,6 @@ function renderFinalMetricBar(player, automated) {
       </div>
       <div class="final-metric-benchmark">
         ${escapeHtml(metric.echoLabel || "ECHO")} ${escapeHtml(metric.echoValue)}
-      </div>
-      <div class="final-metric-tooltip" id="${escapeHtml(metric.tooltipId)}" role="tooltip">
-        ${escapeHtml(metric.guidance)}
       </div>
     </div>
   `).join("");
@@ -661,17 +663,20 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-// Metric guidance follows pointer input but anchors to the card on focus.
+// Only the info trigger positions metric guidance; hovering or focusing the
+// surrounding comparison card must remain inert.
 document.addEventListener("pointermove", (event) => {
   const target = event.target instanceof Element ? event.target : null;
-  const metric = target?.closest(".final-metric-hoverable");
-  if (metric) positionFinalMetricTooltip(event, metric);
+  const trigger = target?.closest(".final-metric-info");
+  const metric = trigger?.closest(".final-metric");
+  if (metric) positionFinalMetricTooltip(event, metric, trigger);
 });
 
 document.addEventListener("focusin", (event) => {
   const target = event.target instanceof Element ? event.target : null;
-  const metric = target?.closest(".final-metric-hoverable");
-  if (metric) positionFinalMetricTooltip(null, metric);
+  const trigger = target?.closest(".final-metric-info");
+  const metric = trigger?.closest(".final-metric");
+  if (metric) positionFinalMetricTooltip(null, metric, trigger);
 });
 
 /** Render or hide the complete final comparison view. */

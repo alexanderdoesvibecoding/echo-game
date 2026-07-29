@@ -84,19 +84,29 @@ beforeEach(() => {
   hideDecisionChartTooltip();
 });
 
-// Verifies final metric guidance follows the pointer and stays inside the viewport.
-test("final metric guidance follows the pointer and stays inside the viewport", () => {
+// Verifies only the info trigger positions final metric guidance within the viewport.
+test("final metric guidance is limited to its info trigger", () => {
   const metric = dom.createElement("metric");
   const tooltip = dom.createElement("tooltip");
-  const pointerTarget = dom.createElement("metric-value");
+  const infoTrigger = dom.createElement("metric-info");
+  const cardTarget = dom.createElement("metric-value");
   tooltip.offsetWidth = 120;
   tooltip.offsetHeight = 34;
-  metric.classList.add("final-metric-hoverable");
+  metric.classList.add("final-metric");
+  infoTrigger.classList.add("final-metric-info");
   metric.setQuery(".final-metric-tooltip", tooltip);
-  pointerTarget.parentElement = metric;
+  infoTrigger.parentElement = metric;
+  cardTarget.parentElement = metric;
 
   dom.dispatchDocument("pointermove", {
-    target: pointerTarget,
+    target: cardTarget,
+    clientX: 100,
+    clientY: 150,
+  });
+  assert.equal(tooltip.style.left, undefined);
+
+  dom.dispatchDocument("pointermove", {
+    target: infoTrigger,
     clientX: 100,
     clientY: 150,
   });
@@ -107,22 +117,25 @@ test("final metric guidance follows the pointer and stays inside the viewport", 
   assert.equal(tooltip.style.left, "881px");
   assert.equal(tooltip.style.top, "712px");
 
-  metric.getBoundingClientRect = () => ({
-    left: 200,
+  infoTrigger.getBoundingClientRect = () => ({
+    left: 400,
     top: 100,
-    width: 300,
-    height: 90,
-    right: 500,
-    bottom: 190,
+    width: 16,
+    height: 16,
+    right: 416,
+    bottom: 116,
   });
-  dom.dispatchDocument("focusin", { target: metric });
-  assert.equal(tooltip.style.left, "290px");
-  assert.equal(tooltip.style.top, "198px");
+  dom.dispatchDocument("focusin", { target: infoTrigger });
+  assert.equal(tooltip.style.left, "348px");
+  assert.equal(tooltip.style.top, "124px");
 
   const tooltipRule = styles.match(/\.final-metric-tooltip\s*\{([^}]*)\}/);
   assert.ok(tooltipRule);
   assert.match(tooltipRule[1], /position:\s*fixed;/);
   assert.match(tooltipRule[1], /pointer-events:\s*none;/);
+  assert.match(styles, /\.final-metric-info:hover \+ \.final-metric-tooltip/);
+  assert.match(styles, /\.final-metric-info:focus \+ \.final-metric-tooltip/);
+  assert.doesNotMatch(styles, /\.final-metric(?:-hoverable)?:hover \.final-metric-tooltip/);
 });
 
 // Verifies daily score groups begin at neutral score and aggregate all score events by day.
@@ -390,13 +403,37 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
   assert.match(dom.element("finalMetricsBar").innerHTML, /Completion Date/);
   assert.match(dom.element("finalMetricsBar").innerHTML, /<strong>July 4<\/strong>/);
   assert.match(dom.element("finalMetricsBar").innerHTML, /ECHO: July 3/);
-  assert.match(dom.element("finalMetricsBar").innerHTML, /Cumulative Unfinished Work/);
+  assert.match(dom.element("finalMetricsBar").innerHTML, /Cumulative Workload/);
   assert.match(dom.element("finalMetricsBar").innerHTML, /48 job-days/);
   assert.match(dom.element("finalMetricsBar").innerHTML, /ECHO 42 job-days/);
-  assert.equal((dom.element("finalMetricsBar").innerHTML.match(/final-metric-[a-z]+ final-metric-hoverable/g) || []).length, 3);
-  assert.match(dom.element("finalMetricsBar").innerHTML, /Earlier is better\./);
-  assert.match(dom.element("finalMetricsBar").innerHTML, /Higher is better\./);
-  assert.match(dom.element("finalMetricsBar").innerHTML, /Lower is better\./);
+  const finalMetricsMarkup = dom.element("finalMetricsBar").innerHTML;
+  assert.equal((finalMetricsMarkup.match(/class="final-metric-info"/g) || []).length, 3);
+  assert.equal((finalMetricsMarkup.match(/type="button"/g) || []).length, 3);
+  assert.doesNotMatch(finalMetricsMarkup, /final-metric-hoverable/);
+  assert.match(
+    dom.element("finalMetricsBar").innerHTML,
+    /Completion Date is when all jobs are finished\. Earlier is better/,
+  );
+  assert.match(
+    dom.element("finalMetricsBar").innerHTML,
+    /this is the first result used when comparing your route with ECHO\./,
+  );
+  assert.match(
+    dom.element("finalMetricsBar").innerHTML,
+    /Decision Score is a general estimate of how well your choices reduced the remaining workload\./,
+  );
+  assert.match(
+    dom.element("finalMetricsBar").innerHTML,
+    /Choices that save time raise the score, while choices that add time lower it\./,
+  );
+  assert.match(
+    dom.element("finalMetricsBar").innerHTML,
+    /Cumulative Workload adds the remaining job-days after daily decisions to a running total\./,
+  );
+  assert.match(
+    dom.element("finalMetricsBar").innerHTML,
+    /Carrying more unfinished work for longer raises the total\. Lower is better\./,
+  );
   assert.match(dom.element("finalMetricsBar").innerHTML, /aria-describedby="finalCompletionDateTooltip"/);
   assert.match(dom.element("finalMetricsBar").innerHTML, /aria-describedby="finalDecisionScoreTooltip"/);
   assert.match(dom.element("finalMetricsBar").innerHTML, /aria-describedby="finalUnfinishedWorkTooltip"/);
