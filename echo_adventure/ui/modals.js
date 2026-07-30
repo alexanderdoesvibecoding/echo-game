@@ -43,7 +43,7 @@ function renderWelcomeContent() {
   const jobText = jobCount ? `${jobCount} job${jobCount === 1 ? "" : "s"}` : "jobs";
   blurb.innerHTML = `
     <p>Finish all ${jobText} to assemble the submarine.</p>
-    <p>Your goal is to complete all jobs before ECHO, the AI planner does.</p>
+    <p>Your goal is to assemble the submarine before ECHO, the AI planner, does.</p>
   `;
 }
 
