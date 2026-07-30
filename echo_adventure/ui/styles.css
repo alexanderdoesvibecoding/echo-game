@@ -1713,8 +1713,8 @@ html[data-theme="dark"] .puzzle-stage {
 }
 .tutorial-card {
   position: fixed;
-  right: 24px;
-  bottom: 24px;
+  left: 24px;
+  top: 24px;
   z-index: 92;
   display: grid;
   gap: 8px;
@@ -1749,8 +1749,6 @@ html[data-theme="dark"] .puzzle-stage {
 }
 @media (max-width: 680px) {
   .tutorial-card {
-    right: 12px;
-    bottom: 12px;
     width: calc(100vw - 24px);
   }
 }

@@ -39,6 +39,7 @@ const {
 const {
   advanceTutorial,
   configureTutorial,
+  positionTutorialCard,
   renderTutorial,
   resetTutorial,
   startTutorial,
@@ -457,11 +458,54 @@ test("final reveal renders comparison metrics, score chart, and escaped review n
   assert.equal(dom.element("finalNotesTitle").textContent, "Why It Was a Tie");
 });
 
+// Verifies distinct corner placements and shared viewport clamping.
+test("tutorial card supports distinct target-relative placements", () => {
+  const card = dom.element("tutorialCard");
+  const target = dom.element("tutorialPositionTarget");
+  card.offsetWidth = 200;
+  card.offsetHeight = 100;
+  target.getBoundingClientRect = () => ({
+    left: 100,
+    top: 200,
+    width: 400,
+    height: 200,
+    right: 500,
+    bottom: 400,
+  });
+
+  positionTutorialCard(target, "bottom-right");
+  assert.equal(card.style.left, "300px");
+  assert.equal(card.style.top, "412px");
+  assert.equal(card.dataset.placement, "bottom-right");
+
+  positionTutorialCard(target, "bottom-left");
+  assert.equal(card.style.left, "100px");
+  assert.equal(card.style.top, "412px");
+  assert.equal(card.dataset.placement, "bottom-left");
+
+  positionTutorialCard(target, "top-right");
+  assert.equal(card.style.left, "300px");
+  assert.equal(card.style.top, "88px");
+  assert.equal(card.dataset.placement, "top-right");
+
+  target.getBoundingClientRect = () => ({
+    left: 900,
+    top: 700,
+    width: 100,
+    height: 40,
+    right: 1000,
+    bottom: 740,
+  });
+  positionTutorialCard(target, "bottom-right");
+  assert.equal(card.style.left, "800px");
+  assert.equal(card.style.top, "656px");
+});
+
 // Verifies welcome, settings, new-run, and developer controls reflect browser-local state.
 test("welcome, settings, new-run, and developer controls reflect browser-local state", () => {
   for (const id of [
     "welcomeModalOverlay", "welcomeSubmarineVisual", "welcomeBlurb", "settingsPanel", "settingsMenuBtn",
-    "tutorialOverlay", "tutorialStepLabel", "tutorialTitle", "tutorialDescription", "tutorialNextBtn",
+    "tutorialOverlay", "tutorialCard", "tutorialStepLabel", "tutorialTitle", "tutorialDescription", "tutorialSkipBtn", "tutorialNextBtn",
     "summarySection", "decisionQueueSection", "dailyDecisionSection",
     "newRunModalOverlay", "newRunSettings", "newRunLoading", "closeNewRunModalBtn", "cancelNewRunBtn",
     "startNewRunBtn", "themeMenuBtn", "newRunDescription", "devSeedField",
@@ -520,12 +564,16 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
   assert.equal(dom.element("tutorialTitle").textContent, "Submarine Puzzle");
   assert.match(dom.element("tutorialDescription").textContent, /blank section is an unfinished job/);
   assert.equal(dom.element("summarySection").classList.contains("tutorial-highlight"), true);
+  assert.equal(dom.element("tutorialCard").dataset.placement, "bottom-right");
+  assert.equal(dom.element("tutorialSkipBtn").classList.contains("hidden"), false);
 
   advanceTutorial();
   assert.equal(uiState.tutorialStep, 1);
   assert.equal(dom.element("tutorialTitle").textContent, "Decision Queue");
   assert.match(dom.element("tutorialDescription").textContent, /questions appear here/);
   assert.equal(dom.element("decisionQueueSection").classList.contains("tutorial-highlight"), true);
+  assert.equal(dom.element("tutorialCard").dataset.placement, "bottom-left");
+  assert.equal(dom.element("tutorialSkipBtn").classList.contains("hidden"), false);
 
   advanceTutorial();
   assert.equal(uiState.tutorialStep, 2);
@@ -533,6 +581,8 @@ test("welcome, settings, new-run, and developer controls reflect browser-local s
   assert.match(dom.element("tutorialDescription").textContent, /your ECD and ECHO's ECD/);
   assert.equal(dom.element("tutorialNextBtn").textContent, "Got it");
   assert.equal(dom.element("dailyDecisionSection").classList.contains("tutorial-highlight"), true);
+  assert.equal(dom.element("tutorialCard").dataset.placement, "bottom-right");
+  assert.equal(dom.element("tutorialSkipBtn").classList.contains("hidden"), true);
 
   advanceTutorial();
   assert.equal(uiState.tutorialStep, -1);

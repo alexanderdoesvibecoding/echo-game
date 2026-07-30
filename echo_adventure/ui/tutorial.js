@@ -5,21 +5,26 @@
 import { $ } from "./html.js";
 import { uiState } from "./state.js";
 
+const TUTORIAL_CARD_GAP = 12;
+const TUTORIAL_VIEWPORT_MARGIN = 12;
 const TUTORIAL_STEPS = [
   {
     targetId: "summarySection",
+    placement: "bottom-right",
     title: "Submarine Puzzle",
     copy: "Each blank section is an unfinished job. Finish a job to build that part of the submarine.",
   },
   {
     targetId: "decisionQueueSection",
+    placement: "bottom-left",
     title: "Decision Queue",
     copy: "Production questions appear here during the day. Choose an answer for each one.",
   },
   {
     targetId: "dailyDecisionSection",
+    placement: "bottom-right",
     title: "ECD Progress",
-    copy: "These bars track your ECD and ECHO's ECD. An earlier date is better.",
+    copy: "These bars track your ECD and ECHO's ECD.",
   },
 ];
 
@@ -118,6 +123,67 @@ function clearTutorialHighlight() {
   }
 }
 
+/** Position the tutorial card at one configured corner of its highlighted target. */
+export function positionTutorialCard(target, placement = "bottom-right") {
+  const card = $("tutorialCard");
+  if (!target || !card || typeof target.getBoundingClientRect !== "function") return;
+
+  const targetRect = target.getBoundingClientRect();
+  const cardRect = card.getBoundingClientRect();
+  const viewportWidth = Number(globalThis.window?.innerWidth)
+    || document.documentElement.clientWidth;
+  const viewportHeight = Number(globalThis.window?.innerHeight)
+    || document.documentElement.clientHeight;
+  const cardWidth = Number(cardRect.width) || Number(card.offsetWidth) || 0;
+  const cardHeight = Number(cardRect.height) || Number(card.offsetHeight) || 0;
+  const targetLeft = Number(targetRect.left) || 0;
+  const targetTop = Number(targetRect.top) || 0;
+  const targetWidth = Number(targetRect.width) || 0;
+  const targetHeight = Number(targetRect.height) || 0;
+  const targetRight = Number.isFinite(targetRect.right)
+    ? targetRect.right
+    : targetLeft + targetWidth;
+  const targetBottom = Number.isFinite(targetRect.bottom)
+    ? targetRect.bottom
+    : targetTop + targetHeight;
+
+  // Each step selects a deliberate corner while shared clamping ensures that
+  // edge targets never push the tutorial actions off-screen.
+  const maxLeft = Math.max(
+    TUTORIAL_VIEWPORT_MARGIN,
+    viewportWidth - cardWidth - TUTORIAL_VIEWPORT_MARGIN,
+  );
+  const maxTop = Math.max(
+    TUTORIAL_VIEWPORT_MARGIN,
+    viewportHeight - cardHeight - TUTORIAL_VIEWPORT_MARGIN,
+  );
+  const alignLeft = placement.endsWith("-left");
+  const placeAbove = placement.startsWith("top-");
+  const preferredLeft = alignLeft ? targetLeft : targetRight - cardWidth;
+  const preferredTop = placeAbove
+    ? targetTop - cardHeight - TUTORIAL_CARD_GAP
+    : targetBottom + TUTORIAL_CARD_GAP;
+  const left = Math.min(
+    maxLeft,
+    Math.max(TUTORIAL_VIEWPORT_MARGIN, preferredLeft),
+  );
+  const top = Math.min(
+    maxTop,
+    Math.max(TUTORIAL_VIEWPORT_MARGIN, preferredTop),
+  );
+
+  card.dataset.placement = placement;
+  card.style.left = `${Math.round(left)}px`;
+  card.style.top = `${Math.round(top)}px`;
+}
+
+/** Reposition the active tutorial card after viewport or target movement. */
+function repositionActiveTutorialCard() {
+  if (!tutorialVisible()) return;
+  const step = TUTORIAL_STEPS[uiState.tutorialStep];
+  positionTutorialCard(step ? $(step.targetId) : null, step?.placement);
+}
+
 /** Render the active tutorial step and its highlighted target. */
 export function renderTutorial() {
   const overlay = $("tutorialOverlay");
@@ -144,7 +210,9 @@ export function renderTutorial() {
   $("tutorialStepLabel").textContent = `${uiState.tutorialStep + 1} of ${TUTORIAL_STEPS.length}`;
   $("tutorialTitle").textContent = step.title;
   $("tutorialDescription").textContent = step.copy;
-  $("tutorialNextBtn").textContent = uiState.tutorialStep === TUTORIAL_STEPS.length - 1
+  const isFinalStep = uiState.tutorialStep === TUTORIAL_STEPS.length - 1;
+  $("tutorialSkipBtn").classList.toggle("hidden", isFinalStep);
+  $("tutorialNextBtn").textContent = isFinalStep
     ? "Got it"
     : "Next";
 
@@ -155,4 +223,10 @@ export function renderTutorial() {
     target.scrollIntoView({ behavior: "smooth", block: "center" });
     $("tutorialNextBtn").focus();
   }
+  positionTutorialCard(target, step.placement);
 }
+
+// Fixed positioning follows the highlighted element while smooth scrolling and
+// viewport changes move it beneath the tutorial overlay.
+globalThis.window?.addEventListener?.("scroll", repositionActiveTutorialCard, true);
+globalThis.window?.addEventListener?.("resize", repositionActiveTutorialCard);
