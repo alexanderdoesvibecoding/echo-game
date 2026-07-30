@@ -108,7 +108,6 @@ export function renderDecisionQueue() {
   // A card may exist in server state before its clock threshold; expose it only
   // when due and all interaction guards are clear.
   const card = due && !blocked ? currentOpenDecisionCard() : null;
-  const finalAssembly = uiState.state.finalAssembly;
   const pendingChoiceId = card && uiState.pendingChoice?.cardId === card.id
     ? uiState.pendingChoice.choiceId
     : "";
@@ -125,8 +124,6 @@ export function renderDecisionQueue() {
     card?.id || "",
     pendingChoiceId,
     uiState.devShowDiagnostics,
-    finalAssembly?.status || "",
-    finalAssembly?.jobName || "",
   ]);
 
   section.classList.toggle("is-empty", !card);
@@ -134,14 +131,9 @@ export function renderDecisionQueue() {
   body.dataset.renderKey = renderKey;
 
   if (!card) {
-    // Final assembly has phase-specific idle copy; ordinary idle/blocked states
-    // intentionally share neutral language.
-    let message = "No decision currently requires your attention.";
-    if (finalAssembly?.status === "planning") {
-      message = `Final Assembly Lock-In is ready for ${finalAssembly.jobName}; the next decision will appear as the workday reaches it.`;
-    } else if (finalAssembly?.status === "locked") {
-      message = `Final assembly is locked. ${finalAssembly.jobName} remains a normal job and is continuing through its production schedule.`;
-    }
+    // Every gap uses the same neutral copy; one-job phases should not introduce
+    // a special narrative state between otherwise ordinary decisions.
+    const message = "No decision currently requires your attention.";
     body.innerHTML = `<div class="decision-queue-empty">${escapeHtml(message)}</div>`;
 
     return;

@@ -1,10 +1,15 @@
 /** Summary, puzzle, decision queue, and day-clock UI tests. */
 
+import { readFile } from "node:fs/promises";
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
 import { installDom } from "./testDom.mjs";
 
+const styles = await readFile(
+  new URL("../../echo_adventure/ui/styles.css", import.meta.url),
+  "utf8",
+);
 const dom = installDom();
 const { uiState } = await import("../../echo_adventure/ui/state.js");
 const {
@@ -197,14 +202,65 @@ test("summary renders the live assembly and current daily metrics", () => {
   assert.equal(dom.element("summaryModalTitle").textContent, "Daily Summary - July 1");
   assert.match(body, /Jobs Complete/);
   assert.match(body, /Jobs Complete[\s\S]*data-summary-count-from="1"/);
-  assert.match(body, /Remaining Job-Days/);
-  assert.match(body, /summary-metric-hoverable/);
-  assert.match(body, /Hover or focus for the per-job breakdown/);
+  assert.match(body, /Cumulative Workload/);
+  assert.match(body, /summary-metric-dropdown/);
+  assert.match(body, /class="metric-label remaining-job-days-trigger"/);
+  assert.match(body, /class="remaining-job-days-chevron" aria-hidden="true">▾/);
+  assert.match(body, /aria-expanded="false"/);
+  assert.match(body, /aria-controls="remainingJobDaysTooltip"/);
+  assert.doesNotMatch(body, /summary-metric-hoverable/);
+  assert.doesNotMatch(body, /Hover or focus/);
   assert.match(body, /Job &lt;Two&gt;/);
   assert.match(body, /2 days/);
   assert.match(body, /data-summary-count-from="2"/);
   assert.match(body, /Completed &lt;one&gt; job\./);
   assert.doesNotMatch(body, /Subjobs/);
+  assert.match(styles, /\.remaining-job-days-trigger:hover/);
+  assert.match(styles, /\.remaining-job-days-trigger:focus-visible/);
+  assert.match(styles, /\.summary-metric-dropdown\.is-open \.remaining-job-days-chevron/);
+  assert.match(styles, /\.summary-metric-dropdown\.is-open \.remaining-job-days-tooltip/);
+  assert.doesNotMatch(styles, /\.summary-metric[^,{]*:hover[^,{]*\.remaining-job-days-tooltip/);
+});
+
+// Verifies the workload job list opens only by click and supports dismissal.
+test("workload job list toggles by click and closes outside or with Escape", () => {
+  const card = dom.element("workload-card");
+  const trigger = dom.element("workload-trigger");
+  const dropdown = dom.element("workload-dropdown");
+  const outside = dom.element("outside-workload-card");
+  card.classList.add("summary-metric-dropdown");
+  trigger.classList.add("remaining-job-days-trigger");
+  trigger.parentElement = card;
+  dropdown.parentElement = card;
+  trigger.setAttribute("aria-expanded", "false");
+  card.setQuery(".remaining-job-days-trigger", trigger);
+  card.setQuery(".remaining-job-days-tooltip", dropdown);
+
+  dom.dispatchDocument("pointermove", { target: trigger });
+  assert.equal(card.classList.contains("is-open"), false);
+
+  dom.dispatchDocument("click", { target: trigger });
+  assert.equal(card.classList.contains("is-open"), true);
+  assert.equal(trigger.getAttribute("aria-expanded"), "true");
+  assert.equal(dropdown.hidden, false);
+
+  dom.dispatchDocument("click", { target: trigger });
+  assert.equal(card.classList.contains("is-open"), false);
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+  assert.equal(dropdown.hidden, true);
+
+  dom.dispatchDocument("click", { target: trigger });
+  dom.dispatchDocument("click", { target: dropdown });
+  assert.equal(card.classList.contains("is-open"), true);
+
+  dom.dispatchDocument("click", { target: outside });
+  assert.equal(card.classList.contains("is-open"), false);
+
+  dom.dispatchDocument("click", { target: trigger });
+  dom.dispatchDocument("keydown", { target: trigger, key: "Escape" });
+  assert.equal(card.classList.contains("is-open"), false);
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+  assert.equal(trigger.focused, true);
 });
 
 // Verifies summary counters support integers, ratios, and descending values.
@@ -667,9 +723,9 @@ test("decision queue reveals due choices, tracks selection, and submits the sele
     finalAssembly: { active: true, status: "locked", jobName: "Pressure Hull <Final>" },
   });
   renderDecisionQueue();
-  assert.match(body.innerHTML, /Final assembly is locked/);
-  assert.match(body.innerHTML, /Pressure Hull &lt;Final&gt;/);
-  assert.match(body.innerHTML, /remains a normal job/);
+  assert.match(body.innerHTML, /No decision currently requires your attention/);
+  assert.doesNotMatch(body.innerHTML, /Final assembly is locked/);
+  assert.doesNotMatch(body.innerHTML, /Pressure Hull &lt;Final&gt;/);
 
   uiState.state = statePayload({
     decisionProgress: { completed: 0, total: 0 },
@@ -677,8 +733,9 @@ test("decision queue reveals due choices, tracks selection, and submits the sele
     finalAssembly: { active: true, status: "planning", jobName: "Sonar <Final>" },
   });
   renderDecisionQueue();
-  assert.match(body.innerHTML, /Final Assembly Lock-In is ready/);
-  assert.match(body.innerHTML, /Sonar &lt;Final&gt;/);
+  assert.match(body.innerHTML, /No decision currently requires your attention/);
+  assert.doesNotMatch(body.innerHTML, /Final Assembly Lock-In/);
+  assert.doesNotMatch(body.innerHTML, /Sonar &lt;Final&gt;/);
 });
 
 // Verifies inline decision area contains the shared player and ECHO clock.

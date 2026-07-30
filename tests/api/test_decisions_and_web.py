@@ -479,7 +479,12 @@ def test_daily_card_generation_is_deterministic_varied_and_free_of_subjob_copy()
     assert final_cards[0].follow_up_source_choice_label == "Recalibrate now"
     assert all(card.player_only for card in final_cards)
     assert all(card.primary_job_id == "JOB-01" for card in final_cards)
-    assert all("Only Job 1 remains" in card.description for card in final_cards)
+    assert all(not card.title.startswith("Final Assembly:") for card in final_cards)
+    assert all(
+        "Only Job 1 remains" not in card.description
+        and "locked production plan" not in card.description
+        for card in final_cards
+    )
     assert all(
         abs(delta) == 1
         for card in final_cards

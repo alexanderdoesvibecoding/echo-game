@@ -8,6 +8,54 @@ import { SUBMARINE_IMAGE_SRC } from "./submarineVisual.js";
 
 const DEFAULT_SUMMARY_COUNTER_DURATION_MS = 1800;
 
+/** Return every daily workload card that can disclose a per-job breakdown. */
+function workloadDropdownCards() {
+  return Array.from(document.querySelectorAll(".summary-metric-dropdown"));
+}
+
+/** Synchronize one workload disclosure's visual and accessibility state. */
+function setWorkloadDropdownOpen(card, open) {
+  if (!card) return;
+  const trigger = card.querySelector(".remaining-job-days-trigger");
+  const dropdown = card.querySelector(".remaining-job-days-tooltip");
+  card.classList.toggle("is-open", open);
+  trigger?.setAttribute("aria-expanded", String(open));
+  if (dropdown) dropdown.hidden = !open;
+}
+
+/** Close all daily workload disclosures except an optional active card. */
+function closeWorkloadDropdowns(exceptCard = null) {
+  workloadDropdownCards().forEach((card) => {
+    if (card !== exceptCard) setWorkloadDropdownOpen(card, false);
+  });
+}
+
+// The workload breakdown is an explicit disclosure: hover alone never opens it,
+// while outside clicks and Escape provide predictable dismissal.
+document.addEventListener("click", (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  const trigger = target?.closest(".remaining-job-days-trigger");
+  if (trigger) {
+    const card = trigger.closest(".summary-metric-dropdown");
+    if (!card) return;
+    const shouldOpen = !card.classList.contains("is-open");
+    closeWorkloadDropdowns(card);
+    setWorkloadDropdownOpen(card, shouldOpen);
+    event.preventDefault?.();
+    return;
+  }
+  if (!target?.closest(".summary-metric-dropdown")) closeWorkloadDropdowns();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  const openCard = workloadDropdownCards().find(card => card.classList.contains("is-open"));
+  if (!openCard) return;
+  const trigger = openCard.querySelector(".remaining-job-days-trigger");
+  setWorkloadDropdownOpen(openCard, false);
+  trigger?.focus();
+});
+
 /** Parse integer or ratio text into animatable counter components. */
 function countValueParts(value) {
   const rawValue = String(value ?? "");
@@ -60,20 +108,23 @@ function renderRemainingJobDaysMetric(metric, remainingJobs) {
 
   return `
     <div
-      class="metric summary-metric summary-metric-${metric.tone} summary-metric-hoverable"
-      tabindex="0"
-      aria-label="Remaining Job-Days: ${escapeHtml(metric.value)}. Hover or focus for the per-job breakdown."
-      aria-describedby="remainingJobDaysTooltip"
+      class="metric summary-metric summary-metric-${metric.tone} summary-metric-dropdown"
     >
       <div class="metric-title-row">
-        <span class="subtle metric-label remaining-job-days-label">
-          ${escapeHtml(metric.label)}
-          <span class="remaining-job-days-info" aria-hidden="true">i</span>
-        </span>
+        <button
+          type="button"
+          class="metric-label remaining-job-days-trigger"
+          aria-label="Toggle incomplete jobs for ${escapeHtml(metric.label)}"
+          aria-expanded="false"
+          aria-controls="remainingJobDaysTooltip"
+        >
+          <span>${escapeHtml(metric.label)}</span>
+          <span class="remaining-job-days-chevron" aria-hidden="true">▾</span>
+        </button>
       </div>
       <div class="metric-value-row summary-metric-value-row">${renderSummaryMetricValue(metric.value, metric.startValue)}</div>
-      <div class="remaining-job-days-tooltip" id="remainingJobDaysTooltip" role="tooltip">
-        <div class="remaining-job-days-tooltip-title">Incomplete jobs</div>
+      <div class="remaining-job-days-tooltip" id="remainingJobDaysTooltip" role="region" aria-labelledby="remainingJobDaysTooltipTitle" hidden>
+        <div class="remaining-job-days-tooltip-title" id="remainingJobDaysTooltipTitle">Incomplete jobs</div>
         ${details}
       </div>
     </div>
@@ -97,7 +148,7 @@ function renderSummaryMetricBar(summary) {
       tone: summary.jobsRemaining ? "warn" : "good",
     },
     {
-      label: "Remaining Job-Days",
+      label: "Cumulative Workload",
       value: Number(summary.totalRemainingDays || 0),
       startValue: Number(summary.previousTotalRemainingDays ?? 0),
       tone: summary.totalRemainingDays ? "warn" : "good",
@@ -107,7 +158,7 @@ function renderSummaryMetricBar(summary) {
   return `
     <div class="summary-metrics-bar">
       ${metrics.map(metric => (
-        metric.label === "Remaining Job-Days"
+        metric.label === "Cumulative Workload"
           ? renderRemainingJobDaysMetric(metric, summary.remainingJobs)
           : `
             <div class="metric summary-metric summary-metric-${metric.tone}">

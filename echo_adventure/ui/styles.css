@@ -841,32 +841,43 @@ html[data-theme="dark"] .final-outcome-headline {
   min-height: 82px;
   overflow: hidden;
 }
-.summary-metric-hoverable {
-  cursor: help;
+.summary-metric-dropdown {
   overflow: visible;
-  outline: none;
 }
-.summary-metric-hoverable:focus-visible {
-  box-shadow: inset 0 3px 0 rgba(213, 137, 0, 0.76), 0 0 0 3px rgba(0, 114, 178, 0.28);
-}
-.remaining-job-days-label {
-  display: inline-flex;
+.remaining-job-days-trigger {
+  display: flex;
+  width: 100%;
+  height: 30px;
   align-items: center;
-  gap: 5px;
-  border-bottom: 1px dashed currentColor;
-}
-.remaining-job-days-info {
-  display: inline-flex;
-  width: 16px;
-  height: 16px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  font-size: 10px;
-  font-style: normal;
-  font-weight: 850;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 9px;
+  border-color: color-mix(in srgb, var(--line) 70%, var(--muted));
+  background: color-mix(in srgb, var(--panel) 90%, var(--line));
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
   line-height: 1;
+  text-align: left;
+}
+.remaining-job-days-trigger:hover {
+  border-color: var(--teal);
+  background: color-mix(in srgb, var(--panel) 86%, var(--teal));
+  color: var(--ink);
+}
+.remaining-job-days-trigger:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+.remaining-job-days-chevron {
+  flex: 0 0 auto;
+  color: var(--teal);
+  font-size: 14px;
+  transition: transform 140ms ease;
+}
+.summary-metric-dropdown.is-open .remaining-job-days-chevron {
+  transform: rotate(180deg);
 }
 .remaining-job-days-tooltip {
   position: absolute;
@@ -885,9 +896,7 @@ html[data-theme="dark"] .final-outcome-headline {
   color: var(--ink);
   white-space: normal;
 }
-.summary-metric-hoverable:hover .remaining-job-days-tooltip,
-.summary-metric-hoverable:focus .remaining-job-days-tooltip,
-.summary-metric-hoverable:focus-within .remaining-job-days-tooltip {
+.summary-metric-dropdown.is-open .remaining-job-days-tooltip {
   display: block;
 }
 .remaining-job-days-tooltip-title {

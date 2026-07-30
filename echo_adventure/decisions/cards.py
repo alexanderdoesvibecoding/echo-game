@@ -210,10 +210,7 @@ def generate_final_assembly_cards(
         # This recommendation guides the player-only card shape; it is not
         # recorded as an ECHO action or used to claim route alignment.
         preferred_choice = max(choices, key=lambda choice: (choice.score_delta, choice.id))
-        description = (
-            f"{_simplify_language(definition.description)} Only {final_job.name} remains "
-            "before final assembly, so this response applies to that job's locked production plan."
-        )
+        description = _simplify_language(definition.description)
         card_id = f"FINAL-D{state.current_day:03d}-Q{ordinal:02d}-{definition.id}"
         event_scope, event_id = _event_identity(
             state.current_day,
@@ -227,7 +224,7 @@ def generate_final_assembly_cards(
         )
         card = DecisionCard(
             id=card_id,
-            title=f"Final Assembly: {_simplify_language(definition.title)}",
+            title=_simplify_language(definition.title),
             description=description,
             choices=choices,
             # Player-only cards are never presented to ECHO. Keeping a stable
