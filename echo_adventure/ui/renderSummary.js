@@ -192,6 +192,7 @@ function renderSummaryGrid(summary) {
       ${renderSubmarinePuzzle(summary.puzzle, {
         showCaption: true,
         animateNewlyPlaced: true,
+        labelUnplacedJobs: true,
       })}
     </div>
   `;
@@ -316,6 +317,19 @@ export function renderSubmarinePuzzle(puzzle, options = {}) {
       .map(item => renderPuzzleSection(item.tile, item.slice, "unplaced"))
       .join("")
     : "";
+  const unfinishedArea = showUnplaced && unplacedItems.length
+    ? options.labelUnplacedJobs
+      ? `
+        <div class="puzzle-unfinished-zone" role="group" aria-label="Unfinished jobs">
+          <div class="puzzle-unfinished-label">
+            <span class="puzzle-unfinished-symbol" aria-hidden="true">!</span>
+            <strong>Unfinished Jobs</strong>
+          </div>
+          <div class="puzzle-loose-row">${unplacedMarkup}</div>
+        </div>
+      `
+      : `<div class="puzzle-loose-row">${unplacedMarkup}</div>`
+    : "";
   return `
     <div class="submarine-puzzle">
       ${options.showCaption ? `<div class="puzzle-caption"><strong>Assembly</strong></div>` : ""}
@@ -323,7 +337,7 @@ export function renderSubmarinePuzzle(puzzle, options = {}) {
         <div class="puzzle-assembled-row${unplacedItems.length ? " has-incomplete" : ""}" style="--slice-total:${total}">
           ${placedMarkup}
         </div>
-        ${showUnplaced && unplacedItems.length ? `<div class="puzzle-loose-row">${unplacedMarkup}</div>` : ""}
+        ${unfinishedArea}
       </div>
     </div>
   `;

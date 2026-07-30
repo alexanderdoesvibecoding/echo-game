@@ -118,10 +118,16 @@ test("submarine puzzle renders assembled, waiting, and accessible image slices",
   assert.match(markup, /puzzle-image-placeholder/);
   assert.match(markup, /puzzle-loose-row/);
   assert.match(markup, /virginia-submarine-cutout\.png/);
+  assert.doesNotMatch(markup, /puzzle-unfinished-zone/);
   assert.match(markup, /Job &lt;One&gt;/);
   assert.doesNotMatch(markup, /\stitle=/);
-});
 
+  const unfinishedMarkup = renderSubmarinePuzzle(puzzle, { labelUnplacedJobs: true });
+  assert.match(unfinishedMarkup, /class="puzzle-unfinished-zone"/);
+  assert.match(unfinishedMarkup, /aria-label="Unfinished jobs"/);
+  assert.match(unfinishedMarkup, /<strong>Unfinished Jobs<\/strong>/);
+  assert.match(unfinishedMarkup, /puzzle-unfinished-zone[\s\S]*puzzle-loose-row/);
+});
 
 // Verifies submarine puzzle handles empty data and assembled-only animation options.
 test("submarine puzzle handles empty data and assembled-only animation options", () => {
@@ -175,6 +181,7 @@ test("summary renders the live assembly and current daily metrics", () => {
   assert.equal(dom.element("summarySection").classList.contains("hidden"), false);
   assert.match(dom.element("summaryGrid").innerHTML, /submarine-puzzle/);
   assert.doesNotMatch(dom.element("summaryGrid").innerHTML, /puzzle-loose-row/);
+  assert.doesNotMatch(dom.element("summaryGrid").innerHTML, /puzzle-unfinished-zone/);
 
   uiState.modalVisible = true;
   uiState.pendingAdvanceState = statePayload({
@@ -215,6 +222,12 @@ test("summary renders the live assembly and current daily metrics", () => {
   assert.match(body, /data-summary-count-from="2"/);
   assert.match(body, /Completed &lt;one&gt; job\./);
   assert.doesNotMatch(body, /Subjobs/);
+  assert.match(body, /puzzle-unfinished-zone/);
+  assert.match(body, /Unfinished Jobs/);
+  assert.doesNotMatch(body, /Blocked Area/);
+  assert.match(styles, /\.puzzle-unfinished-zone\s*\{[\s\S]*border:\s*1px dashed/);
+  assert.match(styles, /\.puzzle-unfinished-zone\s*\{[\s\S]*background:\s*color-mix/);
+  assert.match(styles, /\.puzzle-unfinished-label/);
   assert.match(styles, /\.remaining-job-days-trigger:hover/);
   assert.match(styles, /\.remaining-job-days-trigger:focus-visible/);
   assert.match(styles, /\.summary-metric-dropdown\.is-open \.remaining-job-days-chevron/);

@@ -43,8 +43,7 @@ function renderWelcomeContent() {
   const jobText = jobCount ? `${jobCount} job${jobCount === 1 ? "" : "s"}` : "jobs";
   blurb.innerHTML = `
     <p>Finish all ${jobText} to assemble the submarine.</p>
-    <p>ECHO is an AI planner answering the same production questions.</p>
-    <p>The progress bars track your estimated completion date (ECD) and ECHO's as you compete.</p>
+    <p>Your goal is to complete all jobs before ECHO, the AI planner does.</p>
   `;
 }
 
